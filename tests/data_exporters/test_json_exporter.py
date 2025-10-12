@@ -112,8 +112,8 @@ class TestJsonExporter:
             assert data.input_config is not None
             assert isinstance(data.input_config, UserConfig)
             # TODO: Uncomment this once we have expanded the output config to include all important fields
-            # assert "output" in data["input_config"]
-            # assert data["input_config"]["output"]["artifact_directory"] == str(
+            # assert data.input_config.output is not None
+            # assert data.input_config.output.artifact_directory == str(
             #     output_dir
             # )
 

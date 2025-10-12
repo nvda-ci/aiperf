@@ -40,7 +40,6 @@ from aiperf.common.messages import (
     RecordsProcessingStatsMessage,
     TelemetryRecordsMessage,
 )
-from aiperf.common.messages.command_messages import RealtimeMetricsCommand
 from aiperf.common.messages.credit_messages import CreditPhaseSendingCompleteMessage
 from aiperf.common.messages.inference_messages import MetricRecordsData
 from aiperf.common.mixins import PullClientMixin
@@ -450,13 +449,6 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                     continue  # No new records have been processed, so no need to update the metrics
                 self._previous_realtime_records = self.processing_stats.processed
             await self._report_realtime_metrics()
-
-    @on_command(CommandType.REALTIME_METRICS)
-    async def _on_realtime_metrics_command(
-        self, message: RealtimeMetricsCommand
-    ) -> None:
-        """Handle a real-time metrics command."""
-        await self._report_realtime_metrics()
 
     async def _report_realtime_metrics(self) -> None:
         """Report the real-time metrics."""

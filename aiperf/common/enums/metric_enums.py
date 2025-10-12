@@ -387,7 +387,6 @@ class MetricValueTypeInfo(BasePydanticEnumInfo):
 
     default_factory: Callable[[], MetricValueTypeT]
     converter: Callable[[Any], MetricValueTypeT]
-    dtype: Any
 
 
 class MetricValueType(BasePydanticBackedStrEnum):
@@ -401,25 +400,21 @@ class MetricValueType(BasePydanticBackedStrEnum):
         tag="float",
         default_factory=float,
         converter=float,
-        dtype=float,
     )
     INT = MetricValueTypeInfo(
         tag="int",
         default_factory=int,
         converter=int,
-        dtype=int,
     )
     FLOAT_LIST = MetricValueTypeInfo(
         tag="list[float]",
         default_factory=list,
         converter=lambda v: [float(x) for x in v],
-        dtype=float,
     )
     INT_LIST = MetricValueTypeInfo(
         tag="list[int]",
         default_factory=list,
         converter=lambda v: [int(x) for x in v],
-        dtype=int,
     )
 
     @cached_property
@@ -436,11 +431,6 @@ class MetricValueType(BasePydanticBackedStrEnum):
     def converter(self) -> Callable[[Any], MetricValueTypeT]:
         """Get the converter for the metric value type."""
         return self.info.converter
-
-    @cached_property
-    def dtype(self) -> Any:
-        """Get the dtype for the metric value type (for numpy)."""
-        return self.info.dtype
 
     @classmethod
     def from_python_type(cls, type: type[MetricValueTypeT]) -> "MetricValueType":

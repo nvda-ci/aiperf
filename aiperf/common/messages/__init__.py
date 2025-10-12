@@ -26,7 +26,6 @@ from aiperf.common.messages.command_messages import (
     ProfileCancelCommand,
     ProfileConfigureCommand,
     ProfileStartCommand,
-    RealtimeMetricsCommand,
     RegisterServiceCommand,
     ShutdownCommand,
     ShutdownWorkersCommand,
@@ -70,7 +69,6 @@ from aiperf.common.messages.service_messages import (
     BaseServiceMessage,
     BaseStatusMessage,
     HeartbeatMessage,
-    RegistrationMessage,
     StatusMessage,
 )
 from aiperf.common.messages.telemetry_messages import (
@@ -125,11 +123,9 @@ __all__ = [
     "ProfileProgressMessage",
     "ProfileResultsMessage",
     "ProfileStartCommand",
-    "RealtimeMetricsCommand",
     "RealtimeMetricsMessage",
     "RecordsProcessingStatsMessage",
     "RegisterServiceCommand",
-    "RegistrationMessage",
     "RequiresRequestNSMixin",
     "ShutdownCommand",
     "ShutdownWorkersCommand",

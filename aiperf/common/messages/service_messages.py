@@ -53,14 +53,6 @@ class StatusMessage(BaseStatusMessage):
     message_type: MessageTypeT = MessageType.STATUS
 
 
-class RegistrationMessage(BaseStatusMessage):
-    """Message containing registration data.
-    This message is sent by a service to the system controller to register itself.
-    """
-
-    message_type: MessageTypeT = MessageType.REGISTRATION
-
-
 class HeartbeatMessage(BaseStatusMessage):
     """Message containing heartbeat data.
     This message is sent by a service to the system controller to indicate that it is

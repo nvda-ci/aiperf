@@ -11,14 +11,6 @@ if TYPE_CHECKING:
     from rich.style import StyleType
 
 
-def warn_command_not_implemented(command: str) -> None:
-    """Warn the user that the subcommand is not implemented."""
-    raise_startup_error_and_exit(
-        f"Command [bold red]{command}[/bold red] is not yet implemented",
-        title="Not Implemented",
-    )
-
-
 def raise_startup_error_and_exit(
     message: "RenderableType",
     text_color: "StyleType | None" = None,

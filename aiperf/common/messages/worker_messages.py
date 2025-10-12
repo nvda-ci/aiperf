@@ -23,13 +23,6 @@ class WorkerHealthMessage(BaseServiceMessage):
         description="Stats for the tasks that have been sent to the worker",
     )
 
-    @property
-    def error_rate(self) -> float:
-        """The error rate of the worker."""
-        if self.task_stats.total == 0:
-            return 0
-        return self.task_stats.failed / self.task_stats.total
-
 
 class WorkerStatusSummaryMessage(BaseServiceMessage):
     """Message for a worker status summary."""
