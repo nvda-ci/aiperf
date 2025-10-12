@@ -22,7 +22,6 @@ from aiperf.common.enums import (
     CommandResponseStatus,
     CommandType,
     MessageType,
-    ServiceRegistrationStatus,
     ServiceType,
 )
 from aiperf.common.exceptions import LifecycleOperationError
@@ -52,7 +51,6 @@ from aiperf.common.messages import (
 from aiperf.common.models import (
     ErrorDetails,
     ProcessRecordsResult,
-    ServiceRunInfo,
 )
 from aiperf.common.models.error_models import ExitErrorInfo
 from aiperf.common.protocols import AIPerfUIProtocol, ServiceManagerProtocol
@@ -256,25 +254,16 @@ class SystemController(SignalHandlerMixin, BaseService):
             lambda: f"Processing registration from {message.service_type} with ID: {message.service_id}"
         )
 
-        service_info = ServiceRunInfo(
-            registration_status=ServiceRegistrationStatus.REGISTERED,
-            service_type=message.service_type,
+        await self.service_manager.registry.register(
             service_id=message.service_id,
-            first_seen=time.time_ns(),
             state=message.state,
-            last_seen=time.time_ns(),
         )
-
-        self.service_manager.service_id_map[message.service_id] = service_info
-        if message.service_type not in self.service_manager.service_map:
-            self.service_manager.service_map[message.service_type] = []
-        self.service_manager.service_map[message.service_type].append(service_info)
 
         try:
             type_name = ServiceType(message.service_type).name.title().replace("_", " ")
         except (TypeError, ValueError):
             type_name = message.service_type
-        self.info(lambda: f"Registered {type_name} (id: '{message.service_id}')")
+        self.info(f"Registered {type_name} (id: '{message.service_id}')")
 
     @on_message(MessageType.HEARTBEAT)
     async def _process_heartbeat_message(self, message: HeartbeatMessage) -> None:
@@ -292,10 +281,10 @@ class SystemController(SignalHandlerMixin, BaseService):
 
         # Update the last heartbeat timestamp if the component exists
         try:
-            service_info = self.service_manager.service_id_map[service_id]
-            service_info.last_seen = timestamp
-            service_info.state = message.state
-            self.debug(f"Updated heartbeat for {service_id} to {timestamp}")
+            await self.service_manager.registry.update_service(
+                service_id, timestamp, message.state
+            )
+            self.debug(lambda: f"Updated heartbeat for {service_id} to {timestamp}")
         except Exception:
             self.warning(
                 f"Received heartbeat from unknown service: {service_id} ({service_type})"
@@ -324,6 +313,7 @@ class SystemController(SignalHandlerMixin, BaseService):
         """
         service_id = message.service_id
         service_type = message.service_type
+        timestamp = message.request_ns or time.time_ns()
         state = message.state
 
         self.debug(
@@ -331,19 +321,15 @@ class SystemController(SignalHandlerMixin, BaseService):
         )
 
         # Update the component state if the component exists
-        if service_id not in self.service_manager.service_id_map:
+        if not await self.service_manager.registry.is_registered(service_id):
             self.debug(
                 lambda: f"Received status update from un-registered service: {service_id} ({service_type})"
             )
             return
 
-        service_info = self.service_manager.service_id_map.get(service_id)
-        if service_info is None:
-            return
+        await self.service_manager.registry.update_service(service_id, timestamp, state)
 
-        service_info.state = message.state
-
-        self.debug(f"Updated state for {service_id} to {message.state}")
+        self.debug(lambda: f"Updated state for {service_id} to {state}")
 
     @on_message(MessageType.COMMAND_RESPONSE)
     async def _process_command_response_message(self, message: CommandResponse) -> None:

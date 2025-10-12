@@ -46,6 +46,9 @@ DEFAULT_PULL_CLIENT_MAX_CONCURRENCY = 100_000
 DEFAULT_SERVICE_REGISTRATION_TIMEOUT = 30.0
 """Default timeout for service registration in seconds."""
 
+DEFAULT_MULTIPROCESS_MONITOR_INTERVAL = 0.5
+"""Default interval for monitoring multiprocess services."""
+
 DEFAULT_SERVICE_START_TIMEOUT = 30.0
 """Default timeout for service start in seconds."""
 

@@ -71,6 +71,7 @@ from aiperf.common.messages.service_messages import (
     BaseStatusMessage,
     HeartbeatMessage,
     RegistrationMessage,
+    ServiceFailedMessage,
     StatusMessage,
 )
 from aiperf.common.messages.worker_messages import (
@@ -125,6 +126,7 @@ __all__ = [
     "RegisterServiceCommand",
     "RegistrationMessage",
     "RequiresRequestNSMixin",
+    "ServiceFailedMessage",
     "ShutdownCommand",
     "ShutdownWorkersCommand",
     "SpawnWorkersCommand",

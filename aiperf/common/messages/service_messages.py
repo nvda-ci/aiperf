@@ -2,9 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import time
 
-from pydantic import (
-    Field,
-)
+from pydantic import Field
 
 from aiperf.common.enums import (
     LifecycleState,
@@ -76,3 +74,11 @@ class BaseServiceErrorMessage(BaseServiceMessage):
     message_type: MessageTypeT = MessageType.SERVICE_ERROR
 
     error: ErrorDetails = Field(..., description="Error information")
+
+
+class ServiceFailedMessage(BaseServiceMessage):
+    """Message containing information about a service that has failed."""
+
+    message_type: MessageTypeT = MessageType.SERVICE_FAILED
+
+    reason: str = Field(..., description="Reason for the service failure")

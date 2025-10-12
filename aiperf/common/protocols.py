@@ -21,7 +21,6 @@ from aiperf.common.models import (
     ParsedResponse,
     ParsedResponseRecord,
     RequestRecord,
-    ServiceRunInfo,
     Turn,
 )
 from aiperf.common.types import (
@@ -42,6 +41,7 @@ if TYPE_CHECKING:
     from aiperf.common.config import ServiceConfig, UserConfig
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.record_models import MetricResult
+    from aiperf.controller.registration_manager import RegistrationManager
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
     from aiperf.timing.config import TimingManagerConfig
@@ -441,9 +441,7 @@ class ServiceManagerProtocol(AIPerfLifecycleProtocol, Protocol):
         log_queue: "multiprocessing.Queue | None" = None,
     ): ...
 
-    required_services: dict[ServiceTypeT, int]
-    service_map: dict[ServiceTypeT, list[ServiceRunInfo]]
-    service_id_map: dict[str, ServiceRunInfo]
+    registry: "RegistrationManager"
 
     async def run_service(
         self, service_type: ServiceTypeT, num_replicas: int = 1
