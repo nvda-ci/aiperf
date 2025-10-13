@@ -9,25 +9,24 @@ echo "=========================================="
 echo "Setting up environment for Dynamo GPU telemetry test"
 echo "=========================================="
 
-# Install uv if not present
-if ! command -v uv &> /dev/null; then
-    echo "Installing uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
-else
-    echo "✓ uv is already installed"
-fi
+# Build AIPerf Docker container
+echo "Building AIPerf container..."
+cd ${AIPERF_SOURCE_DIR}
+docker build -t aiperf:test .
 
-# Create and activate virtual environment
-echo "Creating Python 3.10 virtual environment..."
-uv venv --python 3.10
+echo "✓ AIPerf Docker image built successfully"
 
-echo "Activating virtual environment..."
-source .venv/bin/activate
+# Start the container with bash entrypoint to keep it running
+CONTAINER_NAME="aiperf-gpu-telemetry-dynamo-$$"
+echo "Starting AIPerf container: ${CONTAINER_NAME}..."
+docker run -d --name ${CONTAINER_NAME} --network host --entrypoint bash aiperf:test -c 'tail -f /dev/null'
 
-# Install aiperf from source
-echo "Installing aiperf from ${AIPERF_SOURCE_DIR}..."
-uv pip install ${AIPERF_SOURCE_DIR}
+# Export container name for the run script
+export AIPERF_CONTAINER_NAME=${CONTAINER_NAME}
+
+# Verify aiperf works in the container
+echo "Verifying aiperf in container..."
+docker exec ${CONTAINER_NAME} bash -c 'source /opt/aiperf/venv/bin/activate && aiperf --version'
 
 echo "✓ Environment setup complete"
 echo ""
@@ -35,3 +34,8 @@ echo ""
 # Run the actual test
 echo "Starting Dynamo pathway test..."
 bash -x ${AIPERF_SOURCE_DIR}/tests/ci/test_gpu_telemetry_dynamo/run_test.sh
+
+# Cleanup container
+echo "Cleaning up AIPerf container..."
+docker stop ${CONTAINER_NAME} || true
+docker rm ${CONTAINER_NAME} || true

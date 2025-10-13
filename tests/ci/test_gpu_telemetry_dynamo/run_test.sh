@@ -134,14 +134,14 @@ main() {
     fi
     log_info "✓ DCGM GPU metrics are available"
 
-    # Run AIPerf benchmark
+    # Run AIPerf benchmark inside the container
     log_info "Running AIPerf benchmark with GPU telemetry..."
-    aiperf profile \
-        --model "${MODEL}" \
+    docker exec -w /opt/aiperf ${AIPERF_CONTAINER_NAME} bash -c "source /opt/aiperf/venv/bin/activate && aiperf profile \
+        --model '${MODEL}' \
         --endpoint-type chat \
         --endpoint /v1/chat/completions \
         --streaming \
-        --url "localhost:${DYNAMO_PORT}" \
+        --url 'localhost:${DYNAMO_PORT}' \
         --synthetic-input-tokens-mean 100 \
         --synthetic-input-tokens-stddev 0 \
         --output-tokens-mean 200 \
@@ -153,9 +153,14 @@ main() {
         --warmup-request-count 1 \
         --conversation-num 4 \
         --random-seed 100 \
-        --gpu-telemetry
+        --gpu-telemetry"
 
     log_info "✓ AIPerf benchmark completed"
+
+    # Copy results from container to host
+    log_info "Copying results from container to host..."
+    mkdir -p "${SCRIPT_DIR}/${OUTPUT_DIR}"
+    docker cp ${AIPERF_CONTAINER_NAME}:/opt/aiperf/artifacts/. "${SCRIPT_DIR}/${OUTPUT_DIR}/"
 
     # Verify results
     log_info "Verifying GPU telemetry results..."
