@@ -325,6 +325,7 @@ class EndToEndTestRunner:
                     timeout 30 bash -c '
                         echo "Stopping Docker Compose services..."
                         docker compose -f docker-compose.yml down 2>/dev/null || true
+                        sleep 3
 
                         echo "Stopping Dynamo containers..."
                         # Stop containers by Dynamo image
@@ -344,12 +345,19 @@ class EndToEndTestRunner:
                 logger.info("Executing vLLM graceful shutdown...")
                 shutdown_cmd = """
                     timeout 30 bash -c '
+                        echo "Stopping DCGM exporter containers..."
+                        # Stop DCGM exporter containers explicitly since they are brought up separately
+                        docker stop dcgm-exporter 2>/dev/null || true
+                        docker rm dcgm-exporter 2>/dev/null || true
+                        docker ps --filter ancestor=*dcgm-exporter* --format "{{.ID}}" | xargs -r docker stop 2>/dev/null || true
+                        docker ps -aq --filter ancestor=*dcgm-exporter* | xargs -r docker rm 2>/dev/null || true
+
                         echo "Stopping vLLM containers..."
-                        # Stop containers by vLLM image
-                        docker ps --filter ancestor=*vllm* --format "{{.ID}}" | xargs -r docker stop 2>/dev/null || true
+                        # Stop containers with vllm in image name
+                        docker ps --format "{{.ID}} {{.Image}}" | grep vllm | awk "{print \$1}" | xargs -r docker stop 2>/dev/null || true
 
                         # Remove containers
-                        docker ps -aq --filter ancestor=*vllm* | xargs -r docker rm 2>/dev/null || true
+                        docker ps -aq --format "{{.ID}} {{.Image}}" | grep vllm | awk "{print \$1}" | xargs -r docker rm 2>/dev/null || true
 
                         echo "vLLM graceful shutdown completed"
                     '
@@ -363,6 +371,11 @@ class EndToEndTestRunner:
                         echo "Stopping containers for {server_name}..."
                         docker ps --filter name={server_name} --format "{{.ID}}" | xargs -r docker stop 2>/dev/null || true
                         docker ps -aq --filter name={server_name} | xargs -r docker rm 2>/dev/null || true
+
+                        echo "Stopping DCGM containers..."
+                        docker stop dcgm-exporter 2>/dev/null || true
+                        docker rm dcgm-exporter 2>/dev/null || true
+
                         echo "Generic server shutdown completed"
                     '
                 """
