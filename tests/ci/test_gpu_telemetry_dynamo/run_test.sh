@@ -159,7 +159,7 @@ main() {
 
     # Verify results
     log_info "Verifying GPU telemetry results..."
-    if python3 ${AIPERF_SOURCE_DIR}/tests/ci/gpu_telemetry_common/verify_results.py --output-dir "${SCRIPT_DIR}/${OUTPUT_DIR}"; then
+    if python3 ${AIPERF_SOURCE_DIR}/tests/ci/gpu_telemetry_common/verify_results.py --base-dir "${SCRIPT_DIR}"; then
         log_info "=========================================="
         log_info "✓ DYNAMO PATHWAY TEST PASSED"
         log_info "=========================================="

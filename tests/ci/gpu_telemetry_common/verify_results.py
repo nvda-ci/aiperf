@@ -15,19 +15,53 @@ from pathlib import Path
 from typing import Any
 
 
-def load_summary_json(output_dir: Path) -> dict[str, Any]:
-    """Load and parse the AIPerf summary.json file."""
-    summary_path = output_dir / "summary.json"
+def find_aiperf_output(base_dir: Path) -> Path | None:
+    """
+    Find AIPerf output directory automatically.
 
-    if not summary_path.exists():
-        print(f"ERROR: Summary file not found at {summary_path}")
+    Searches for AIPerf output in common locations:
+    - aiperf_output/ (legacy)
+    - artifacts/*/ (current AIPerf output structure)
+
+    Returns:
+        Path to the directory containing the results, or None if not found.
+    """
+    # Try legacy location
+    legacy_dir = base_dir / "aiperf_output"
+    if legacy_dir.exists() and (legacy_dir / "summary.json").exists():
+        return legacy_dir
+
+    # Search for profile_export_aiperf.json in artifacts
+    artifacts_dir = base_dir / "artifacts"
+    if artifacts_dir.exists():
+        for json_file in artifacts_dir.rglob("profile_export_aiperf.json"):
+            return json_file.parent
+
+    return None
+
+
+def load_summary_json(output_dir: Path) -> dict[str, Any]:
+    """
+    Load and parse the AIPerf results JSON file.
+
+    Tries both summary.json (legacy) and profile_export_aiperf.json (current).
+    """
+    # Try current filename first
+    json_path = output_dir / "profile_export_aiperf.json"
+    if not json_path.exists():
+        # Fallback to legacy filename
+        json_path = output_dir / "summary.json"
+
+    if not json_path.exists():
+        print(f"ERROR: Results file not found at {output_dir}")
+        print("  Tried: profile_export_aiperf.json, summary.json")
         return {}
 
     try:
-        with open(summary_path) as f:
+        with open(json_path) as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        print(f"ERROR: Failed to parse summary.json: {e}")
+        print(f"ERROR: Failed to parse {json_path.name}: {e}")
         return {}
 
 
@@ -167,19 +201,36 @@ def main():
         description="Validate GPU telemetry results from AIPerf benchmarking"
     )
     parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path("."),
+        help="Base directory to search for AIPerf output (default: current directory)",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("aiperf_output"),
-        help="Path to AIPerf output directory (default: aiperf_output)",
+        help="Explicit path to AIPerf output directory (overrides auto-detection)",
     )
     args = parser.parse_args()
 
-    output_dir = args.output_dir
-
-    if not output_dir.exists():
-        print(f"ERROR: Output directory not found at {output_dir}")
-        print(f"Please check that the path is correct: {output_dir.absolute()}")
-        sys.exit(1)
+    # Use explicit output-dir if provided, otherwise auto-detect
+    if args.output_dir:
+        output_dir = args.output_dir
+        if not output_dir.exists():
+            print(f"ERROR: Specified output directory not found: {output_dir}")
+            print(f"  Absolute path: {output_dir.absolute()}")
+            sys.exit(1)
+    else:
+        output_dir = find_aiperf_output(args.base_dir)
+        if output_dir is None:
+            print(f"ERROR: Could not find AIPerf output in {args.base_dir}")
+            print("  Searched for:")
+            print(f"    - {args.base_dir / 'aiperf_output' / 'summary.json'}")
+            print(
+                f"    - {args.base_dir / 'artifacts' / '*' / 'profile_export_aiperf.json'}"
+            )
+            sys.exit(1)
+        print(f"Found AIPerf output at: {output_dir}")
 
     print("=" * 70)
     print("GPU Telemetry Results Verification")
