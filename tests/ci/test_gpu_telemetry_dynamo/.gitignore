@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# AIPerf output directory
+aiperf_output/
+
+# Docker Compose logs
+*.log
+
+# Downloaded Dynamo docker-compose file
+docker-compose.yml
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
