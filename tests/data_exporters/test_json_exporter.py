@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -18,10 +19,9 @@ from aiperf.exporters.json_exporter import JsonExporter
 
 @pytest.fixture
 def sample_records():
-    """Sample metric records for JSON export testing."""
     return [
         MetricResult(
-            tag="ttft",
+            tag="time_to_first_token",
             header="Time to First Token",
             unit="ns",
             avg=123.0 * NANOS_PER_MILLIS,
@@ -42,51 +42,17 @@ def sample_records():
 
 @pytest.fixture
 def mock_user_config():
-    """Mock user configuration for JSON export testing."""
     return UserConfig(
         endpoint=EndpointConfig(
             model_names=["test-model"],
             type=EndpointType.CHAT,
             custom_endpoint="custom_endpoint",
-class TestJsonExporter:
-    @pytest.fixture
-    def sample_records(self):
-        return [
-            MetricResult(
-                tag="time_to_first_token",
-                header="Time to First Token",
-                unit="ns",
-                avg=123.0 * NANOS_PER_MILLIS,
-                min=100.0 * NANOS_PER_MILLIS,
-                max=150.0 * NANOS_PER_MILLIS,
-                p1=101.0 * NANOS_PER_MILLIS,
-                p5=105.0 * NANOS_PER_MILLIS,
-                p25=110.0 * NANOS_PER_MILLIS,
-                p50=120.0 * NANOS_PER_MILLIS,
-                p75=130.0 * NANOS_PER_MILLIS,
-                p90=140.0 * NANOS_PER_MILLIS,
-                p95=None,
-                p99=149.0 * NANOS_PER_MILLIS,
-                std=10.0 * NANOS_PER_MILLIS,
-            )
-        ]
-
-    @pytest.fixture
-    def mock_user_config(self):
-        return UserConfig(
-            endpoint=EndpointConfig(
-                model_names=["test-model"],
-                type=EndpointType.CHAT,
-                custom_endpoint="custom_endpoint",
-            )
         )
     )
 
 
 @pytest.fixture
 def mock_results(sample_records):
-    """Mock results object for JSON export testing."""
-
     class MockResults:
         def __init__(self, metrics):
             self.metrics = metrics

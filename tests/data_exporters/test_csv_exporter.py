@@ -418,7 +418,7 @@ class TestCsvExporterTelemetry:
             results = ProfileResults(
                 records=[
                     MetricResult(
-                        tag="ttft",
+                        tag="time_to_first_token",
                         header="Time to First Token",
                         unit="ms",
                         avg=120.5,
@@ -461,7 +461,7 @@ class TestCsvExporterTelemetry:
             results = ProfileResults(
                 records=[
                     MetricResult(
-                        tag="ttft",
+                        tag="time_to_first_token",
                         header="Time to First Token",
                         unit="ms",
                         avg=120.5,

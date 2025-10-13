@@ -5,19 +5,19 @@ from datetime import datetime
 from typing import Any
 
 import aiofiles
+from pydantic import BaseModel, ConfigDict
 
+from aiperf.common.config import UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
-from aiperf.common.constants import NANOS_PER_SECOND
+from aiperf.common.constants import NANOS_PER_SECOND, STAT_KEYS
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import DataExporterType, MetricFlags
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
-from aiperf.common.models import MetricResult
-from aiperf.common.models.export_models import JsonExportData
+from aiperf.common.models import ErrorDetailsCount, MetricResult
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.common.types import MetricTagT
 from aiperf.exporters.display_units_utils import (
-    STAT_KEYS,
     convert_all_metrics_to_display_units,
     normalize_endpoint_display,
 )
@@ -60,6 +60,8 @@ class TelemetryExportData(BaseModel):
 
 class JsonExportData(BaseModel):
     """Data to be exported to a JSON file."""
+
+    model_config = ConfigDict(extra="allow")
 
     records: dict[MetricTagT, MetricResult] | None = None
     input_config: UserConfig | None = None

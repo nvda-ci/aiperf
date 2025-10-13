@@ -19,7 +19,6 @@ from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult, TelemetryResults
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.display_units_utils import (
-    STAT_KEYS,
     convert_all_metrics_to_display_units,
     normalize_endpoint_display,
 )

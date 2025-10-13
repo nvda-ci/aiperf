@@ -61,7 +61,6 @@ __all__ = [
     "GpuSummary",
     "JsonExportData",
     "JsonExporter",
-    "STAT_KEYS",
     "TelemetryExportData",
     "TelemetrySummary",
     "convert_all_metrics_to_display_units",
