@@ -493,3 +493,24 @@ def mock_linux_child_process(
     """Mock Linux child process environment (Linux platform + child process)."""
     mock_current_process.return_value = mock_macos_child_process
     return mock_current_process
+
+
+@pytest.fixture
+def mock_model_info():
+    """Mock huggingface_hub.model_info for testing alias resolution."""
+    with patch("huggingface_hub.model_info") as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_auto_tokenizer():
+    """Mock transformers.AutoTokenizer for testing tokenizer initialization."""
+    with patch("transformers.AutoTokenizer") as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_list_models():
+    """Mock huggingface_hub.list_models for testing model search."""
+    with patch("huggingface_hub.list_models") as mock:
+        yield mock

@@ -31,6 +31,7 @@ dependencies = [
   "aiohttp~=3.12.14",
   "cyclopts>=3,<4",
   "ffmpeg-python~=0.2.0",
+  "huggingface-hub~=0.35.3",
   "numpy~=1.26.4",
   "orjson~=3.10.18",
   "pillow~=11.1.0",
