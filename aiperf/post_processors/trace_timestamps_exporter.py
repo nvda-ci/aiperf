@@ -45,7 +45,7 @@ class TraceTimestampsExporter(AIPerfLifecycleMixin):
     ) -> None:
         super().__init__(user_config=user_config, service_id=service_id, **kwargs)
         self.user_config = user_config
-        self.service_id = service_id or "default"
+        self.processor_id = service_id or "default"
         self.output_file: Path | None = None
         self.file_handle = None
         self._records_written = 0
