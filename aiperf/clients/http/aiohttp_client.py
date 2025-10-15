@@ -120,8 +120,9 @@ class AioHttpClientMixin(AIPerfLoggerMixin):
                         and response.content_type == "text/event-stream"
                     ):
                         # Parse SSE stream with optimal performance
+                        # Pass trace_timestamps so SSE reader can capture chunk data
                         messages = await AioHttpSSEStreamReader(
-                            response
+                            response, trace_timestamps=trace_timestamps
                         ).read_complete_stream()
                         record.responses.extend(messages)
                     else:
@@ -177,8 +178,13 @@ class AioHttpSSEStreamReader:
     making it ideal for benchmarking scenarios.
     """
 
-    def __init__(self, response: aiohttp.ClientResponse):
+    def __init__(
+        self,
+        response: aiohttp.ClientResponse,
+        trace_timestamps: AioHttpTraceTimestamps | None = None,
+    ):
         self.response = response
+        self.trace_timestamps = trace_timestamps
 
     async def read_complete_stream(self) -> list[SSEMessage]:
         """Read the complete SSE stream in a performant manner and return a list of
@@ -219,6 +225,13 @@ class AioHttpSSEStreamReader:
             if not chunk:
                 break
             chunk = first_byte + chunk
+
+            # Capture chunk information for trace timestamps
+            if self.trace_timestamps is not None:
+                self.trace_timestamps.response_chunk_received_ns.append(
+                    chunk_ns_first_byte
+                )
+                self.trace_timestamps.response_chunk_sizes.append(len(chunk))
 
             try:
                 # Use the fastest available decoder

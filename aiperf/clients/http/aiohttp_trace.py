@@ -34,32 +34,21 @@ def create_trace_config(timestamps: AioHttpTraceTimestamps) -> aiohttp.TraceConf
     """
     trace_config = aiohttp.TraceConfig()
 
-    # Simple callbacks using lambdas for timestamp-only captures
-    trace_config.on_connection_queued_start.append(
-        lambda *_: setattr(
-            timestamps, "connection_queued_start_ns", time.perf_counter_ns()
-        )
-    )
-    trace_config.on_connection_queued_end.append(
-        lambda *_: setattr(
-            timestamps, "connection_queued_end_ns", time.perf_counter_ns()
-        )
-    )
-    trace_config.on_connection_create_start.append(
-        lambda *_: setattr(
-            timestamps, "connection_create_start_ns", time.perf_counter_ns()
-        )
-    )
-    trace_config.on_connection_create_end.append(
-        lambda *_: setattr(
-            timestamps, "connection_create_end_ns", time.perf_counter_ns()
-        )
-    )
-    trace_config.on_connection_reuseconn.append(
-        lambda *_: setattr(
-            timestamps, "connection_reuseconn_ns", time.perf_counter_ns()
-        )
-    )
+    # Connection Pool Callbacks (must be async)
+    async def on_connection_queued_start(*_) -> None:
+        timestamps.connection_queued_start_ns = time.perf_counter_ns()
+
+    async def on_connection_queued_end(*_) -> None:
+        timestamps.connection_queued_end_ns = time.perf_counter_ns()
+
+    async def on_connection_create_start(*_) -> None:
+        timestamps.connection_create_start_ns = time.perf_counter_ns()
+
+    async def on_connection_create_end(*_) -> None:
+        timestamps.connection_create_end_ns = time.perf_counter_ns()
+
+    async def on_connection_reuseconn(*_) -> None:
+        timestamps.connection_reuseconn_ns = time.perf_counter_ns()
 
     # DNS callbacks with metadata extraction
     async def on_dns_resolvehost_start(
@@ -110,11 +99,10 @@ def create_trace_config(timestamps: AioHttpTraceTimestamps) -> aiohttp.TraceConf
         timestamps.request_method = params.method
         timestamps.request_url = str(params.url)
 
-    trace_config.on_request_headers_sent.append(
-        lambda *_: setattr(
-            timestamps, "request_headers_sent_ns", time.perf_counter_ns()
-        )
-    )
+    async def on_request_headers_sent(*_) -> None:
+        timestamps.request_headers_sent_ns = time.perf_counter_ns()
+
+    trace_config.on_request_headers_sent.append(on_request_headers_sent)
 
     async def on_request_end(
         _session: aiohttp.ClientSession,
@@ -172,7 +160,11 @@ def create_trace_config(timestamps: AioHttpTraceTimestamps) -> aiohttp.TraceConf
         timestamps.exception_type = type(params.exception).__name__
         timestamps.exception_message = str(params.exception)
 
-    # Register callbacks that need metadata extraction
+    trace_config.on_connection_queued_start.append(on_connection_queued_start)
+    trace_config.on_connection_queued_end.append(on_connection_queued_end)
+    trace_config.on_connection_create_start.append(on_connection_create_start)
+    trace_config.on_connection_create_end.append(on_connection_create_end)
+    trace_config.on_connection_reuseconn.append(on_connection_reuseconn)
     trace_config.on_dns_resolvehost_start.append(on_dns_resolvehost_start)
     trace_config.on_dns_resolvehost_end.append(on_dns_resolvehost_end)
     trace_config.on_dns_cache_hit.append(on_dns_cache_hit)

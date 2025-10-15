@@ -563,12 +563,14 @@ class RecordProcessorFactory(
         class_type: RecordProcessorType | str,
         service_config: "ServiceConfig",
         user_config: "UserConfig",
+        service_id: str | None = None,
         **kwargs,
     ) -> "RecordProcessorProtocol":
         return super().create_instance(
             class_type,
             service_config=service_config,
             user_config=user_config,
+            service_id=service_id,
             **kwargs,
         )
 

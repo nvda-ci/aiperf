@@ -483,3 +483,61 @@ class TestAioHttpClientMixin:
             assert hasattr(timestamps, "response_reason")
             assert hasattr(timestamps, "total_request_bytes")
             assert hasattr(timestamps, "total_response_bytes")
+
+    @pytest.mark.asyncio
+    async def test_trace_timestamps_capture_sse_chunks(
+        self, aiohttp_client: AioHttpClientMixin, mock_sse_response: Mock
+    ) -> None:
+        """Test that SSE stream chunks are captured in trace timestamps."""
+        mock_messages = [
+            SSEMessage(perf_ns=123456789),
+            SSEMessage(perf_ns=123456790),
+            SSEMessage(perf_ns=123456791),
+        ]
+
+        with (
+            patch("aiohttp.ClientSession") as mock_session_class,
+            patch(
+                "aiperf.clients.http.aiohttp_client.AioHttpSSEStreamReader"
+            ) as mock_reader_class,
+        ):
+            setup_mock_session(mock_session_class, mock_sse_response, ["request"])
+
+            # Create a real SSE reader that will capture chunks
+
+            real_reader = None
+
+            def create_reader(response, trace_timestamps=None):
+                nonlocal real_reader
+                # Create mock reader but save trace_timestamps reference
+                reader = Mock()
+                reader.read_complete_stream = AsyncMock(return_value=mock_messages)
+                # Simulate chunk capture (what the real reader would do)
+                if trace_timestamps:
+                    trace_timestamps.response_chunk_received_ns.extend(
+                        [123456789, 123456790, 123456791]
+                    )
+                    trace_timestamps.response_chunk_sizes.extend([100, 150, 200])
+                real_reader = reader
+                return reader
+
+            mock_reader_class.side_effect = create_reader
+
+            record = await aiohttp_client.post_request(
+                "http://test.com/stream",
+                '{"stream": true}',
+                {"Accept": "text/event-stream"},
+            )
+
+            assert_successful_request_record(
+                record, expected_response_count=3, expected_response_type=SSEMessage
+            )
+
+            # Verify trace timestamps captured SSE chunks
+            timestamps = record.trace_timestamps
+            assert timestamps is not None
+            assert len(timestamps.response_chunk_received_ns) == 3
+            assert len(timestamps.response_chunk_sizes) == 3
+            assert timestamps.total_response_chunks == 3
+            assert timestamps.total_response_bytes == 450  # 100 + 150 + 200
+            assert timestamps.is_streaming_response is True

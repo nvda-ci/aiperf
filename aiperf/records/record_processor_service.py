@@ -88,6 +88,7 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
                         processor_type,
                         service_config=self.service_config,
                         user_config=self.user_config,
+                        service_id=self.service_id,
                     )
                 )
                 self.records_processors.append(processor)

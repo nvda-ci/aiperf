@@ -15,6 +15,10 @@ class RecordProcessorType(CaseInsensitiveStrEnum):
     """Streamer that streams records and computes metrics from MetricType.RECORD and MetricType.AGGREGATE.
     This is the first stage of the metrics processing pipeline, and is done is a distributed manner across multiple service instances."""
 
+    TRACE_TIMESTAMPS_EXPORT = "trace_timestamps_export"
+    """Exporter that streams comprehensive HTTP trace timestamp data to JSONL files for offline performance analysis.
+    Captures all raw timestamps, metadata, and 42+ computed performance metrics per request."""
+
 
 class ResultsProcessorType(CaseInsensitiveStrEnum):
     """Type of streaming results processor.
