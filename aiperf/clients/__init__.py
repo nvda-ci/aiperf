@@ -13,6 +13,7 @@ from aiperf.clients.http import (
     AioHttpDefaults,
     AioHttpSSEStreamReader,
     SocketDefaults,
+    create_trace_config,
 )
 from aiperf.clients.model_endpoint_info import (
     EndpointInfo,
@@ -44,4 +45,5 @@ __all__ = [
     "OpenAIEmbeddingsRequestConverter",
     "RankingsRequestConverter",
     "SocketDefaults",
+    "create_trace_config",
 ]

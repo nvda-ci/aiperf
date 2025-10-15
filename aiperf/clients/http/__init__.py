@@ -14,6 +14,9 @@ from aiperf.clients.http.aiohttp_client import (
     create_tcp_connector,
     parse_sse_message,
 )
+from aiperf.clients.http.aiohttp_trace import (
+    create_trace_config,
+)
 from aiperf.clients.http.defaults import (
     AioHttpDefaults,
     SocketDefaults,
@@ -25,5 +28,6 @@ __all__ = [
     "AioHttpSSEStreamReader",
     "SocketDefaults",
     "create_tcp_connector",
+    "create_trace_config",
     "parse_sse_message",
 ]

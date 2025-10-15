@@ -97,12 +97,16 @@ from aiperf.common.models.telemetry_models import (
     TelemetryRecord,
     TelemetryResults,
 )
+from aiperf.common.models.timing_models import (
+    AioHttpTraceTimestamps,
+)
 from aiperf.common.models.worker_models import (
     WorkerTaskStats,
 )
 
 __all__ = [
     "AIPerfBaseModel",
+    "AioHttpTraceTimestamps",
     "Audio",
     "BaseResponseData",
     "CPUTimes",

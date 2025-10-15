@@ -19,6 +19,7 @@ from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.dataset_models import Turn
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
 from aiperf.common.models.export_models import JsonMetricResult
+from aiperf.common.models.timing_models import AioHttpTraceTimestamps
 from aiperf.common.types import MetricTagT
 
 
@@ -347,6 +348,10 @@ class RequestRecord(AIPerfBaseModel):
     x_correlation_id: str | None = Field(
         default=None,
         description="The X-Correlation-ID header of the request. This is the ID of the credit drop.",
+    )
+    trace_timestamps: AioHttpTraceTimestamps | None = Field(
+        default=None,
+        description="Detailed trace timestamps from aiohttp's tracing system, if available.",
     )
 
     @property

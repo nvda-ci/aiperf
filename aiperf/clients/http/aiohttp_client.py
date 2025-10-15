@@ -7,11 +7,13 @@ from typing import Any
 
 import aiohttp
 
+from aiperf.clients.http.aiohttp_trace import create_trace_config
 from aiperf.clients.http.defaults import AioHttpDefaults, SocketDefaults
 from aiperf.clients.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.enums import SSEFieldType
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import (
+    AioHttpTraceTimestamps,
     ErrorDetails,
     RequestRecord,
     SSEField,
@@ -78,6 +80,10 @@ class AioHttpClientMixin(AIPerfLoggerMixin):
             start_perf_ns=time.perf_counter_ns(),
         )
 
+        # Create trace timestamps object and trace config for detailed timing
+        trace_timestamps = AioHttpTraceTimestamps()
+        trace_config = create_trace_config(trace_timestamps)
+
         try:
             # Make raw HTTP request with precise timing using aiohttp
             async with aiohttp.ClientSession(
@@ -90,6 +96,7 @@ class AioHttpClientMixin(AIPerfLoggerMixin):
                     "Accept-Encoding",
                 ],
                 connector_owner=False,
+                trace_configs=[trace_config],
             ) as session:
                 record.start_perf_ns = time.perf_counter_ns()
                 async with session.request(
@@ -133,6 +140,9 @@ class AioHttpClientMixin(AIPerfLoggerMixin):
             record.end_perf_ns = time.perf_counter_ns()
             self.error(f"Error in aiohttp request: {e!r}")
             record.error = ErrorDetails(type=e.__class__.__name__, message=str(e))
+
+        # Attach the trace timestamps to the record
+        record.trace_timestamps = trace_timestamps
 
         return record
 

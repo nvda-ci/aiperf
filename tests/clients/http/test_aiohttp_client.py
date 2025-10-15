@@ -9,9 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import aiohttp
 import pytest
 
-from aiperf.clients.http.aiohttp_client import (
-    AioHttpClientMixin,
-)
+from aiperf.clients.http.aiohttp_client import AioHttpClientMixin
 from aiperf.clients.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -21,6 +19,7 @@ from aiperf.clients.model_endpoint_info import (
 from aiperf.common.config import UserConfig
 from aiperf.common.enums import EndpointType, ModelSelectionStrategy
 from aiperf.common.models import (
+    AioHttpTraceTimestamps,
     SSEMessage,
 )
 from tests.clients.http.conftest import (
@@ -402,3 +401,85 @@ class TestAioHttpClientMixin:
             mock_session.request.assert_called_once()
             call_args = mock_session.request.call_args
             assert call_args[1]["data"] == large_payload
+
+    @pytest.mark.asyncio
+    async def test_trace_timestamps_captured(
+        self, aiohttp_client: AioHttpClientMixin, mock_aiohttp_response: Mock
+    ) -> None:
+        """Test that trace timestamps are captured in the request record."""
+        with patch("aiohttp.ClientSession") as mock_session_class:
+            setup_mock_session(mock_session_class, mock_aiohttp_response, ["request"])
+
+            record = await aiohttp_client.post_request(
+                "http://test.com/api",
+                '{"test": "data"}',
+                {"Content-Type": "application/json"},
+            )
+
+            assert_successful_request_record(record)
+            # Verify trace timestamps are attached to the record
+            assert record.trace_timestamps is not None
+            assert isinstance(record.trace_timestamps, AioHttpTraceTimestamps)
+
+    @pytest.mark.asyncio
+    async def test_trace_timestamps_structure(
+        self, aiohttp_client: AioHttpClientMixin, mock_aiohttp_response: Mock
+    ) -> None:
+        """Test that the trace timestamps model has the expected structure."""
+        with patch("aiohttp.ClientSession") as mock_session_class:
+            setup_mock_session(mock_session_class, mock_aiohttp_response, ["request"])
+
+            record = await aiohttp_client.post_request(
+                "http://test.com/api",
+                '{"test": "data"}',
+                {"Content-Type": "application/json"},
+            )
+
+            timestamps = record.trace_timestamps
+            assert timestamps is not None
+
+            # Verify all timestamp fields exist on the model
+            assert hasattr(timestamps, "connection_queued_start_ns")
+            assert hasattr(timestamps, "connection_queued_end_ns")
+            assert hasattr(timestamps, "connection_create_start_ns")
+            assert hasattr(timestamps, "connection_create_end_ns")
+            assert hasattr(timestamps, "connection_reuseconn_ns")
+            assert hasattr(timestamps, "dns_resolvehost_start_ns")
+            assert hasattr(timestamps, "dns_resolvehost_end_ns")
+            assert hasattr(timestamps, "dns_cache_hit_ns")
+            assert hasattr(timestamps, "dns_cache_miss_ns")
+            assert hasattr(timestamps, "request_start_ns")
+            assert hasattr(timestamps, "request_headers_sent_ns")
+            assert hasattr(timestamps, "request_end_ns")
+            assert hasattr(timestamps, "request_chunk_sent_ns")
+            assert hasattr(timestamps, "response_chunk_received_ns")
+            assert hasattr(timestamps, "request_redirect_ns")
+            assert hasattr(timestamps, "request_exception_ns")
+
+            # Verify helper properties exist
+            assert hasattr(timestamps, "connection_queue_wait_ns")
+            assert hasattr(timestamps, "connection_create_duration_ns")
+            assert hasattr(timestamps, "dns_resolution_duration_ns")
+            assert hasattr(timestamps, "request_send_duration_ns")
+            assert hasattr(timestamps, "request_headers_duration_ns")
+            assert hasattr(timestamps, "request_body_duration_ns")
+            assert hasattr(timestamps, "total_request_chunks")
+            assert hasattr(timestamps, "total_response_chunks")
+            assert hasattr(timestamps, "total_redirects")
+
+            # Verify metadata fields exist
+            assert hasattr(timestamps, "dns_host")
+            assert hasattr(timestamps, "connection_host")
+            assert hasattr(timestamps, "request_method")
+            assert hasattr(timestamps, "request_url")
+            assert hasattr(timestamps, "request_chunk_sizes")
+            assert hasattr(timestamps, "response_chunk_sizes")
+            assert hasattr(timestamps, "redirect_urls")
+            assert hasattr(timestamps, "redirect_status_codes")
+            assert hasattr(timestamps, "exception_type")
+            assert hasattr(timestamps, "exception_message")
+            assert hasattr(timestamps, "response_headers")
+            assert hasattr(timestamps, "response_status")
+            assert hasattr(timestamps, "response_reason")
+            assert hasattr(timestamps, "total_request_bytes")
+            assert hasattr(timestamps, "total_response_bytes")
