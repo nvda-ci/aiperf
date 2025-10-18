@@ -168,13 +168,302 @@ See the [Complete Metrics Reference](../metrics_reference.md) page for a list of
 
 **File:** `artifacts/my-run/profile_export_aiperf.json`
 
-A single JSON object containing statistical summaries (min, max, mean, percentiles) for all metrics across the entire benchmark run, as well as the user configuration used for the benchmark.
+A single JSON object containing statistical summaries (min, max, mean, percentiles) for all metrics across the entire benchmark run, error summary, and the user configuration used for the benchmark.
+
+#### Complete File Structure
+
+The following example shows the complete structure of a `profile_export_aiperf.json` file with all major sections:
+
+```json
+{
+  // ==================== Benchmark Metrics ====================
+  // Metrics with full statistical distributions
+  "request_throughput": {
+    "unit": "requests/sec",
+    "avg": 13.16084556379392
+  },
+  "request_latency": {
+    "unit": "ms",
+    "avg": 6550.356151749999,
+    "p1": 5523.63769363,
+    "p5": 5641.17552705,
+    "p10": 5649.248782399999,
+    "p25": 5678.539702,
+    "p50": 5799.897624499999,
+    "p75": 7314.955492249999,
+    "p90": 8594.209632299999,
+    "p95": 8980.84214965,
+    "p99": 9381.628943169999,
+    "min": 4996.247445999999,
+    "max": 9383.367922,
+    "std": 1171.13614778278
+  },
+  "time_to_first_token": {
+    "unit": "ms",
+    "avg": 1588.797775365,
+    "p50": 787.5439584999999,
+    "p95": 4051.42644575,
+    "min": 382.242961,
+    "max": 4121.087335
+  },
+  "output_sequence_length": {
+    "unit": "tokens",
+    "avg": 96.85,
+    "p50": 97.0,
+    "min": 91.0,
+    "max": 97.0
+  },
+  // ... other metrics with statistical distributions
+
+  // ==================== Benchmark Summary ====================
+  "benchmark_duration": {
+    "unit": "sec",
+    "avg": 15.196591969000002
+  },
+  "request_count": {
+    "unit": "requests",
+    "avg": 200.0
+  },
+  "total_isl": {
+    "unit": "tokens",
+    "avg": 110000.0
+  },
+  "total_osl": {
+    "unit": "tokens",
+    "avg": 19370.0
+  },
+
+  // ==================== Benchmark Status ====================
+  "was_cancelled": true,
+  "start_time": "2025-10-17T20:22:08.939332",
+  "end_time": "2025-10-17T20:22:24.967633",
+
+  // ==================== Error Tracking ====================
+  "error_summary": [
+    {
+      "error_details": {
+        "code": 499,
+        "type": "RequestCancellationError",
+        "message": "Request was cancelled after 0.000 seconds"
+      },
+      "count": 81
+    },
+    {
+      "error_details": {
+        "code": 500,
+        "type": "InternalServerError",
+        "message": "Server encountered an internal error"
+      },
+      "count": 3
+    }
+  ],
+  "goodput": null,
+  "good_request_count": null,
+  "error_request_count": null,
+  "error_isl": null,
+  "total_error_isl": null,
+
+  // ==================== GPU Telemetry Data ====================
+  "telemetry_data": {
+    "summary": {
+      "endpoints_configured": ["http://localhost:9401/metrics"],
+      "endpoints_successful": ["http://localhost:9401/metrics"],
+      "start_time": "2025-10-17T20:22:08.939332",
+      "end_time": "2025-10-17T20:22:24.970213"
+    },
+    "endpoints": {
+      "localhost:9401": {
+        "gpus": {
+          "gpu_0": {
+            "gpu_index": 0,
+            "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+            "gpu_uuid": "GPU-f35d4dc1-e000-3faa-e3cf-787ede5e8761",
+            "hostname": "d3bc1424aff3",
+            "metrics": {
+              "gpu_power_usage": {
+                "unit": "W",
+                "avg": 43.37,
+                "p50": 26.68,
+                "p95": 190.24,
+                "min": 26.68,
+                "max": 299.28,
+                "std": 65.35
+              },
+              "gpu_utilization": {
+                "unit": "%",
+                "avg": 33.22,
+                "p50": 29.0,
+                "p95": 70.40,
+                "min": 29.0,
+                "max": 98.0,
+                "std": 16.54
+              },
+              "gpu_memory_used": {
+                "unit": "GB",
+                "avg": 47.03,
+                "min": 47.03,
+                "max": 47.03
+              },
+              "gpu_temperature": {
+                "unit": "°C",
+                "avg": 41.22,
+                "p50": 40.0,
+                "max": 60.0
+              }
+              // ... other GPU metrics
+            }
+          }
+        }
+      }
+    }
+  },
+
+  // ==================== Input Configuration ====================
+  "input_config": {
+    "endpoint": {
+      "model_names": ["openai/gpt-oss-20b"],
+      "type": "chat",
+      "streaming": true,
+      "url": "localhost:9000"
+    },
+    "input": {
+      "random_seed": 0,
+      "prompt": {
+        "output_tokens": {
+          "mean": 100
+        }
+      }
+    },
+    "loadgen": {
+      "concurrency": 100,
+      "request_rate_mode": "concurrency_burst",
+      "request_count": 1000000000
+    },
+    "cli_command": "aiperf profile -m \"openai/gpt-oss-20b\" --url \"localhost:9000\" --streaming --concurrency 100 --endpoint-type \"chat\" --num-requests 1000000000 --random-seed 0 --osl 100 --record-processors 4 --gpu-telemetry \"http://localhost:9400/metrics\" \"http://localhost:9401/metrics\"",
+    "gpu_telemetry": [
+      "http://localhost:9400/metrics",
+      "http://localhost:9401/metrics"
+    ]
+  }
+}
+```
+
+> [!NOTE]
+> The `input_config` section is a representation of the internal configuration, and it is not guaranteed to be stable across AIPerf versions.
+
+#### Key Field Categories
+
+**Metric Fields (for metrics with statistical distributions):**
+- `unit`: Unit of measurement for the metric
+- `avg`: Mean value across all requests
+- `p1`, `p5`, `p10`, `p25`, `p50`, `p75`, `p90`, `p95`, `p99`: Percentile values
+- `min`: Minimum value observed
+- `max`: Maximum value observed
+- `std`: Standard deviation
+
+**Benchmark Status Fields:**
+- `was_cancelled`: Boolean indicating if the benchmark was manually stopped before completion
+- `start_time`: ISO 8601 timestamp when benchmark started
+- `end_time`: ISO 8601 timestamp when benchmark ended
+
+**Error Tracking Fields:**
+- `error_summary`: Array of error summaries grouped by error type
+  - `error_details`: Detailed information about the error
+    - `code`: HTTP status code or custom error code
+    - `type`: Error classification (typically the Python exception class name)
+    - `message`: Human-readable error description
+  - `count`: Number of times this specific error occurred during the benchmark
+- `goodput`: Percentage of successful requests (null if not tracked)
+- `good_request_count`: Total number of successful requests (null if not tracked)
+- `error_request_count`: Total number of failed requests (null if no errors)
+- `error_isl`: Input sequence length statistics for failed requests (null if no errors)
+- `total_error_isl`: Total input sequence length across all failed requests (null if no errors)
+
+**GPU Telemetry Metrics (when enabled via `--gpu-telemetry`):**
+- `gpu_power_usage`: Power consumption in watts
+- `energy_consumption`: Total energy used in megajoules
+- `gpu_utilization`: GPU compute utilization percentage
+- `memory_copy_utilization`: Memory copy engine utilization percentage
+- `gpu_memory_used`: GPU memory used in gigabytes
+- `gpu_memory_free`: GPU memory free in gigabytes
+- `sm_clock_frequency`: Streaming multiprocessor clock frequency in MHz
+- `memory_clock_frequency`: Memory clock frequency in MHz
+- `gpu_temperature`: GPU temperature in Celsius
+- `memory_temperature`: Memory temperature in Celsius
+- `xid_errors`: Count of GPU hardware errors
 
 ### Aggregated Statistics (CSV)
 
 **File:** `artifacts/my-run/profile_export_aiperf.csv`
 
-Contains the same aggregated statistics as the JSON format, but in a spreadsheet-friendly structure with one metric per row.
+Contains the same aggregated statistics as the JSON format, but in a spreadsheet-friendly structure optimized for analysis in Excel, Google Sheets, or data analysis tools like pandas.
+
+#### Structure
+
+The CSV file is organized into three distinct sections separated by blank lines:
+
+1. **Statistical Distribution Metrics** - Metrics with full statistical distributions
+2. **Summary Metrics** - Single-value aggregate metrics
+3. **GPU Telemetry Metrics** - Hardware telemetry data (if enabled)
+
+#### Section 1: Statistical Distribution Metrics
+
+The first section contains metrics that have statistical distributions across all requests:
+
+**Example Snippet:**
+```csv
+Metric,avg,min,max,p1,p5,p10,p25,p50,p75,p90,p95,p99,std
+Request Latency (ms),6550.36,4996.25,9383.37,5523.64,5641.18,5649.25,5678.54,5799.90,7314.96,8594.21,8980.84,9381.63,1171.14
+Time to First Token (ms),1588.80,382.24,4121.09,403.48,547.97,641.77,659.03,787.54,2439.00,3695.10,4051.43,4119.33,1189.99
+Inter Token Latency (ms),51.76,46.81,56.30,50.41,50.50,50.53,50.86,51.98,52.17,53.18,54.32,55.87,1.23
+Output Sequence Length (tokens),96.85,91.00,97.00,91.00,97.00,97.00,97.00,97.00,97.00,97.00,97.00,97.00,0.88
+```
+
+**Columns:**
+- `Metric`: Human-readable metric name with unit in parentheses
+- `avg`: Mean value across all requests
+- `min`: Minimum value observed
+- `max`: Maximum value observed
+- `p1`, `p5`, `p10`, `p25`, `p50`, `p75`, `p90`, `p95`, `p99`: Percentile values
+- `std`: Standard deviation
+
+#### Section 2: Summary Metrics
+
+The second section contains aggregate metrics that have a single value for the entire benchmark:
+
+**Example Snippet:**
+```csv
+Metric,Value
+Benchmark Duration (sec),15.20
+Request Throughput (requests/sec),13.16
+Request Count,200.00
+Output Token Throughput (tokens/sec),1274.63
+```
+
+**Columns:**
+- `Metric`: Human-readable metric name with unit in parentheses
+- `Value`: The aggregate value for the entire benchmark run
+
+#### Section 3: GPU Telemetry Metrics
+
+When GPU telemetry is enabled via `--gpu-telemetry`, the third section contains hardware metrics with one row per GPU per metric:
+
+**Example Snippet:**
+```csv
+Endpoint,GPU_Index,GPU_Name,GPU_UUID,Metric,avg,min,max,p1,p5,p10,p25,p50,p75,p90,p95,p99,std
+localhost:9401,0,NVIDIA RTX 6000 Ada Generation,GPU-f35d4dc1-e000-3faa-e3cf-787ede5e8761,GPU Power Usage (W),43.37,26.68,299.28,26.68,26.68,26.68,26.68,26.68,26.68,26.68,190.24,299.28,65.35
+localhost:9401,0,NVIDIA RTX 6000 Ada Generation,GPU-f35d4dc1-e000-3faa-e3cf-787ede5e8761,GPU Utilization (%),33.22,29.00,98.00,29.00,29.00,29.00,29.00,29.00,29.00,29.00,70.40,98.00,16.54
+localhost:9401,0,NVIDIA RTX 6000 Ada Generation,GPU-f35d4dc1-e000-3faa-e3cf-787ede5e8761,GPU Memory Used (GB),47.03,47.03,47.03,47.03,47.03,47.03,47.03,47.03,47.03,47.03,47.03,47.03,0.00
+```
+
+**Columns:**
+- `Endpoint`: Telemetry endpoint hostname and port
+- `GPU_Index`: Zero-based GPU index on the system
+- `GPU_Name`: GPU model name (e.g., "NVIDIA RTX 6000 Ada Generation")
+- `GPU_UUID`: Unique GPU identifier
+- `Metric`: Human-readable telemetry metric name with unit
+- `avg`, `min`, `max`, `p1`-`p99`, `std`: Statistical values (same as Section 1)
+
 
 ## Working with Output Data
 

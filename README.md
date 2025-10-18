@@ -57,8 +57,6 @@ Features
 | **[Sequence Distributions](docs/tutorials/sequence-distributions.md)** | Mixed ISL/OSL pairings | Benchmarking mixed use cases |
 | **[Goodput](docs/tutorials/goodput.md)** | Throughput of requests meeting user-defined SLOs | SLO validation, capacity planning, runtime/model comparisons |
 
-### Working with Benchmark Data
-- **[Profile Exports](docs/tutorials/working-with-profile-exports.md)** - Parse and analyze `profile_export.jsonl` with Pydantic models, custom metrics, and async processing
 
 ### Quick Navigation
 ```bash
@@ -160,7 +158,14 @@ NVIDIA AIPerf | LLM Metrics
 ```
 </div>
 
+## Output File Formats
 
+AIPerf generates multiple output formats after each benchmark run, each optimized for different analysis workflows. See [Working with Profile Export Files](docs/tutorials/working-with-profile-exports.md) for more details.
+
+- [**`inputs.json`**](docs/tutorials/working-with-profile-exports.md#input-dataset-json) - Complete input dataset with formatted payloads for each request
+- [**`profile_export.jsonl`**](docs/tutorials/working-with-profile-exports.md#per-request-records-jsonl) - Per-request metric records in JSON Lines format with one record per line
+- [**`profile_export_aiperf.json`**](docs/tutorials/working-with-profile-exports.md#aggregated-statistics-json) - Aggregated statistics and user configuration as a single JSON object
+- [**`profile_export_aiperf.csv`**](docs/tutorials/working-with-profile-exports.md#aggregated-statistics-csv) - Aggregated statistics in CSV format
 ## Known Issues
 
 - Output sequence length constraints (`--output-tokens-mean`) cannot be guaranteed unless you pass `ignore_eos` and/or `min_tokens` via `--extra-inputs` to an inference server that supports them.
