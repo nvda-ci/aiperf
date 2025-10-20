@@ -5,8 +5,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiperf.common.enums import EndpointType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import (
     ParsedResponse,
 )
@@ -16,7 +14,7 @@ from aiperf.common.protocols import InferenceServerResponse
 from aiperf.endpoints.base_endpoint import BaseEndpoint
 
 
-@EndpointFactory.register(EndpointType.RANKINGS)
+# @EndpointFactory.register(EndpointType.RANKINGS)
 class RankingsEndpoint(BaseEndpoint):
     """NIM Rankings endpoint.
 

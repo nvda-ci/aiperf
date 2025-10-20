@@ -58,6 +58,7 @@ MessageTypeT: TypeAlias = MessageType | str
 MetricTagT: TypeAlias = str
 ModelEndpointInfoT = TypeVar("ModelEndpointInfoT", bound="ModelEndpointInfo")
 OutputT = TypeVar("OutputT", bound=Any)
+PluginClassT = TypeVar("PluginClassT", bound=Any)
 ProtocolT = TypeVar("ProtocolT", bound=Any)
 RawRequestT = TypeVar("RawRequestT", bound=Any, contravariant=True)
 RawResponseT = TypeVar("RawResponseT", bound=Any, contravariant=True)

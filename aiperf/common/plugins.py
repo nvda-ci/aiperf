@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import Self
 
 from aiperf.common.exceptions import PluginNotFoundError
+from aiperf.common.types import PluginClassT
 
 
 class AIPerfPluginMetadata(BaseModel):
@@ -245,7 +246,9 @@ class AIPerfPluginManager:
             )
         return plugin.metadata
 
-    def get_plugin_class(self, plugin_type: type[Protocol], name: str) -> type[Any]:
+    def get_plugin_class(
+        self, plugin_type: type[PluginClassT], name: str
+    ) -> type[PluginClassT]:
         """Get the plugin class for the given plugin type and name (lazy loads if needed).
 
         Raises:
@@ -280,3 +283,12 @@ class AIPerfPluginManager:
             f"Plugin class '{name}' loaded for plugin type '{plugin_type}': {plugin.class_type!r}."
         )
         return plugin.class_type
+
+    def create_instance(self, plugin_type: type[Protocol], name: str, **kwargs) -> Any:
+        """Create an instance of the given plugin type and name."""
+        plugin_class = self.get_plugin_class(plugin_type, name)
+        if not plugin_class:
+            raise PluginNotFoundError(
+                f"Plugin class for '{name}' not found for plugin type '{plugin_type}'"
+            )
+        return plugin_class(**kwargs)

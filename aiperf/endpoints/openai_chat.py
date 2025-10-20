@@ -6,9 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from aiperf.common.enums import EndpointType
 from aiperf.common.enums.openai_enums import OpenAIObjectType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import (
     BaseResponseData,
     ParsedResponse,
@@ -24,7 +22,7 @@ from aiperf.endpoints.base_endpoint import BaseEndpoint
 _DEFAULT_ROLE: str = "user"
 
 
-@EndpointFactory.register(EndpointType.CHAT)
+# @EndpointFactory.register(EndpointType.CHAT)
 class ChatEndpoint(BaseEndpoint):
     """OpenAI Chat Completions endpoint.
 

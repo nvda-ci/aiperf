@@ -23,7 +23,6 @@ from aiperf.common.enums import (
 )
 from aiperf.common.exceptions import NotInitializedError
 from aiperf.common.factories import (
-    EndpointFactory,
     ServiceFactory,
 )
 from aiperf.common.hooks import background_task, on_command, on_pull_message
@@ -49,7 +48,9 @@ from aiperf.common.models import (
 )
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.record_models import RequestInfo
+from aiperf.common.plugins import AIPerfPluginManager
 from aiperf.common.protocols import (
+    EndpointProtocol,
     PushClientProtocol,
     RequestClientProtocol,
 )
@@ -104,13 +105,17 @@ class Worker(PullClientMixin, BaseComponentService, ProcessHealthMixin):
 
         self.model_endpoint = ModelEndpointInfo.from_user_config(self.user_config)
 
-        self.debug(
-            lambda: f"Creating inference client for {self.model_endpoint.endpoint.type}, "
-            f"class: {EndpointFactory.get_class_from_type(self.model_endpoint.endpoint.type).__name__}",
+        endpoint_type = self.model_endpoint.endpoint.type
+        pm = AIPerfPluginManager()
+        plugin_class: type[EndpointProtocol] = pm.get_plugin_class(
+            EndpointProtocol, endpoint_type
         )
-        self.inference_client = EndpointFactory.create_instance(
-            self.model_endpoint.endpoint.type,
-            model_endpoint=self.model_endpoint,
+        self.debug(
+            lambda: f"Creating inference client for {endpoint_type}, "
+            f"class: {plugin_class.__name__}",
+        )
+        self.inference_client: EndpointProtocol = plugin_class(
+            model_endpoint=self.model_endpoint
         )
         self.attach_child_lifecycle(self.inference_client)
 

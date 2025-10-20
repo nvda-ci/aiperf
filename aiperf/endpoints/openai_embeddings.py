@@ -5,9 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiperf.common.enums import EndpointType
 from aiperf.common.enums.openai_enums import OpenAIObjectType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import (
     BaseResponseData,
     ParsedResponse,
@@ -19,7 +17,7 @@ from aiperf.common.types import JsonObject, RequestOutputT
 from aiperf.endpoints.base_endpoint import BaseEndpoint
 
 
-@EndpointFactory.register(EndpointType.EMBEDDINGS)
+# @EndpointFactory.register(EndpointType.EMBEDDINGS)
 class EmbeddingsEndpoint(BaseEndpoint):
     """OpenAI Embeddings endpoint.
 
