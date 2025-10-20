@@ -21,7 +21,6 @@ from aiperf.common.enums import (
 from aiperf.common.enums.dataset_enums import CustomDatasetType
 from aiperf.common.factories import (
     ComposerFactory,
-    EndpointFactory,
     ServiceFactory,
 )
 from aiperf.common.hooks import on_command, on_request
@@ -121,9 +120,14 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
     ) -> InputsFile:
         """Generate input payloads from the dataset for use in the inputs.json file."""
         inputs = InputsFile()
-        inference_client = EndpointFactory.create_instance(
-            model_endpoint.endpoint.type,
-            model_endpoint,
+        from aiperf.common.plugins import AIPerfPluginManager
+        from aiperf.common.protocols import EndpointProtocol
+
+        endpoint_class = AIPerfPluginManager().get_plugin_class(
+            EndpointProtocol, model_endpoint.endpoint.type
+        )
+        inference_client: EndpointProtocol = endpoint_class(
+            model_endpoint=model_endpoint
         )
         for conversation in self.dataset.values():
             payloads = await asyncio.gather(

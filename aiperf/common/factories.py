@@ -14,7 +14,6 @@ from aiperf.common.enums import (
     ConsoleExporterType,
     CustomDatasetType,
     DataExporterType,
-    EndpointType,
     RecordProcessorType,
     RequestRateMode,
     ResultsProcessorType,
@@ -28,7 +27,6 @@ from aiperf.common.exceptions import (
     InvalidOperationError,
     InvalidStateError,
 )
-from aiperf.common.protocols import EndpointProtocol
 from aiperf.common.types import (
     ClassEnumT,
     ClassProtocolT,
@@ -46,13 +44,11 @@ if TYPE_CHECKING:
         ServiceConfig,
         UserConfig,
     )
-    from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
     from aiperf.common.protocols import (
         CommunicationClientProtocol,
         CommunicationProtocol,
         ConsoleExporterProtocol,
         DataExporterProtocol,
-        EndpointProtocol,
         RecordProcessorProtocol,
         RequestRateGeneratorProtocol,
         ResultsProcessorProtocol,
@@ -446,39 +442,6 @@ class DataExporterFactory(AIPerfFactory[DataExporterType, "DataExporterProtocol"
         return super().create_instance(
             class_type, exporter_config=exporter_config, **kwargs
         )
-
-
-class EndpointFactory(AIPerfFactory[EndpointType, "EndpointProtocol"]):
-    """Factory for registering and creating EndpointProtocol instances based on the specified endpoint type.
-    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
-    """
-
-    @classmethod
-    def create_instance(  # type: ignore[override]
-        cls,
-        class_type: EndpointType | str,
-        model_endpoint: "ModelEndpointInfo",
-        **kwargs,
-    ) -> "EndpointProtocol":
-        return super().create_instance(
-            class_type, model_endpoint=model_endpoint, **kwargs
-        )
-
-    @classmethod
-    def metadata(cls, endpoint_type: EndpointType | str):
-        """Get metadata from the registered endpoint class.
-
-        Args:
-            endpoint_type: The endpoint type to get metadata for
-
-        Returns:
-            EndpointMetadata from the registered endpoint class
-
-        Raises:
-            FactoryCreationError: If no endpoint is registered for the type
-        """
-        endpoint_class = cls.get_class_from_type(endpoint_type)
-        return endpoint_class.metadata()
 
 
 class ServiceFactory(AIPerfFactory[ServiceType, "ServiceProtocol"]):

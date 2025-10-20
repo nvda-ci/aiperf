@@ -5,7 +5,6 @@ import time
 
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import CommAddress
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.hooks import on_init
 from aiperf.common.messages import (
     ConversationTurnRequestMessage,
@@ -49,9 +48,14 @@ class InferenceResultParser(CommunicationMixin):
         self.model_endpoint: ModelEndpointInfo = ModelEndpointInfo.from_user_config(
             user_config
         )
-        self.inference_client = EndpointFactory.create_instance(
-            self.model_endpoint.endpoint.type,
-            model_endpoint=self.model_endpoint,
+        from aiperf.common.plugins import AIPerfPluginManager
+        from aiperf.common.protocols import EndpointProtocol
+
+        endpoint_class: type[EndpointProtocol] = AIPerfPluginManager().get_plugin_class(
+            EndpointProtocol, self.model_endpoint.endpoint.type
+        )
+        self.inference_client: EndpointProtocol = endpoint_class(
+            model_endpoint=self.model_endpoint
         )
 
     @on_init

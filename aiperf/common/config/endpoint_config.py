@@ -34,9 +34,13 @@ class EndpointConfig(BaseConfig):
             return self
 
         # Lazy import to avoid circular dependency
-        from aiperf.common.factories import EndpointFactory
+        from aiperf.common.plugins import AIPerfPluginManager
+        from aiperf.common.protocols import EndpointProtocol
 
-        metadata = EndpointFactory.metadata(self.type)
+        endpoint_class = AIPerfPluginManager().get_plugin_class(
+            EndpointProtocol, self.type
+        )
+        metadata = endpoint_class.metadata()
         if not metadata.supports_streaming:
             _logger.warning(
                 f"Streaming is not supported for --endpoint-type {self.type}, setting streaming to False"

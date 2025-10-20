@@ -7,6 +7,7 @@ __ignore__ = []
 # Make the list of submodules empty to avoid recursively adding
 # everything from those modules into the top-level here.
 __submodules__ = []
+import aiperf.endpoints
 
 ########################################################################
 ## 📝        Documentation of all supported mkinit flags           📝 ##

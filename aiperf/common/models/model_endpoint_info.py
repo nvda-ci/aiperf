@@ -147,9 +147,13 @@ class ModelEndpointInfo(AIPerfBaseModel):
             path = self.endpoint.custom_endpoint.lstrip("/")
         else:
             # Lazy import to avoid circular dependency
-            from aiperf.common.factories import EndpointFactory
+            from aiperf.common.plugins import AIPerfPluginManager
+            from aiperf.common.protocols import EndpointProtocol
 
-            metadata = EndpointFactory.metadata(self.endpoint.type)
+            endpoint_class = AIPerfPluginManager().get_plugin_class(
+                EndpointProtocol, self.endpoint.type
+            )
+            metadata = endpoint_class.metadata()
             if not metadata.endpoint_path:
                 return url
             path = metadata.endpoint_path.lstrip("/")
