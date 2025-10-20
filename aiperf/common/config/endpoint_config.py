@@ -29,7 +29,15 @@ class EndpointConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_streaming(self) -> Self:
-        if not self.type.supports_streaming:
+        """Validate that streaming is supported for the endpoint type."""
+        if not self.streaming:
+            return self
+
+        # Lazy import to avoid circular dependency
+        from aiperf.common.factories import EndpointFactory
+
+        metadata = EndpointFactory.metadata(self.type)
+        if not metadata.supports_streaming:
             _logger.warning(
                 f"Streaming is not supported for --endpoint-type {self.type}, setting streaming to False"
             )

@@ -17,20 +17,22 @@ from aiperf.common.enums import (
     MessageType,
     MetricType,
     ServiceType,
+    TransportType,
 )
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from aiperf.clients.model_endpoint_info import ModelEndpointInfo
     from aiperf.common.messages import CommandMessage, Message
     from aiperf.common.mixins import AIPerfLifecycleMixin, HooksMixin
     from aiperf.common.models import AIPerfBaseModel, Media
+    from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
     from aiperf.common.protocols import ServiceProtocol
 
 
 AnyT: TypeAlias = Any
 AnyClassT: TypeAlias = type | UnionType
+JsonObject: TypeAlias = dict[str, Any]  # JSON object type
 AIPerfBaseModelT = TypeVar("AIPerfBaseModelT", bound="AIPerfBaseModel")
 BaseModelT = TypeVar("BaseModelT", bound="BaseModel")
 ClassEnumT = TypeVar("ClassEnumT", bound="CaseInsensitiveStrEnum")
@@ -65,3 +67,4 @@ ResponseT = TypeVar("ResponseT", bound=Any, covariant=True)
 SelfT = TypeVar("SelfT", bound=Any)
 ServiceProtocolT = TypeVar("ServiceProtocolT", bound="ServiceProtocol")
 ServiceTypeT: TypeAlias = ServiceType | str
+TransportTypeT: TypeAlias = TransportType | str

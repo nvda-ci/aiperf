@@ -9,7 +9,7 @@ from aiperf.common.config import EndpointConfig, InputConfig, ServiceConfig, Use
 from aiperf.common.messages import ConversationTurnResponseMessage
 from aiperf.common.models import ErrorDetails, RequestRecord, Text, Turn
 from aiperf.common.tokenizer import Tokenizer
-from aiperf.parsers.inference_result_parser import InferenceResultParser
+from aiperf.records.inference_result_parser import InferenceResultParser
 
 
 @pytest.fixture
@@ -66,8 +66,10 @@ def parser(mock_turn_response):
         patch(
             "aiperf.common.mixins.CommunicationMixin.__init__", mock_communication_init
         ),
-        patch("aiperf.clients.model_endpoint_info.ModelEndpointInfo.from_user_config"),
-        patch("aiperf.common.factories.ResponseExtractorFactory.create_instance"),
+        patch(
+            "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config"
+        ),
+        patch("aiperf.common.factories.EndpointFactory.create_instance"),
     ):
         parser = InferenceResultParser(
             service_config=ServiceConfig(),

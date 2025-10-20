@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import Field
 
 from aiperf.common.config import EndpointDefaults, UserConfig
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
 from aiperf.common.models import AIPerfBaseModel
 
 
@@ -125,6 +125,10 @@ class ModelEndpointInfo(AIPerfBaseModel):
         ...,
         description="The endpoint to use for the models.",
     )
+    transport: TransportType = Field(
+        default=TransportType.HTTP,
+        description="The transport to use for the endpoint.",
+    )
 
     @classmethod
     def from_user_config(cls, user_config: UserConfig) -> "ModelEndpointInfo":
@@ -142,9 +146,13 @@ class ModelEndpointInfo(AIPerfBaseModel):
         if self.endpoint.custom_endpoint:
             path = self.endpoint.custom_endpoint.lstrip("/")
         else:
-            if not self.endpoint.type.endpoint_path:
+            # Lazy import to avoid circular dependency
+            from aiperf.common.factories import EndpointFactory
+
+            metadata = EndpointFactory.metadata(self.endpoint.type)
+            if not metadata.endpoint_path:
                 return url
-            path = self.endpoint.type.endpoint_path.lstrip("/")
+            path = metadata.endpoint_path.lstrip("/")
             if url.endswith("/v1") and path.startswith("v1/"):
                 path = path[3:]  # Remove the v1/ prefix
 

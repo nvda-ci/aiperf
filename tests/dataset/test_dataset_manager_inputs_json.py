@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from aiperf.common.config.config_defaults import OutputDefaults
-from aiperf.common.factories import RequestConverterFactory
+from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import InputsFile, SessionPayloads
 
 
@@ -156,9 +156,9 @@ class TestDatasetManagerInputsJsonGeneration:
         populated_dataset_manager,
         caplog,
     ):
-        """Test error handling when RequestConverterFactory creation fails."""
+        """Test error handling when EndpointFactory creation fails."""
         with patch.object(
-            RequestConverterFactory,
+            EndpointFactory,
             "create_instance",
             side_effect=Exception("Factory error"),
         ):
@@ -198,7 +198,7 @@ class TestDatasetManagerInputsJsonGeneration:
         )
 
         with patch.object(
-            RequestConverterFactory,
+            EndpointFactory,
             "create_instance",
             return_value=mock_converter,
         ):

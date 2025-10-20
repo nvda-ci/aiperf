@@ -39,9 +39,8 @@ from aiperf.common.enums.dataset_enums import (
     VideoSynthType,
 )
 from aiperf.common.enums.endpoints_enums import (
-    EndpointServiceKind,
     EndpointType,
-    EndpointTypeInfo,
+    TransportType,
 )
 from aiperf.common.enums.logging_enums import (
     AIPerfLogLevel,
@@ -129,9 +128,7 @@ __all__ = [
     "CreditPhase",
     "CustomDatasetType",
     "DataExporterType",
-    "EndpointServiceKind",
     "EndpointType",
-    "EndpointTypeInfo",
     "EnergyMetricUnit",
     "EnergyMetricUnitInfo",
     "ExportLevel",
@@ -170,6 +167,7 @@ __all__ = [
     "TemperatureMetricUnit",
     "TemperatureMetricUnitInfo",
     "TimingMode",
+    "TransportType",
     "VideoFormat",
     "VideoSynthType",
     "WorkerStatus",

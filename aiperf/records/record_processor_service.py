@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 
-from aiperf.clients.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.constants import DEFAULT_PULL_CLIENT_MAX_CONCURRENCY
@@ -29,6 +28,7 @@ from aiperf.common.models import (
     ParsedResponseRecord,
     RequestRecord,
 )
+from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.protocols import (
     PushClientProtocol,
     RecordProcessorProtocol,
@@ -37,7 +37,7 @@ from aiperf.common.protocols import (
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.utils import compute_time_ns
 from aiperf.metrics.metric_dicts import MetricRecordDict
-from aiperf.parsers.inference_result_parser import InferenceResultParser
+from aiperf.records.inference_result_parser import InferenceResultParser
 
 
 @ServiceFactory.register(ServiceType.RECORD_PROCESSOR)

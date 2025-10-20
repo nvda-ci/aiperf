@@ -2,29 +2,49 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aiperf.clients.openai.rankings import RankingsRequestConverter
+from aiperf.common.enums import EndpointType, ModelSelectionStrategy
 from aiperf.common.models import Text, Turn
+from aiperf.common.models.model_endpoint_info import (
+    EndpointInfo,
+    ModelEndpointInfo,
+    ModelInfo,
+    ModelListInfo,
+)
+from aiperf.common.models.record_models import RequestInfo
+from aiperf.endpoints.nim_rankings import RankingsEndpoint
 
 
 class TestRankingsRequestConverter:
     """Test cases for RankingsRequestConverter."""
 
     @pytest.fixture
-    def converter(self):
-        """Create a RankingsRequestConverter instance."""
-        return RankingsRequestConverter()
-
-    @pytest.fixture
     def model_endpoint(self):
         """Create a test ModelEndpointInfo for rankings."""
-        mock_endpoint = MagicMock()
-        mock_endpoint.endpoint.extra = None
-        mock_endpoint.primary_model_name = "test-model"
-        return mock_endpoint
+        return ModelEndpointInfo(
+            models=ModelListInfo(
+                models=[ModelInfo(name="test-model")],
+                model_selection_strategy=ModelSelectionStrategy.ROUND_ROBIN,
+            ),
+            endpoint=EndpointInfo(
+                type=EndpointType.RANKINGS,
+                base_url="http://localhost:8000",
+                extra=None,
+            ),
+        )
+
+    @pytest.fixture
+    def converter(self, model_endpoint):
+        """Create a RankingsRequestConverter instance."""
+        with patch(
+            "aiperf.common.factories.TransportFactory.create_instance"
+        ) as mock_transport:
+            mock_transport.return_value = MagicMock()
+            endpoint = RankingsEndpoint(model_endpoint=model_endpoint)
+            return endpoint
 
     @pytest.fixture
     def basic_turn(self):
@@ -47,7 +67,9 @@ class TestRankingsRequestConverter:
     @pytest.mark.asyncio
     async def test_format_payload_basic(self, converter, model_endpoint, basic_turn):
         """Test basic payload formatting with query and passages."""
-        payload = await converter.format_payload(model_endpoint, basic_turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=model_endpoint, turns=[basic_turn])
+        )
 
         assert payload["model"] == "test-model"
         assert payload["query"] == {"text": "What is artificial intelligence?"}
@@ -67,7 +89,9 @@ class TestRankingsRequestConverter:
             model="test-model",
         )
 
-        payload = await converter.format_payload(model_endpoint, turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+        )
 
         assert payload["query"] == {"text": "What is Python?"}
         assert len(payload["passages"]) == 1
@@ -87,7 +111,9 @@ class TestRankingsRequestConverter:
         )
 
         with caplog.at_level(logging.WARNING):
-            payload = await converter.format_payload(model_endpoint, turn)
+            payload = await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
         assert "Multiple query texts found" in caplog.text
         assert payload["query"] == {"text": "First query"}
@@ -100,7 +126,9 @@ class TestRankingsRequestConverter:
         )
 
         with caplog.at_level(logging.WARNING):
-            payload = await converter.format_payload(model_endpoint, turn)
+            payload = await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
         assert "no passages to rank" in caplog.text
         assert payload["query"] == {"text": "What is AI?"}
@@ -114,7 +142,9 @@ class TestRankingsRequestConverter:
         )
 
         with pytest.raises(ValueError, match="requires a text with name 'query'"):
-            await converter.format_payload(model_endpoint, turn)
+            await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
     @pytest.mark.asyncio
     async def test_format_payload_empty_query_contents(self, converter, model_endpoint):
@@ -128,7 +158,9 @@ class TestRankingsRequestConverter:
         )
 
         with pytest.raises(ValueError, match="requires a text with name 'query'"):
-            await converter.format_payload(model_endpoint, turn)
+            await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
     @pytest.mark.asyncio
     async def test_format_payload_ignored_texts(
@@ -147,7 +179,9 @@ class TestRankingsRequestConverter:
 
         # Should warn about ignored texts
         with caplog.at_level(logging.WARNING):
-            payload = await converter.format_payload(model_endpoint, turn)
+            payload = await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
         # Check that warnings were issued for ignored texts
         assert "context" in caplog.text
@@ -169,7 +203,9 @@ class TestRankingsRequestConverter:
             model="test-model",
         )
 
-        payload = await converter.format_payload(model_endpoint, turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+        )
 
         assert payload["query"] == {"text": "What is AI?"}
         assert len(payload["passages"]) == 3
@@ -188,7 +224,9 @@ class TestRankingsRequestConverter:
             model="turn-model",  # Different from endpoint model
         )
 
-        payload = await converter.format_payload(model_endpoint, turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+        )
         assert payload["model"] == "turn-model"
 
     @pytest.mark.asyncio
@@ -202,7 +240,9 @@ class TestRankingsRequestConverter:
             model=None,
         )
 
-        payload = await converter.format_payload(model_endpoint, turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+        )
         assert payload["model"] == model_endpoint.primary_model_name
 
     @pytest.mark.asyncio
@@ -220,16 +260,26 @@ class TestRankingsRequestConverter:
         )
 
         with caplog.at_level(logging.WARNING):
-            await converter.format_payload(model_endpoint, turn)
+            await converter.format_payload(
+                RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+            )
 
         assert "not supported for rankings" in caplog.text
 
     @pytest.mark.asyncio
     async def test_format_payload_extra_parameters(self, converter):
         """Test that extra parameters from endpoint config are included."""
-        mock_endpoint = MagicMock()
-        mock_endpoint.endpoint.extra = {"top_k": 5, "return_scores": True}
-        mock_endpoint.primary_model_name = "test-model"
+        test_endpoint = ModelEndpointInfo(
+            models=ModelListInfo(
+                models=[ModelInfo(name="test-model")],
+                model_selection_strategy=ModelSelectionStrategy.ROUND_ROBIN,
+            ),
+            endpoint=EndpointInfo(
+                type=EndpointType.RANKINGS,
+                base_url="http://localhost:8000",
+                extra=[("top_k", 5), ("return_scores", True)],
+            ),
+        )
 
         turn = Turn(
             texts=[
@@ -239,7 +289,9 @@ class TestRankingsRequestConverter:
             model="test-model",
         )
 
-        payload = await converter.format_payload(mock_endpoint, turn)
+        payload = await converter.format_payload(
+            RequestInfo(model_endpoint=test_endpoint, turns=[turn])
+        )
 
         assert payload["top_k"] == 5
         assert payload["return_scores"] is True

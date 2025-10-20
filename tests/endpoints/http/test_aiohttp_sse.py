@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from aiperf.clients.http.aiohttp_client import AioHttpSSEStreamReader
 from aiperf.common.models import SSEMessage
-from tests.clients.http.conftest import (
+from aiperf.transports.aiohttp_client import AioHttpSSEStreamReader
+from tests.endpoints.http.conftest import (
     create_sse_chunk_list,
     setup_single_sse_chunk,
     setup_sse_content_mock,
@@ -58,7 +58,7 @@ class TestAioHttpSSEStreamReader:
             patch.object(
                 AioHttpSSEStreamReader, "__aiter__", return_value=mock_aiter()
             ),
-            patch("aiperf.clients.http.aiohttp_client.parse_sse_message") as mock_parse,
+            patch("aiperf.common.models.record_models.SSEMessage.parse") as mock_parse,
         ):
             mock_messages = [
                 SSEMessage(perf_ns=123456789),

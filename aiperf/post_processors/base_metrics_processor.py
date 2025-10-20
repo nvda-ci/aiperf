@@ -6,6 +6,7 @@ from abc import ABC
 from aiperf.common.config import UserConfig
 from aiperf.common.constants import GOOD_REQUEST_COUNT_TAG
 from aiperf.common.enums import MetricFlags, MetricType
+from aiperf.common.factories import EndpointFactory
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.metrics.base_metric import BaseMetric
 from aiperf.metrics.metric_registry import MetricRegistry
@@ -26,11 +27,12 @@ class BaseMetricsProcessor(AIPerfLifecycleMixin, ABC):
         # Start with no flags (unfiltered)
         required_flags, disallowed_flags = MetricFlags.NONE, MetricFlags.NONE
         # Disable metrics that are not applicable to the endpoint type
-        if not self.user_config.endpoint.type.produces_tokens:
+        metadata = EndpointFactory.metadata(self.user_config.endpoint.type)
+        if not metadata.produces_tokens:
             disallowed_flags |= MetricFlags.PRODUCES_TOKENS_ONLY
-        if not self.user_config.endpoint.type.supports_audio:
+        if not metadata.supports_audio:
             disallowed_flags |= MetricFlags.SUPPORTS_AUDIO_ONLY
-        if not self.user_config.endpoint.type.supports_images:
+        if not metadata.supports_images:
             disallowed_flags |= MetricFlags.SUPPORTS_IMAGE_ONLY
         if not self.user_config.endpoint.streaming:
             disallowed_flags |= MetricFlags.STREAMING_ONLY

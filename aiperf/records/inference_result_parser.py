@@ -3,10 +3,9 @@
 import asyncio
 import time
 
-from aiperf.clients.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import CommAddress
-from aiperf.common.factories import ResponseExtractorFactory
+from aiperf.common.factories import EndpointFactory
 from aiperf.common.hooks import on_init
 from aiperf.common.messages import (
     ConversationTurnRequestMessage,
@@ -20,8 +19,9 @@ from aiperf.common.models import (
     RequestRecord,
 )
 from aiperf.common.models.dataset_models import Turn
+from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.record_models import ReasoningResponseData
-from aiperf.common.protocols import RequestClientProtocol, ResponseExtractorProtocol
+from aiperf.common.protocols import RequestClientProtocol
 from aiperf.common.tokenizer import Tokenizer
 
 
@@ -49,22 +49,15 @@ class InferenceResultParser(CommunicationMixin):
         self.model_endpoint: ModelEndpointInfo = ModelEndpointInfo.from_user_config(
             user_config
         )
-        self.extractor: ResponseExtractorProtocol = (
-            ResponseExtractorFactory.create_instance(
-                self.model_endpoint.endpoint.type,
-                model_endpoint=self.model_endpoint,
-            )
+        self.inference_client = EndpointFactory.create_instance(
+            self.model_endpoint.endpoint.type,
+            model_endpoint=self.model_endpoint,
         )
 
     @on_init
     async def _initialize(self) -> None:
         """Initialize inference result parser-specific components."""
         self.debug("Initializing inference result parser")
-
-        self.extractor = ResponseExtractorFactory.create_instance(
-            self.model_endpoint.endpoint.type,
-            model_endpoint=self.model_endpoint,
-        )
 
     async def configure(self) -> None:
         """Configure the tokenizers."""
@@ -183,7 +176,7 @@ class InferenceResultParser(CommunicationMixin):
                 output_token_count=None,
             )
 
-        resp = await self.extractor.extract_response_data(request_record)
+        resp = await self.inference_client.extract_response_data(request_record)
         input_token_count = await self.compute_input_token_count(request_record)
 
         output_texts: list[str] = []

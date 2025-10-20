@@ -10,7 +10,7 @@ from rich.table import Table
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import MetricFlags
 from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
-from aiperf.common.factories import ConsoleExporterFactory
+from aiperf.common.factories import ConsoleExporterFactory, EndpointFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult
 from aiperf.common.protocols import ConsoleExporterProtocol
@@ -96,4 +96,5 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
         return row
 
     def _get_title(self) -> str:
-        return f"NVIDIA AIPerf | {self._endpoint_type.metrics_title}"
+        metadata = EndpointFactory.metadata(self._endpoint_type)
+        return f"NVIDIA AIPerf | {metadata.metrics_title}"
