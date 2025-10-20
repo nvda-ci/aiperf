@@ -3,7 +3,7 @@
 
 import logging
 import threading
-from importlib.metadata import PackageNotFoundError, entry_points, metadata
+from importlib.metadata import EntryPoint, PackageNotFoundError, entry_points, metadata
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,7 +64,7 @@ class AIPerfPluginMapping(BaseModel):
         default=None,
         description="The class type of the plugin. This is lazy loaded when needed.",
     )
-    entry_point: Any = Field(
+    entry_point: EntryPoint = Field(
         ...,
         description="The entry point of the plugin. This is the importlib.metadata.EntryPoint object.",
     )
@@ -198,13 +198,18 @@ class AIPerfPluginManager:
         """Register a plugin lazily."""
         package_name = module_path.split(".", 1)[0]
         id = name.replace("-", "_").upper()
+        entry_point = f"{module_path}:{class_name}"
         self._plugin_mappings[plugin_type][id] = AIPerfPluginMapping(
             plugin_type=plugin_type,
             name=id,
             package_name=package_name,
             built_in=built_in,
             class_type=None,
-            entry_point=None,
+            entry_point=EntryPoint(
+                name=id,
+                value=entry_point,
+                group=f"aiperf.plugins.{plugin_type.__name__}",
+            ),
             metadata=AIPerfPluginMetadata(
                 name=id,
                 version="unknown",
