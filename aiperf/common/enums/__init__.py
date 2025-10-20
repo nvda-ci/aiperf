@@ -12,6 +12,9 @@ from aiperf.common.enums.base_enums import (
     BasePydanticBackedStrEnum,
     BasePydanticEnumInfo,
     CaseInsensitiveStrEnum,
+    DynamicEnumMeta,
+    DynamicMemberProxy,
+    DynamicStrEnum,
 )
 from aiperf.common.enums.command_enums import (
     CommandResponseStatus,
@@ -39,7 +42,6 @@ from aiperf.common.enums.dataset_enums import (
     VideoSynthType,
 )
 from aiperf.common.enums.endpoints_enums import (
-    EndpointType,
     TransportType,
 )
 from aiperf.common.enums.logging_enums import (
@@ -81,6 +83,10 @@ from aiperf.common.enums.model_enums import (
 from aiperf.common.enums.openai_enums import (
     OpenAIObjectType,
 )
+from aiperf.common.enums.plugin_enums import (
+    AIPerfUIType,
+    EndpointType,
+)
 from aiperf.common.enums.post_processor_enums import (
     RecordProcessorType,
     ResultsProcessorType,
@@ -101,9 +107,6 @@ from aiperf.common.enums.timing_enums import (
     CreditPhase,
     RequestRateMode,
     TimingMode,
-)
-from aiperf.common.enums.ui_enums import (
-    AIPerfUIType,
 )
 from aiperf.common.enums.worker_enums import (
     WorkerStatus,
@@ -128,6 +131,9 @@ __all__ = [
     "CreditPhase",
     "CustomDatasetType",
     "DataExporterType",
+    "DynamicEnumMeta",
+    "DynamicMemberProxy",
+    "DynamicStrEnum",
     "EndpointType",
     "EnergyMetricUnit",
     "EnergyMetricUnitInfo",
