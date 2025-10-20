@@ -48,7 +48,16 @@ Dynamo includes DCGM out of the box on port 9401 - no extra setup needed!
 ```bash
 # Set environment variables
 export AIPERF_REPO_TAG="main"
-export DYNAMO_PREBUILT_IMAGE_TAG="nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0"
+
+# Fetch latest Dynamo version from GitHub releases
+# Falls back to known working version if query fails
+export DYNAMO_VERSION=$(curl -s "https://api.github.com/repos/ai-dynamo/dynamo/releases/latest" | \
+  grep '"tag_name":' | \
+  sed -E 's/.*"v([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+export DYNAMO_VERSION=${DYNAMO_VERSION:-0.5.1}
+export DYNAMO_PREBUILT_IMAGE_TAG="nvcr.io/nvidia/ai-dynamo/vllm-runtime:${DYNAMO_VERSION}"
+
+export DYNAMO_HTTP_PORT=8000
 export MODEL="Qwen/Qwen3-0.6B"
 
 # Download the Dynamo container
@@ -66,7 +75,7 @@ docker run \
   --gpus all \
   --network host \
   ${DYNAMO_PREBUILT_IMAGE_TAG} \
-    /bin/bash -c "python3 -m dynamo.frontend & python3 -m dynamo.vllm --model ${MODEL} --enforce-eager --no-enable-prefix-caching" > server.log 2>&1 &
+    /bin/bash -c "python3 -m dynamo.frontend --http-port ${DYNAMO_HTTP_PORT} & python3 -m dynamo.vllm --model ${MODEL} --enforce-eager --no-enable-prefix-caching" > server.log 2>&1 &
 ```
 
 ```bash
@@ -99,7 +108,7 @@ uv pip install ./aiperf
 
 ```bash
 # Wait for Dynamo API to be ready (up to 15 minutes)
-timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"}],\"max_completion_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "Dynamo not ready after 15min"; exit 1; }
+timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:${DYNAMO_HTTP_PORT}/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"}],\"max_completion_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "Dynamo not ready after 15min"; exit 1; }
 ```
 ```bash
 # Wait for DCGM Exporter to be ready (up to 2 minutes after Dynamo is ready)
@@ -112,11 +121,11 @@ echo "DCGM GPU metrics are now available"
 
 ```bash
 aiperf profile \
-    --model Qwen/Qwen3-0.6B \
+    --model ${MODEL} \
     --endpoint-type chat \
     --endpoint /v1/chat/completions \
     --streaming \
-    --url localhost:8080 \
+    --url localhost:${DYNAMO_HTTP_PORT} \
     --synthetic-input-tokens-mean 100 \
     --synthetic-input-tokens-stddev 0 \
     --output-tokens-mean 200 \
@@ -200,7 +209,7 @@ docker run -d --name vllm-server \
   --gpus all \
   -p 8000:8000 \
   vllm/vllm-openai:latest \
-  --model Qwen/Qwen3-0.6B \
+  --model ${MODEL} \
   --host 0.0.0.0 \
   --port 8000
 ```
@@ -248,7 +257,7 @@ uv pip install ./aiperf
 
 ```bash
 # Wait for vLLM inference server to be ready (up to 15 minutes)
-timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}],\"max_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "vLLM not ready after 15min"; exit 1; }
+timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}],\"max_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "vLLM not ready after 15min"; exit 1; }
 
 # Wait for DCGM Exporter metrics to be available (up to 2 minutes after vLLM is ready)
 echo "vLLM ready, waiting for DCGM metrics to be available..."
@@ -260,7 +269,7 @@ echo "DCGM GPU metrics are now available"
 
 ```bash
 aiperf profile \
-    --model Qwen/Qwen3-0.6B \
+    --model ${MODEL} \
     --endpoint-type chat \
     --endpoint /v1/chat/completions \
     --streaming \
@@ -288,11 +297,11 @@ For distributed setups with multiple nodes, you can collect GPU telemetry from a
 # Note: The default endpoints http://localhost:9400/metrics and http://localhost:9401/metrics
 #       are always attempted in addition to these custom URLs
 aiperf profile \
-    --model Qwen/Qwen3-0.6B \
+    --model ${MODEL} \
     --endpoint-type chat \
     --endpoint /v1/chat/completions \
     --streaming \
-    --url localhost:8080 \
+    --url localhost:${DYNAMO_HTTP_PORT} \
     --synthetic-input-tokens-mean 100 \
     --synthetic-input-tokens-stddev 0 \
     --output-tokens-mean 200 \

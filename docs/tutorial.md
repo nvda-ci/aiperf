@@ -21,7 +21,16 @@ models using various inference solutions.
 ```bash
 # Set environment variables
 export AIPERF_REPO_TAG="main"
-export DYNAMO_PREBUILT_IMAGE_TAG="nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0"
+
+# Fetch latest Dynamo version from GitHub releases
+# Falls back to known working version if query fails
+export DYNAMO_VERSION=$(curl -s "https://api.github.com/repos/ai-dynamo/dynamo/releases/latest" | \
+  grep '"tag_name":' | \
+  sed -E 's/.*"v([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+export DYNAMO_VERSION=${DYNAMO_VERSION:-0.5.1}
+export DYNAMO_PREBUILT_IMAGE_TAG="nvcr.io/nvidia/ai-dynamo/vllm-runtime:${DYNAMO_VERSION}"
+
+export DYNAMO_HTTP_PORT=8000
 export MODEL="Qwen/Qwen3-0.6B"
 
 # Download the Dyanmo container
@@ -41,7 +50,7 @@ docker run \
   --gpus all \
   --network host \
   ${DYNAMO_PREBUILT_IMAGE_TAG} \
-    /bin/bash -c "python3 -m dynamo.frontend & python3 -m dynamo.vllm --model ${MODEL} --enforce-eager --no-enable-prefix-caching" > server.log 2>&1 &
+    /bin/bash -c "python3 -m dynamo.frontend --http-port ${DYNAMO_HTTP_PORT} & python3 -m dynamo.vllm --model ${MODEL} --enforce-eager --no-enable-prefix-caching" > server.log 2>&1 &
 ```
 <!-- /setup-dynamo-default-openai-endpoint-server -->
 
@@ -72,18 +81,18 @@ uv pip install ./aiperf
 ```
 <!-- health-check-dynamo-default-openai-endpoint-server -->
 ```bash
-timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"}],\"max_completion_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "Dynamo not ready after 15min"; exit 1; }
+timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:${DYNAMO_HTTP_PORT}/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"}],\"max_completion_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "Dynamo not ready after 15min"; exit 1; }
 ```
 <!-- /health-check-dynamo-default-openai-endpoint-server -->
 <!-- aiperf-run-dynamo-default-openai-endpoint-server -->
 ```bash
 # Profile the model
 aiperf profile \
-    --model Qwen/Qwen3-0.6B \
+    --model ${MODEL} \
     --endpoint-type chat \
     --endpoint /v1/chat/completions \
     --streaming \
-    --url localhost:8080 \
+    --url localhost:${DYNAMO_HTTP_PORT} \
     --synthetic-input-tokens-mean 100 \
     --synthetic-input-tokens-stddev 0 \
     --output-tokens-mean 200 \
@@ -105,14 +114,14 @@ aiperf profile \
 # Pull and run vLLM Docker container:
 docker pull vllm/vllm-openai:latest
 docker run --gpus all -p 8000:8000 vllm/vllm-openai:latest \
-  --model Qwen/Qwen3-0.6B \
+  --model ${MODEL} \
   --host 0.0.0.0 --port 8000
 ```
 <!-- /setup-vllm-default-openai-endpoint-server -->
 
 <!-- health-check-vllm-default-openai-endpoint-server -->
 ```bash
-timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}],\"max_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "vLLM not ready after 15min"; exit 1; }
+timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}],\"max_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "vLLM not ready after 15min"; exit 1; }
 ```
 <!-- /health-check-vllm-default-openai-endpoint-server -->
 
@@ -121,7 +130,7 @@ timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost
 ```bash
 # Profile the model
 aiperf profile \
-    --model Qwen/Qwen3-0.6B \
+    --model ${MODEL} \
     --endpoint-type chat \
     --endpoint /v1/chat/completions \
     --streaming \
