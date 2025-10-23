@@ -33,3 +33,4 @@ class TransportType(CaseInsensitiveStrEnum):
     """The various types of transports for an endpoint."""
 
     HTTP = "http"
+    HTTP2 = "http2"

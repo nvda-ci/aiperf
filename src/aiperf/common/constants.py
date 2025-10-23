@@ -122,6 +122,14 @@ DEFAULT_ZMQ_CONTEXT_TERM_TIMEOUT = 10.0
 AIPERF_HTTP_CONNECTION_LIMIT = int(os.environ.get("AIPERF_HTTP_CONNECTION_LIMIT", 2500))
 """Maximum number of concurrent connections for HTTP clients."""
 
+AIPERF_TLS_VERIFY = os.getenv("AIPERF_TLS_VERIFY", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
+"""Whether to verify TLS certificates. Set AIPERF_TLS_VERIFY=false to disable certificate verification.
+WARNING: Disabling certificate verification is insecure and should only be used for testing."""
+
 GOOD_REQUEST_COUNT_TAG = "good_request_count"
 """GoodRequestCount metric tag"""
 

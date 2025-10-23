@@ -6,6 +6,7 @@ from typing import Any
 
 import aiohttp
 
+from aiperf.common.constants import AIPERF_TLS_VERIFY
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import (
     ErrorDetails,
@@ -31,6 +32,10 @@ class AioHttpClient(AIPerfLoggerMixin):
     ) -> None:
         """Initialize the AioHttpClient."""
         super().__init__(**kwargs)
+
+        if not AIPERF_TLS_VERIFY:
+            self.warning("TLS certificate verification is DISABLED - this is insecure!")
+
         self.tcp_connector = create_tcp_connector(**tcp_kwargs or {})
         self.timeout = aiohttp.ClientTimeout(total=timeout)
 
@@ -167,6 +172,7 @@ def create_tcp_connector(**kwargs) -> aiohttp.TCPConnector:
         "happy_eyeballs_delay": AioHttpDefaults.HAPPY_EYEBALLS_DELAY,
         "family": AioHttpDefaults.SOCKET_FAMILY,
         "socket_factory": socket_factory,
+        "verify_ssl": AIPERF_TLS_VERIFY,
     }
 
     default_kwargs.update(kwargs)

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pydantic import Field
 
 from aiperf.common.models import AIPerfBaseModel
-from aiperf.common.types import TransportTypeT
 
 
 class EndpointMetadata(AIPerfBaseModel):
@@ -44,9 +43,6 @@ class EndpointMetadata(AIPerfBaseModel):
 class TransportMetadata(AIPerfBaseModel):
     """Transport metadata for discovery and documentation."""
 
-    transport_type: TransportTypeT = Field(
-        description="Transport type identifier for this transport"
-    )
     url_schemes: list[str] = Field(
         default_factory=list,
         description="URL schemes this transport handles (for auto-detection and validation).",

@@ -4,7 +4,7 @@
 
 import pytest
 
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
+from aiperf.common.enums import EndpointType, ModelSelectionStrategy
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -21,7 +21,6 @@ class MockTransport(BaseTransport):
     @classmethod
     def metadata(cls) -> TransportMetadata:
         return TransportMetadata(
-            transport_type=TransportType.HTTP,
             url_schemes=["http", "https"],
         )
 
@@ -74,7 +73,6 @@ class TestBaseTransport:
     def test_metadata(self, transport):
         """Test metadata method returns correct information."""
         metadata = transport.metadata()
-        assert metadata.transport_type == TransportType.HTTP
         assert "http" in metadata.url_schemes
         assert "https" in metadata.url_schemes
 
@@ -275,17 +273,12 @@ class TestTransportMetadata:
 
     def test_transport_metadata_creation(self):
         """Test creating TransportMetadata instance."""
-        metadata = TransportMetadata(
-            transport_type=TransportType.HTTP, url_schemes=["http", "https"]
-        )
-        assert metadata.transport_type == TransportType.HTTP
+        metadata = TransportMetadata(url_schemes=["http", "https"])
         assert metadata.url_schemes == ["http", "https"]
 
     def test_transport_metadata_single_scheme(self):
         """Test metadata with single URL scheme."""
-        metadata = TransportMetadata(
-            transport_type=TransportType.HTTP, url_schemes=["grpc"]
-        )
+        metadata = TransportMetadata(url_schemes=["grpc"])
         assert len(metadata.url_schemes) == 1
         assert "grpc" in metadata.url_schemes
 
@@ -319,9 +312,7 @@ class TestBaseTransportAbstractMethods:
         class IncompleteTransport(BaseTransport):
             @classmethod
             def metadata(cls) -> TransportMetadata:
-                return TransportMetadata(
-                    transport_type=TransportType.HTTP, url_schemes=["http"]
-                )
+                return TransportMetadata(url_schemes=["http"])
 
             async def send_request(
                 self, request_info: RequestInfo, payload: dict
@@ -337,9 +328,7 @@ class TestBaseTransportAbstractMethods:
         class IncompleteTransport(BaseTransport):
             @classmethod
             def metadata(cls) -> TransportMetadata:
-                return TransportMetadata(
-                    transport_type=TransportType.HTTP, url_schemes=["http"]
-                )
+                return TransportMetadata(url_schemes=["http"])
 
             def get_url(self, request_info: RequestInfo) -> str:
                 return ""

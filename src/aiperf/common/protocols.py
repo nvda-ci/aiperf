@@ -399,6 +399,34 @@ class InferenceServerResponse(Protocol):
 
 
 @runtime_checkable
+class HTTPClientProtocol(Protocol):
+    """Protocol for HTTP client implementations.
+
+    Defines the interface that HTTP client mixins must implement to work
+    with BaseHTTPTransport.
+    """
+
+    async def post_request(
+        self, url: str, payload: str, headers: dict[str, str]
+    ) -> RequestRecord:
+        """Send HTTP POST request.
+
+        Args:
+            url: Target URL
+            payload: Request body as JSON string
+            headers: HTTP headers
+
+        Returns:
+            RequestRecord with responses, timing, and any errors
+        """
+        ...
+
+    async def close(self) -> None:
+        """Close the HTTP client and cleanup resources."""
+        ...
+
+
+@runtime_checkable
 class HooksProtocol(Protocol):
     """Protocol for hooks methods provided by the HooksMixin."""
 

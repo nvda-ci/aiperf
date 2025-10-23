@@ -15,12 +15,22 @@ from aiperf.transports.aiohttp_client import (
 from aiperf.transports.aiohttp_transport import (
     AioHttpTransport,
 )
+from aiperf.transports.base_http_transport import (
+    BaseHTTPTransport,
+)
 from aiperf.transports.base_transports import (
     BaseTransport,
 )
 from aiperf.transports.http_defaults import (
     AioHttpDefaults,
+    HttpCoreDefaults,
     SocketDefaults,
+)
+from aiperf.transports.httpcore_client import (
+    HttpCoreClient,
+)
+from aiperf.transports.httpcore_transport import (
+    HttpCoreTransport,
 )
 from aiperf.transports.sse_utils import (
     AsyncSSEStreamReader,
@@ -31,7 +41,11 @@ __all__ = [
     "AioHttpDefaults",
     "AioHttpTransport",
     "AsyncSSEStreamReader",
+    "BaseHTTPTransport",
     "BaseTransport",
+    "HttpCoreClient",
+    "HttpCoreDefaults",
+    "HttpCoreTransport",
     "SocketDefaults",
     "create_tcp_connector",
 ]
