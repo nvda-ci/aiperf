@@ -44,7 +44,7 @@ This comparison matrix shows the supported CLI options between GenAI-Perf and AI
 | **dynamic_grpc** | Dynamic gRPC service calls | ✅ | ❌ | |
 | **huggingface_generate** | HuggingFace transformers generate API | ✅ | ❌ | |
 | **image_retrieval** | Image search and retrieval endpoints | ✅ | ❌ | |
-| **nvclip** | NVIDIA CLIP model endpoints | ✅ | ❌ | |
+| **nvclip** | NVIDIA CLIP model endpoints | ✅ | ✅ | |
 | **multimodal** | Multi-modal (text + image/audio) endpoints | ✅ | 🟡 | use `chat` for AIPerf instead |
 | **generate** | Generic text generation endpoints | ✅ | ❌ | |
 | **kserve** | KServe model serving endpoints | ✅ | ❌ | |

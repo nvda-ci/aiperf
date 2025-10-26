@@ -3,12 +3,12 @@
 """Shared fixtures and helpers for endpoint tests."""
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from aiperf.common.enums import EndpointType, ModelSelectionStrategy
-from aiperf.common.models import Text, Turn
+from aiperf.common.models import Image, Text, Turn
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -16,6 +16,7 @@ from aiperf.common.models.model_endpoint_info import (
     ModelListInfo,
 )
 from aiperf.common.models.record_models import RequestInfo
+from aiperf.common.protocols import InferenceServerResponse
 
 
 def create_model_endpoint(
@@ -64,6 +65,34 @@ def create_request_info(
         **turn_kwargs,
     )
     return RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+
+
+def create_multimodal_request_info(
+    model_endpoint: ModelEndpointInfo,
+    texts: list[str] | None = None,
+    images: list[str] | None = None,
+    model: str | None = None,
+    **turn_kwargs,
+) -> RequestInfo:
+    """Helper to create RequestInfo with text and/or image content."""
+    text_objs = [Text(contents=texts)] if texts else []
+    image_objs = [Image(contents=images)] if images else []
+
+    turn = Turn(
+        texts=text_objs,
+        images=image_objs,
+        model=model,
+        **turn_kwargs,
+    )
+    return RequestInfo(model_endpoint=model_endpoint, turns=[turn])
+
+
+def create_mock_response(json_data: dict | None, perf_ns: int = 123456789) -> Mock:
+    """Helper to create a mock InferenceServerResponse."""
+    mock_response = Mock(spec=InferenceServerResponse)
+    mock_response.perf_ns = perf_ns
+    mock_response.get_json.return_value = json_data
+    return mock_response
 
 
 @pytest.fixture

@@ -16,6 +16,9 @@ from aiperf.endpoints.hf_tei_rankings import (
 from aiperf.endpoints.nim_rankings import (
     NIMRankingsEndpoint,
 )
+from aiperf.endpoints.nvclip import (
+    NVClipEndpoint,
+)
 from aiperf.endpoints.openai_chat import (
     ChatEndpoint,
 )
@@ -38,5 +41,6 @@ __all__ = [
     "EmbeddingsEndpoint",
     "HFTeiRankingsEndpoint",
     "NIMRankingsEndpoint",
+    "NVClipEndpoint",
     "SolidoEndpoint",
 ]
