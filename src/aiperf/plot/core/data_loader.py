@@ -18,9 +18,8 @@ import numpy as np
 import pandas as pd
 
 from aiperf.common.mixins import AIPerfLoggerMixin
+from aiperf.common.models.record_models import MetricRecordInfo, MetricResult
 from aiperf.plot.constants import (
-    METRIC_DISPLAY_NAMES,
-    METRIC_UNITS,
     PROFILE_EXPORT_AIPERF_JSON,
     PROFILE_EXPORT_JSONL,
 )
@@ -61,7 +60,8 @@ class RunData:
     Args:
         metadata: Metadata for the run.
         requests: DataFrame containing per-request data, or None if not loaded.
-        aggregated: Dictionary containing aggregated statistics.
+        aggregated: Dictionary containing aggregated statistics. The "metrics" key
+            contains a dict mapping metric tags to MetricResult objects.
     """
 
     metadata: RunMetadata
@@ -222,14 +222,9 @@ class DataLoader(AIPerfLoggerMixin):
 
     def get_available_metrics(self, run_data: RunData) -> dict[str, dict[str, str]]:
         """
-        Get metrics that are both available in the data and defined in MetricRegistry.
+        Get metrics available in the loaded data.
 
-        This method takes the intersection of:
-        1. Metrics present in the profile_export_aiperf.json data
-        2. Metrics defined in the MetricRegistry (via METRIC_DISPLAY_NAMES and METRIC_UNITS)
-
-        This ensures only metrics that exist in both the data and the registry are returned,
-        preventing errors when trying to plot metrics that aren't available.
+        Extracts metric information directly from MetricResult objects in the data.
 
         Args:
             run_data: RunData object with loaded aggregated data.
@@ -238,7 +233,6 @@ class DataLoader(AIPerfLoggerMixin):
             Dictionary with two keys:
                 - "display_names": dict mapping metric tag to display name
                 - "units": dict mapping metric tag to unit string
-            Only includes metrics present in both the data and the registry.
 
         Examples:
             >>> loader = DataLoader()
@@ -251,30 +245,20 @@ class DataLoader(AIPerfLoggerMixin):
             self.warning("No metrics found in aggregated data")
             return {"display_names": {}, "units": {}}
 
-        # Get metrics present in the data
-        data_metrics = set(run_data.aggregated["metrics"].keys())
+        metrics = run_data.aggregated["metrics"]
+        display_names = {}
+        units = {}
 
-        # Get metrics defined in the registry
-        registry_metrics = set(METRIC_DISPLAY_NAMES.keys())
-
-        # Take intersection
-        available_metrics = data_metrics & registry_metrics
-
-        if not available_metrics:
-            self.warning(
-                f"No overlap between data metrics ({len(data_metrics)}) and "
-                f"registry metrics ({len(registry_metrics)})"
-            )
-            return {"display_names": {}, "units": {}}
-
-        # Build filtered dictionaries
-        display_names = {
-            metric: METRIC_DISPLAY_NAMES[metric] for metric in available_metrics
-        }
-        units = {metric: METRIC_UNITS[metric] for metric in available_metrics}
+        for tag, metric in metrics.items():
+            if isinstance(metric, MetricResult):
+                display_names[tag] = metric.header
+                units[tag] = metric.unit
+            else:
+                # Fallback for raw dicts (if parsing failed)
+                self.warning(f"Metric {tag} is not a MetricResult object, skipping")
 
         self.info(
-            f"Found {len(available_metrics)} available metrics: {sorted(available_metrics)}"
+            f"Found {len(display_names)} available metrics: {sorted(display_names.keys())}"
         )
 
         return {"display_names": display_names, "units": units}
@@ -306,14 +290,15 @@ class DataLoader(AIPerfLoggerMixin):
                         continue
 
                     try:
-                        record = json.loads(line)
-                        # Flatten the record
-                        flat_record = self._flatten_jsonl_record(record)
+                        # Parse using Pydantic model for type safety and validation
+                        metric_record = MetricRecordInfo.model_validate_json(line)
+                        # Convert to flat dict for DataFrame
+                        flat_record = self._convert_to_flat_dict(metric_record)
                         records.append(flat_record)
-                    except json.JSONDecodeError as e:
+                    except (json.JSONDecodeError, Exception) as e:
                         corrupted_lines += 1
                         self.warning(
-                            f"Skipping corrupted line {line_num} in {jsonl_path}: {e}"
+                            f"Skipping invalid line {line_num} in {jsonl_path}: {e}"
                         )
                         continue
 
@@ -380,39 +365,33 @@ class DataLoader(AIPerfLoggerMixin):
             "inter_chunk_latency_range": float(np.max(arr) - np.min(arr)),
         }
 
-    def _flatten_jsonl_record(self, record: dict) -> dict:
+    def _convert_to_flat_dict(self, record: MetricRecordInfo) -> dict:
         """
-        Flatten a JSONL record into a single-level dictionary.
+        Convert a MetricRecordInfo Pydantic model to a flat dictionary for DataFrame.
 
         Args:
-            record: Nested dictionary from JSONL line.
+            record: Pydantic model from JSONL line.
 
         Returns:
             Flattened dictionary with metrics and metadata at top level.
         """
         flat = {}
 
-        # Flatten metadata
-        if "metadata" in record:
-            for key, value in record["metadata"].items():
-                flat[key] = value
+        # Flatten metadata (Pydantic model -> dict)
+        flat.update(record.metadata.model_dump())
 
-        # Flatten metrics (extract just the value, drop unit)
-        if "metrics" in record:
-            for key, value in record["metrics"].items():
-                if isinstance(value, dict) and "value" in value:
-                    # Compute per-request statistics for inter_chunk_latency (stream health/jitter)
-                    if key == "inter_chunk_latency":
-                        stats = self._compute_inter_chunk_latency_stats(value["value"])
-                        flat.update(stats)
-                        continue
-                    flat[key] = value["value"]
-                else:
-                    flat[key] = value
+        # Flatten metrics (extract values from MetricValue objects)
+        for key, metric_value in record.metrics.items():
+            # Compute per-request statistics for inter_chunk_latency (stream health/jitter)
+            if key == "inter_chunk_latency" and isinstance(metric_value.value, list):
+                stats = self._compute_inter_chunk_latency_stats(metric_value.value)
+                flat.update(stats)
+                continue
+            flat[key] = metric_value.value
 
-        # Include error field
-        if "error" in record:
-            flat["error"] = record["error"]
+        # Include error field if present
+        if record.error:
+            flat["error"] = record.error.model_dump()
 
         return flat
 
@@ -420,11 +399,15 @@ class DataLoader(AIPerfLoggerMixin):
         """
         Load aggregated statistics from JSON file.
 
+        Parses the metrics in the JSON file into MetricResult objects for type-safe
+        access to metric fields.
+
         Args:
             json_path: Path to the profile_export_aiperf.json file.
 
         Returns:
-            Dictionary containing aggregated statistics.
+            Dictionary containing aggregated statistics. The "metrics" key contains
+            a dict mapping metric tags to MetricResult objects.
 
         Raises:
             DataLoadError: If file cannot be read or parsed.
@@ -435,6 +418,19 @@ class DataLoader(AIPerfLoggerMixin):
         try:
             with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
+
+            # Parse metrics into MetricResult objects
+            if "metrics" in data and isinstance(data["metrics"], dict):
+                parsed_metrics = {}
+                for tag, metric_data in data["metrics"].items():
+                    try:
+                        parsed_metrics[tag] = MetricResult(**metric_data)
+                    except Exception as e:
+                        self.warning(f"Failed to parse metric {tag}: {e}")
+                        # Keep raw dict as fallback
+                        parsed_metrics[tag] = metric_data
+                data["metrics"] = parsed_metrics
+
             self.info(f"Loaded aggregated data from {json_path}")
             return data
         except json.JSONDecodeError as e:
