@@ -11,6 +11,7 @@ import tempfile
 import ffmpeg
 from PIL import Image, ImageDraw
 
+from aiperf.common import random_generator as rng
 from aiperf.common.config.video_config import VideoConfig
 from aiperf.common.enums import VideoSynthType
 from aiperf.dataset.generator.base import BaseGenerator
@@ -24,9 +25,10 @@ class VideoGenerator(BaseGenerator):
     returned as base64 encoded strings. Currently only MP4 format is supported.
     """
 
-    def __init__(self, config: VideoConfig):
-        super().__init__()
+    def __init__(self, config: VideoConfig, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
+        self._rng = rng.derive("dataset.video_generator")
 
     def _check_ffmpeg_availability(self) -> bool:
         """Check if FFmpeg binary is available in the system."""
@@ -383,7 +385,8 @@ class VideoGenerator(BaseGenerator):
                     )
 
                 frame_path = os.path.join(temp_dir, f"frame_{i:06d}.png")
-                frame.save(frame_path, "PNG")
+                # Use explicit compression settings for deterministic output across platforms
+                frame.save(frame_path, "PNG", compress_level=6, optimize=False)
 
             # Create output file in the same temp directory
             output_path = os.path.join(temp_dir, "output.mp4")

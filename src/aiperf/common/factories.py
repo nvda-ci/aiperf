@@ -463,11 +463,10 @@ class DatasetSamplingStrategyFactory(
         cls,
         class_type: DatasetSamplingStrategy | str,
         conversation_ids: list[str],
-        seed: int | None = None,
         **kwargs,
     ) -> "DatasetSamplingStrategyProtocol":
         return super().create_instance(
-            class_type, conversation_ids=conversation_ids, seed=seed, **kwargs
+            class_type, conversation_ids=conversation_ids, **kwargs
         )
 
 

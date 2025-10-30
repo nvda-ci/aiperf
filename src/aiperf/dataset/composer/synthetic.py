@@ -3,12 +3,12 @@
 
 import uuid
 
+from aiperf.common import random_generator as rng
 from aiperf.common.config import UserConfig
 from aiperf.common.enums import ComposerType
 from aiperf.common.factories import ComposerFactory
 from aiperf.common.models import Audio, Conversation, Image, Text, Turn, Video
 from aiperf.common.tokenizer import Tokenizer
-from aiperf.dataset import utils
 from aiperf.dataset.composer.base import BaseDatasetComposer
 
 
@@ -16,6 +16,9 @@ from aiperf.dataset.composer.base import BaseDatasetComposer
 class SyntheticDatasetComposer(BaseDatasetComposer):
     def __init__(self, config: UserConfig, tokenizer: Tokenizer):
         super().__init__(config, tokenizer)
+
+        self._turn_sampler_rng = rng.derive("composer.turn_sampler")
+        self._delay_sampler_rng = rng.derive("composer.delay_sampler")
 
         if (
             not self.include_prompt
@@ -41,7 +44,7 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         for _ in range(self.config.input.conversation.num_dataset_entries):
             conversation = Conversation(session_id=str(uuid.uuid4()))
 
-            num_turns = utils.sample_positive_normal_integer(
+            num_turns = self._turn_sampler_rng.sample_positive_normal_integer(
                 self.config.input.conversation.turn.mean,
                 self.config.input.conversation.turn.stddev,
             )
@@ -77,7 +80,7 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
             turn.videos.append(self._generate_video_payloads())
 
         if not is_first:
-            delay = utils.sample_positive_normal_integer(
+            delay = self._delay_sampler_rng.sample_positive_normal_integer(
                 self.config.input.conversation.turn.delay.mean,
                 self.config.input.conversation.turn.delay.stddev,
             )

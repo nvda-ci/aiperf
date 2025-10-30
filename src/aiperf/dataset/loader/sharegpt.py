@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import random
 import uuid
 from typing import Any
 
+from aiperf.common import random_generator as rng
 from aiperf.common.config.user_config import UserConfig
 from aiperf.common.enums import ModelSelectionStrategy
 from aiperf.common.models import Conversation, Text, Turn
@@ -41,6 +41,8 @@ class ShareGPTLoader(BasePublicDatasetLoader):
         self.user_config = user_config
         self.output_tokens_mean = self.user_config.input.prompt.output_tokens.mean
         self.turn_count = 0
+
+        self._rng = rng.derive("dataset.sharegpt_loader")
 
         super().__init__(user_config=user_config, tokenizer=tokenizer, **kwargs)
 
@@ -116,7 +118,7 @@ class ShareGPTLoader(BasePublicDatasetLoader):
     def _select_model_name(self) -> str:
         selection_strategy = self.user_config.endpoint.model_selection_strategy
         if selection_strategy == ModelSelectionStrategy.RANDOM:
-            return random.choice(self.user_config.endpoint.model_names)
+            return self._rng.choice(self.user_config.endpoint.model_names)
         elif selection_strategy == ModelSelectionStrategy.ROUND_ROBIN:
             model_name = self.user_config.endpoint.model_names[
                 self.turn_count % len(self.user_config.endpoint.model_names)

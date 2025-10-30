@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import random
 import uuid
 from collections import defaultdict
 from pathlib import Path
 from typing import TypeAlias
 
+from aiperf.common import random_generator as rng
 from aiperf.common.enums import CustomDatasetType, MediaType
 from aiperf.common.factories import CustomDatasetFactory
 from aiperf.common.models import Conversation, Turn
@@ -72,6 +72,7 @@ class RandomPoolDatasetLoader(MediaConversionMixin):
     def __init__(self, filename: str, num_conversations: int = 1):
         self.filename = filename
         self.num_conversations = num_conversations
+        self._rng = rng.derive("dataset.random_pool_loader")
 
     def load_dataset(self) -> dict[Filename, list[RandomPool]]:
         """Load random pool data from a file or directory.
@@ -125,7 +126,7 @@ class RandomPoolDatasetLoader(MediaConversionMixin):
         """
         data: dict[Filename, list[RandomPool]] = defaultdict(list)
 
-        for file_path in dir_path.iterdir():
+        for file_path in sorted(dir_path.iterdir()):
             if file_path.is_file():
                 dataset_pool = self._load_dataset_from_file(file_path)
                 data[file_path.name].extend(dataset_pool)
@@ -155,7 +156,7 @@ class RandomPoolDatasetLoader(MediaConversionMixin):
 
         # Randomly sample (with replacement) from each dataset pool
         for filename, dataset_pool in data.items():
-            samples = random.choices(dataset_pool, k=self.num_conversations)
+            samples = self._rng.choices(dataset_pool, k=self.num_conversations)
             turns: list[Turn] = []
             for sample in samples:
                 media = self.convert_to_media_objects(sample, name=Path(filename).stem)

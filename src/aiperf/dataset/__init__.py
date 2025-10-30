@@ -46,9 +46,6 @@ from aiperf.dataset.utils import (
     check_file_exists,
     encode_image,
     open_image,
-    sample_normal,
-    sample_positive_normal,
-    sample_positive_normal_integer,
 )
 
 __all__ = [
@@ -86,7 +83,4 @@ __all__ = [
     "encode_image",
     "main",
     "open_image",
-    "sample_normal",
-    "sample_positive_normal",
-    "sample_positive_normal_integer",
 ]
