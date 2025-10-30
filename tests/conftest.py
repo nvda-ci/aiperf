@@ -431,6 +431,13 @@ def mock_platform_linux(mock_platform_system):
 
 
 @pytest.fixture
+def mock_platform_windows(mock_platform_system):
+    """Mock platform.system() to return 'Windows' for Windows testing."""
+    mock_platform_system.return_value = "Windows"
+    return mock_platform_system
+
+
+@pytest.fixture
 def mock_multiprocessing_set_start_method():
     """Mock multiprocessing.set_start_method() for testing spawn method setup."""
     with patch("multiprocessing.set_start_method") as mock:

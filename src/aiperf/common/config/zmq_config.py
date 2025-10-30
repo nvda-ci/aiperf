@@ -150,14 +150,14 @@ class ZMQIPCProxyConfig(BaseZMQProxyConfig):
         """Get the frontend address based on protocol configuration."""
         if self.path is None:
             raise ValueError("Path is required for IPC transport")
-        return f"ipc://{self.path / self.name}_frontend.ipc"
+        return f"ipc://{(self.path / self.name).as_posix()}_frontend.ipc"
 
     @property
     def backend_address(self) -> str:
         """Get the backend address based on protocol configuration."""
         if self.path is None:
             raise ValueError("Path is required for IPC transport")
-        return f"ipc://{self.path / self.name}_backend.ipc"
+        return f"ipc://{(self.path / self.name).as_posix()}_backend.ipc"
 
     @property
     def control_address(self) -> str | None:
@@ -165,7 +165,7 @@ class ZMQIPCProxyConfig(BaseZMQProxyConfig):
         if self.path is None:
             raise ValueError("Path is required for IPC transport")
         return (
-            f"ipc://{self.path / self.name}_control.ipc"
+            f"ipc://{(self.path / self.name).as_posix()}_control.ipc"
             if self.enable_control
             else None
         )
@@ -176,7 +176,7 @@ class ZMQIPCProxyConfig(BaseZMQProxyConfig):
         if self.path is None:
             raise ValueError("Path is required for IPC transport")
         return (
-            f"ipc://{self.path / self.name}_capture.ipc"
+            f"ipc://{(self.path / self.name).as_posix()}_capture.ipc"
             if self.enable_capture
             else None
         )
@@ -320,18 +320,18 @@ class ZMQIPCConfig(BaseZMQCommunicationConfig):
         """Get the records push/pull address based on protocol configuration."""
         if not self.path:
             raise ValueError("Path is required for IPC transport")
-        return f"ipc://{self.path / 'records_push_pull.ipc'}"
+        return f"ipc://{(self.path / 'records_push_pull.ipc').as_posix()}"
 
     @property
     def credit_drop_address(self) -> str:
         """Get the credit drop address based on protocol configuration."""
         if not self.path:
             raise ValueError("Path is required for IPC transport")
-        return f"ipc://{self.path / 'credit_drop.ipc'}"
+        return f"ipc://{(self.path / 'credit_drop.ipc').as_posix()}"
 
     @property
     def credit_return_address(self) -> str:
         """Get the credit return address based on protocol configuration."""
         if not self.path:
             raise ValueError("Path is required for IPC transport")
-        return f"ipc://{self.path / 'credit_return.ipc'}"
+        return f"ipc://{(self.path / 'credit_return.ipc').as_posix()}"

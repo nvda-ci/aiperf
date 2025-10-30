@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import signal
+import sys
 from collections.abc import Callable, Coroutine
 
 from aiperf.common.mixins import AIPerfLoggerMixin
@@ -22,6 +23,14 @@ class SignalHandlerMixin(AIPerfLoggerMixin):
         Args:
             callback: The callback to call when a signal is received
         """
+        # Windows doesn't support asyncio signal handlers
+        if sys.platform == "win32":
+            self.debug(
+                "Signal handlers via asyncio are not supported on Windows. "
+                "Use Ctrl+C or system shutdown mechanisms instead."
+            )
+            return
+
         loop = asyncio.get_running_loop()
 
         def signal_handler(sig: int) -> None:

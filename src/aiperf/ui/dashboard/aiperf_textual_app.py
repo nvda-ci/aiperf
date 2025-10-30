@@ -3,6 +3,7 @@
 
 import os
 import signal
+import sys
 from contextlib import suppress
 
 from rich.console import RenderableType
@@ -153,9 +154,11 @@ class AIPerfTextualApp(App):
         self.realtime_metrics_dashboard = None
         self.log_viewer = None
 
-        # Forward the signal to the main process
-        # IMPORTANT: This is necessary, otherwise the process will hang
-        os.kill(os.getpid(), signal.SIGINT)
+        # Forward the signal to the main process to trigger shutdown
+        # On Windows, SIGINT via os.kill is unreliable, so we skip it
+        # The app.exit() call above should be sufficient
+        if sys.platform != "win32":
+            os.kill(os.getpid(), signal.SIGINT)
 
     async def action_toggle_hide_log_viewer(self) -> None:
         """Toggle the visibility of the log viewer section."""

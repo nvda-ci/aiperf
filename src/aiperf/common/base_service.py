@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import sys
 import uuid
 from abc import ABC
 from typing import ClassVar
@@ -103,7 +104,8 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
         self.error(lambda: f"Killing {self}")
         self.stop_requested = True
         self.stopped_event.set()
-        # TODO: This is a hack to ensure that the process is killed.
-        #       We should find a better way to do this.
-        os.kill(os.getpid(), signal.SIGKILL)
+        # Use platform-appropriate signal for forceful termination
+        # Windows doesn't support SIGKILL, use SIGTERM instead
+        kill_signal = signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL
+        os.kill(os.getpid(), kill_signal)
         raise asyncio.CancelledError(f"Killed {self}")

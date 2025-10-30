@@ -11,6 +11,7 @@ from aiperf.common.config import ServiceConfig, UserConfig
 from tests.common.conftest import DummyService
 
 
+@pytest.mark.macos
 class TestBootstrapMacOSFixes:
     """Test the macOS-specific terminal FD closing in bootstrap.py"""
 

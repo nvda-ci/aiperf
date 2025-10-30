@@ -2,9 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import multiprocessing
+import sys
 import uuid
 from multiprocessing import Process
-from multiprocessing.context import ForkProcess, SpawnProcess
+from multiprocessing.context import SpawnProcess
+
+# ForkProcess is only available on Unix-like systems
+if sys.platform != "win32":
+    from multiprocessing.context import ForkProcess
+else:
+    ForkProcess = type(None)  # type: ignore
 
 from pydantic import BaseModel, ConfigDict, Field
 

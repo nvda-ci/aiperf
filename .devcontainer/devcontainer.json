@@ -68,7 +68,8 @@
     },
     "mounts": [
         // Default mounts
-        "source=/tmp/,target=/tmp/,type=bind",
+        // Note: Removed /tmp/ bind mount for Windows compatibility
+        // The container will use its own /tmp/ directory
         "source=appuser-aiperf-bashhistory,target=/home/appuser/.commandhistory,type=volume", // For bash history
         "source=appuser-aiperf-precommit-cache,target=/home/appuser/.cache/pre-commit,type=volume", // For pre-commit cache
         "source=appuser-aiperf-venv,target=/home/appuser/.venv,type=volume" // For venv

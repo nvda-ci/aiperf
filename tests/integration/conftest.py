@@ -127,11 +127,15 @@ def pytest_runtest_teardown(item):
 
 
 def get_venv_python() -> str:
-    """Get the Python executable from the virtual environment."""
+    """Get the Python executable from the virtual environment (cross-platform)."""
     # Check if we're in a virtual environment
     venv_path = os.environ.get("VIRTUAL_ENV")
     if venv_path:
-        python_path = Path(venv_path) / "bin" / "python"
+        # Windows uses Scripts/python.exe, Unix uses bin/python
+        if sys.platform == "win32":
+            python_path = Path(venv_path) / "Scripts" / "python.exe"
+        else:
+            python_path = Path(venv_path) / "bin" / "python"
         if python_path.exists():
             return str(python_path)
     # Fall back to sys.executable if not in a venv

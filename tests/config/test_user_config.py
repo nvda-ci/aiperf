@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+import tempfile
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
@@ -231,21 +232,33 @@ def test_user_config_exclude_unset_fields():
             EndpointType.CHAT,
             TimingMode.REQUEST_RATE,
             True,
-            "/tmp/artifacts/hf_model-openai-chat-concurrency5-request_rate10.0",
+            str(
+                Path(tempfile.gettempdir())
+                / "artifacts"
+                / "hf_model-openai-chat-concurrency5-request_rate10.0"
+            ),
         ),
         (
             ["model1", "model2"],  # multi-model
             EndpointType.COMPLETIONS,
             TimingMode.REQUEST_RATE,
             True,
-            "/tmp/artifacts/model1_multi-openai-completions-concurrency5-request_rate10.0",
+            str(
+                Path(tempfile.gettempdir())
+                / "artifacts"
+                / "model1_multi-openai-completions-concurrency5-request_rate10.0"
+            ),
         ),
         (
             ["singlemodel"],  # single model
             EndpointType.EMBEDDINGS,
             TimingMode.FIXED_SCHEDULE,
             False,
-            "/tmp/artifacts/singlemodel-openai-embeddings-fixed_schedule",
+            str(
+                Path(tempfile.gettempdir())
+                / "artifacts"
+                / "singlemodel-openai-embeddings-fixed_schedule"
+            ),
         ),
     ],
 )
@@ -259,13 +272,13 @@ def test_compute_artifact_directory(
         streaming=streaming,
         url="http://custom-url",
     )
-    output = OutputConfig(artifact_directory=Path("/tmp/artifacts"))
+    output = OutputConfig(artifact_directory=Path(tempfile.gettempdir()) / "artifacts")
     loadgen = LoadGeneratorConfig(concurrency=5, request_rate=10)
 
     monkeypatch.setattr("pathlib.Path.is_file", lambda self: True)
     input_cfg = InputConfig(
         fixed_schedule=(timing_mode == TimingMode.FIXED_SCHEDULE),
-        file="/tmp/dummy_input.txt",
+        file=str(Path(tempfile.gettempdir()) / "dummy_input.txt"),
     )
     config = UserConfig(
         endpoint=endpoint,

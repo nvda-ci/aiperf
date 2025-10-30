@@ -54,7 +54,8 @@ class TestServiceConfigCommValidation:
         comm_config = config.comm_config
         assert isinstance(comm_config, ZMQIPCConfig)
         # Make sure it is not using a hardcoded path (security measure)
-        assert comm_config.path != Path("/tmp/aiperf")
+        # Use platform-agnostic temp directory instead of /tmp
+        assert comm_config.path != Path(tempfile.gettempdir()) / "aiperf"
 
         # Make sure a new config uses a different path
         config = ServiceConfig()
@@ -158,11 +159,11 @@ class TestIPCConfiguration:
         "path,expected_addresses",
         [
             (
-                Path("/tmp/aiperf"),  # Custom specified path
+                Path(tempfile.gettempdir()) / "aiperf",  # Cross-platform temp path
                 {
-                    "records_push_pull_address": "ipc:///tmp/aiperf/records_push_pull.ipc",
-                    "credit_drop_address": "ipc:///tmp/aiperf/credit_drop.ipc",
-                    "credit_return_address": "ipc:///tmp/aiperf/credit_return.ipc",
+                    "records_push_pull_address": f"ipc://{(Path(tempfile.gettempdir()) / 'aiperf' / 'records_push_pull.ipc').as_posix()}",
+                    "credit_drop_address": f"ipc://{(Path(tempfile.gettempdir()) / 'aiperf' / 'credit_drop.ipc').as_posix()}",
+                    "credit_return_address": f"ipc://{(Path(tempfile.gettempdir()) / 'aiperf' / 'credit_return.ipc').as_posix()}",
                 },
             ),
         ],

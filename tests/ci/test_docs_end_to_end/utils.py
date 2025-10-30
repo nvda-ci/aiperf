@@ -5,7 +5,10 @@ Utility functions for the end-to-end testing framework.
 """
 
 import logging
+import os
+import signal
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -162,10 +165,27 @@ def validate_file_exists(file_path: str) -> bool:
         return False
 
 
-def safe_kill_process(pid: int, signal: int = 9) -> bool:
-    """Safely kill a process by PID with error handling"""
+def safe_kill_process(pid: int, sig: int = 9) -> bool:
+    """Safely kill a process by PID with error handling (cross-platform)"""
     try:
-        subprocess.run(f"kill -{signal} {pid}", shell=True, timeout=5)
+        if sys.platform == "win32":
+            # On Windows, use taskkill command
+            # /F forces termination, /PID specifies process ID
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                timeout=5,
+            )
+        else:
+            # On Unix-like systems, use os.kill with appropriate signal
+            # Map common signal numbers to signal constants
+            signal_map = {
+                9: signal.SIGKILL,
+                15: signal.SIGTERM,
+                2: signal.SIGINT,
+            }
+            kill_signal = signal_map.get(sig, signal.SIGTERM)
+            os.kill(pid, kill_signal)
         return True
     except Exception as e:
         logger.debug(f"Could not kill process {pid}: {e}")
