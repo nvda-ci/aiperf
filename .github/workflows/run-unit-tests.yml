@@ -29,7 +29,7 @@ jobs:
         make first-time-setup PYTHON_VERSION=${{ matrix.python-version }}
     - run: pip install -e ".[dev]"
       if: matrix.os == 'windows-latest'
-    - run: cd tests/aiperf-mock-server && pip install -e ".[dev]"
+    - run: cd tests/aiperf_mock_server && pip install -e ".[dev]"
       if: matrix.os == 'windows-latest'
     - run: pytest -v
       if: matrix.os == 'windows-latest'
