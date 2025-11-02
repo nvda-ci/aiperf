@@ -220,10 +220,10 @@ class TestSamplerStatistics:
         samples = [sampler.next_conversation_id() for _ in range(1000)]
 
         expected_first_20 = [
-            'conv_1', 'conv_3', 'conv_5', 'conv_4', 'conv_5',
-            'conv_3', 'conv_1', 'conv_5', 'conv_5', 'conv_2',
-            'conv_5', 'conv_5', 'conv_3', 'conv_3', 'conv_2',
-            'conv_3', 'conv_3', 'conv_4', 'conv_2', 'conv_5'
+            'conv_1', 'conv_5', 'conv_3', 'conv_1', 'conv_1',
+            'conv_1', 'conv_3', 'conv_1', 'conv_3', 'conv_4',
+            'conv_5', 'conv_5', 'conv_5', 'conv_2', 'conv_5',
+            'conv_4', 'conv_1', 'conv_3', 'conv_1', 'conv_2'
         ]  # fmt: skip
         assert samples[:20] == expected_first_20
 

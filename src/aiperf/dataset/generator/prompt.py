@@ -12,6 +12,7 @@ from aiperf.common.exceptions import (
     InvalidStateError,
     NotInitializedError,
 )
+from aiperf.common.hash_id_random_generator import HashIdRandomGenerator
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.generator.base import BaseGenerator
 
@@ -42,9 +43,15 @@ class PromptGenerator(BaseGenerator):
         self._corpus_rng = rng.derive("dataset.prompt.corpus")
         self._prefix_rng = rng.derive("dataset.prompt.prefix")
 
+        # Hash-ID-based RNG for parallel processing with reproducibility
+        # This RNG re-seeds itself for each hash_id, enabling deterministic
+        # independent random sequences per hash block across workers
+        self._hash_id_corpus_rng = HashIdRandomGenerator.from_base_rng(self._corpus_rng)
+
         super().__init__(config=config, tokenizer=tokenizer, **kwargs)
 
         # Cached prompts: block ID -> list of tokens
+        # Each worker maintains its own cache for parallel processing
         self._cache: dict[int, list[int]] = {}
 
         # TODO: move this under initialize() method
@@ -175,7 +182,11 @@ class PromptGenerator(BaseGenerator):
         Generate a prompt containing exactly `num_tokens` by reusing previously generated prompts
         stored in `_cache`. Each hash index in `hash_ids` corresponds to a block of
         `block_size` tokens. If a hash index is found in `_cache`, its stored prompt is reused.
-        Otherwise, a new prompt is generated using `_generate_prompt()` and stored in `_cache`.
+        Otherwise, a new prompt is generated deterministically for that hash_id and stored in `_cache`.
+
+        The generation uses hash_id-based re-seeding to ensure perfect reproducibility
+        across parallel workers. Each hash_id produces an independent, deterministic
+        random sequence based on (base_seed + hash_id).
 
         Args:
             num_tokens: The number of tokens required in the prompt.
@@ -206,15 +217,24 @@ class PromptGenerator(BaseGenerator):
                 current_block_size = final_block_size
 
             if hash_id not in self._cache:
+                # Re-seed the hash_id RNG for deterministic, reproducible generation
+                # This ensures the same hash_id always produces the same tokens
+                # regardless of worker or processing order
+                self._hash_id_corpus_rng.reseed_for_hash_id(hash_id)
+
                 # To ensure that the prompt doesn't merge chunks, we insert a BOS or EOS token
                 # at the beginning. Length is maintained and the prompt generates the expected
                 # number of tokens. If no BOS or EOS token is available, we don't insert one.
                 prompt_tokens: list[int] = []
                 if self.tokenizer.block_separation_token_id is not None:
                     prompt_tokens += [self.tokenizer.block_separation_token_id]
-                    prompt_tokens += self._sample_tokens(current_block_size - 1)
+                    prompt_tokens += self._sample_tokens(
+                        current_block_size - 1, rng_to_use=self._hash_id_corpus_rng
+                    )
                 else:
-                    prompt_tokens += self._sample_tokens(current_block_size)
+                    prompt_tokens += self._sample_tokens(
+                        current_block_size, rng_to_use=self._hash_id_corpus_rng
+                    )
 
                 self._cache[hash_id] = prompt_tokens  # store to cache
 
@@ -222,12 +242,16 @@ class PromptGenerator(BaseGenerator):
 
         return self.tokenizer.decode(final_prompt, skip_special_tokens=False)
 
-    def _sample_tokens(self, num_tokens: int) -> list[int]:
+    def _sample_tokens(
+        self, num_tokens: int, rng_to_use: rng.RandomGenerator | None = None
+    ) -> list[int]:
         """Generate a list of token IDs containing exactly `num_tokens` number of tokens
         using the preloaded tokenized corpus.
 
         Args:
             num_tokens: Number of tokens required in the prompt.
+            rng_to_use: Optional rng.RandomGenerator to use for sampling. If None, uses self._corpus_rng.
+                    Useful for hash_id-based generation where deterministic seeding per hash is needed.
 
         Returns:
             A list of token IDs.
@@ -243,7 +267,8 @@ class PromptGenerator(BaseGenerator):
                 f"Returning a prompt of length {self._corpus_size}."
             )
 
-        start_idx = self._corpus_rng.randrange(self._corpus_size)
+        rng_to_use = rng_to_use or self._corpus_rng
+        start_idx = rng_to_use.randrange(self._corpus_size)
 
         end_idx = start_idx + num_tokens
         prompt_tokens = self._tokenized_corpus[start_idx:end_idx]

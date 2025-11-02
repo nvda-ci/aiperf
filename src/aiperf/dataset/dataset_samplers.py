@@ -43,7 +43,7 @@ class RandomSampler(BaseDatasetSampler):
 
     def __init__(self, conversation_ids: list[str], **kwargs) -> None:
         super().__init__(conversation_ids, **kwargs)
-        self._rng = rng.derive("dataset.sampler.random_choice")
+        self._rng = rng.derive("dataset.sampler.random")
 
     def next_conversation_id(self) -> str:
         return self._rng.choice(self._conversation_ids)
