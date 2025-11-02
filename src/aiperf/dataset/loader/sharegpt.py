@@ -42,7 +42,7 @@ class ShareGPTLoader(BasePublicDatasetLoader):
         self.output_tokens_mean = self.user_config.input.prompt.output_tokens.mean
         self.turn_count = 0
 
-        self._rng = rng.derive("dataset.sharegpt_loader")
+        self._rng = rng.derive("dataset.loader.sharegpt")
 
         super().__init__(user_config=user_config, tokenizer=tokenizer, **kwargs)
 

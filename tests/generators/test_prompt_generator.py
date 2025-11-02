@@ -338,7 +338,9 @@ class TestPromptGeneratorComprehensive:
         corpus_size = generator._corpus_size
 
         # Start near the end to force wrap-around
-        with patch.object(generator._rng, "randrange", return_value=corpus_size - 2):
+        with patch.object(
+            generator._corpus_rng, "randrange", return_value=corpus_size - 2
+        ):
             tokens = generator._sample_tokens(5)
             expected_tokens = (
                 generator._tokenized_corpus[corpus_size - 2 : corpus_size]
@@ -353,7 +355,7 @@ class TestPromptGeneratorComprehensive:
         generator = PromptGenerator(config, tokenizer)
         corpus_size = generator._corpus_size
 
-        with patch.object(generator._rng, "randrange", return_value=0):
+        with patch.object(generator._corpus_rng, "randrange", return_value=0):
             tokens = generator._sample_tokens(corpus_size)
 
             assert len(tokens) == corpus_size
@@ -368,7 +370,7 @@ class TestPromptGeneratorComprehensive:
         generator = PromptGenerator(config, tokenizer)
         corpus_size = generator._corpus_size
 
-        with patch.object(generator._rng, "randrange", return_value=0):
+        with patch.object(generator._corpus_rng, "randrange", return_value=0):
             tokens = generator._sample_tokens(corpus_size * 2)
 
         # Should log a warning

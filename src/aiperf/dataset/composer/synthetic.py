@@ -17,8 +17,8 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
     def __init__(self, config: UserConfig, tokenizer: Tokenizer):
         super().__init__(config, tokenizer)
 
-        self._turn_sampler_rng = rng.derive("composer.turn_sampler")
-        self._delay_sampler_rng = rng.derive("composer.delay_sampler")
+        self._turn_sampler_rng = rng.derive("composer.conversation.turn_count")
+        self._delay_sampler_rng = rng.derive("composer.conversation.turn_delay")
 
         if (
             not self.include_prompt

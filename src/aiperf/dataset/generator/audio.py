@@ -48,7 +48,11 @@ class AudioGenerator(BaseGenerator):
     def __init__(self, config: AudioConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self._rng = rng.derive("dataset.audio_generator")
+
+        # Separate RNGs for independent concerns
+        self._duration_rng = rng.derive("dataset.audio.duration")
+        self._format_rng = rng.derive("dataset.audio.format")
+        self._data_rng = rng.derive("dataset.audio.data")
 
     def _validate_sampling_rate(
         self, sampling_rate_hz: int, audio_format: AudioFormat
@@ -113,15 +117,15 @@ class AudioGenerator(BaseGenerator):
             raise ConfigurationError("Audio length must be greater than 0.01 seconds")
 
         # Sample audio length (in seconds) using rejection sampling
-        audio_length = self._rng.sample_normal(
+        audio_length = self._duration_rng.sample_normal(
             self.config.length.mean, self.config.length.stddev, lower=0.01
         )
 
         # Randomly select sampling rate and bit depth
         sampling_rate_hz = int(
-            self._rng.numpy_choice(self.config.sample_rates) * 1000
+            self._format_rng.numpy_choice(self.config.sample_rates) * 1000
         )  # Convert kHz to Hz
-        bit_depth = self._rng.numpy_choice(self.config.depths)
+        bit_depth = self._format_rng.numpy_choice(self.config.depths)
 
         # Validate sampling rate and bit depth
         self._validate_sampling_rate(sampling_rate_hz, self.config.format)
@@ -129,7 +133,7 @@ class AudioGenerator(BaseGenerator):
 
         # Generate synthetic audio data (gaussian noise)
         num_samples = int(audio_length * sampling_rate_hz)
-        audio_data = self._rng.normal(
+        audio_data = self._data_rng.normal(
             0,
             0.3,
             (

@@ -72,7 +72,7 @@ class RandomPoolDatasetLoader(MediaConversionMixin):
     def __init__(self, filename: str, num_conversations: int = 1):
         self.filename = filename
         self.num_conversations = num_conversations
-        self._rng = rng.derive("dataset.random_pool_loader")
+        self._rng = rng.derive("dataset.loader.random_pool")
 
     def load_dataset(self) -> dict[Filename, list[RandomPool]]:
         """Load random pool data from a file or directory.

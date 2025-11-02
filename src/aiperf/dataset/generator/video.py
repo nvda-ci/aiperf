@@ -28,7 +28,11 @@ class VideoGenerator(BaseGenerator):
     def __init__(self, config: VideoConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self._rng = rng.derive("dataset.video_generator")
+
+        # Separate RNGs for independent concerns (reserved for future use)
+        self._dimensions_rng = rng.derive("dataset.video.dimensions")
+        self._format_rng = rng.derive("dataset.video.format")
+        self._data_rng = rng.derive("dataset.video.data")
 
     def _check_ffmpeg_availability(self) -> bool:
         """Check if FFmpeg binary is available in the system."""

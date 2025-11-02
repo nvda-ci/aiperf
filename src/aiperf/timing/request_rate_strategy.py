@@ -116,7 +116,7 @@ class PoissonRateGenerator:
                 f"Request rate {config.request_rate} must be set and greater than 0 for {config.request_rate_mode!r}"
             )
 
-        self._rng = rng.derive("timing.poisson_rate_generator")
+        self._rng = rng.derive("timing.request.poisson_interval")
         self._request_rate: float = config.request_rate
 
     def next_interval(self) -> float:

@@ -403,12 +403,24 @@ def init(seed: int | None) -> None:
 
     Raises:
         InvalidStateError: If global RNG manager has already been initialized.
+
+    Note:
+        Also sets global random seeds for Python's random and NumPy as a defensive
+        measure. This ensures reproducibility even if third-party libraries or
+        future code inadvertently uses global random state.
     """
     global _manager
     if _manager is not None:
         raise InvalidStateError(
             "Global RNG manager has already been initialized. Call rng.reset() first."
         )
+
+    # Set global seeds defensively for reproducibility
+    # This protects against third-party code or future changes that might use global state
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
     _manager = _RNGManager(seed)
 
 

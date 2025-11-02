@@ -20,7 +20,7 @@ class BaseDatasetSampler(ABC):
     provide a `next_conversation_id` method that returns the next conversation id.
 
     Each sampler that requires randomness should create its own RNG in its __init__ method
-    using rng.derive() with a unique identifier (e.g., "dataset.random_sampler").
+    using rng.derive() with a unique identifier (e.g., "dataset.sampler.random_choice").
     """
 
     def __init__(self, conversation_ids: list[str], **kwargs) -> None:
@@ -43,7 +43,7 @@ class RandomSampler(BaseDatasetSampler):
 
     def __init__(self, conversation_ids: list[str], **kwargs) -> None:
         super().__init__(conversation_ids, **kwargs)
-        self._rng = rng.derive("dataset.random_sampler")
+        self._rng = rng.derive("dataset.sampler.random_choice")
 
     def next_conversation_id(self) -> str:
         return self._rng.choice(self._conversation_ids)
@@ -81,7 +81,7 @@ class ShuffleSampler(BaseDatasetSampler):
 
     def __init__(self, conversation_ids: list[str], **kwargs) -> None:
         super().__init__(conversation_ids, **kwargs)
-        self._rng = rng.derive("dataset.shuffle_sampler")
+        self._rng = rng.derive("dataset.sampler.shuffle")
         self._rng.shuffle(self._conversation_ids)
         self._index: int = 0
 

@@ -22,7 +22,7 @@ class RequestCancellationStrategy:
         """
         self.config = config
 
-        self._rng = rng.derive("timing.cancellation_strategy")
+        self._rng = rng.derive("timing.request.cancellation")
 
         self._cancellation_rate = config.request_cancellation_rate / 100.0
         self._cancellation_delay_ns = int(

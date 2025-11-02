@@ -35,7 +35,9 @@ class TestVideoGenerator:
         """Test VideoGenerator initialization with valid config."""
         generator = VideoGenerator(base_config)
         assert generator.config == base_config
-        assert hasattr(generator, "_rng")
+        assert hasattr(generator, "_dimensions_rng")
+        assert hasattr(generator, "_format_rng")
+        assert hasattr(generator, "_data_rng")
 
     @pytest.mark.parametrize(
         "ffmpeg_path,expected",

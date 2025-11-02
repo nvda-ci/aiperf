@@ -105,7 +105,7 @@ class SequenceLengthDistribution:
                 "Distribution must contain at least one sequence length pair"
             )
 
-        self._rng = rng.derive("models.sequence_length_distribution")
+        self._rng = rng.derive("models.sequence.distribution")
         self._pairs = tuple(pairs)  # Immutable copy
         self._validate_probabilities()
         self._cumulative_probs = self._compute_cumulative_probabilities()

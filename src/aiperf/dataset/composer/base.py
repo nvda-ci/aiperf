@@ -31,8 +31,8 @@ class BaseDatasetComposer(AIPerfLoggerMixin, ABC):
         self.audio_generator = AudioGenerator(config.input.audio)
         self.video_generator = VideoGenerator(config.input.video)
 
-        self._model_selector_rng = rng.derive("composer.model_selector")
-        self._max_tokens_rng = rng.derive("composer.max_tokens_sampler")
+        self._model_selector_rng = rng.derive("composer.turn.model_selection")
+        self._max_tokens_rng = rng.derive("composer.turn.max_tokens")
 
         self.turn_count = 0
 

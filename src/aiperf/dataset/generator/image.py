@@ -24,7 +24,12 @@ class ImageGenerator(BaseGenerator):
 
     def __init__(self, config: ImageConfig, **kwargs):
         super().__init__(**kwargs)
-        self._rng = rng.derive("dataset.image_generator")
+
+        # Separate RNGs for independent concerns
+        self._dimensions_rng = rng.derive("dataset.image.dimensions")
+        self._format_rng = rng.derive("dataset.image.format")
+        self._source_rng = rng.derive("dataset.image.source")
+
         self.config = config
 
         # Pre-load source images into memory for fast sampling
@@ -53,12 +58,12 @@ class ImageGenerator(BaseGenerator):
         image_format = self.config.format
         if image_format == ImageFormat.RANDOM:
             formats = [f for f in ImageFormat if f != ImageFormat.RANDOM]
-            image_format = self._rng.choice(formats)
+            image_format = self._format_rng.choice(formats)
 
-        width = self._rng.sample_positive_normal_integer(
+        width = self._dimensions_rng.sample_positive_normal_integer(
             self.config.width.mean, self.config.width.stddev
         )
-        height = self._rng.sample_positive_normal_integer(
+        height = self._dimensions_rng.sample_positive_normal_integer(
             self.config.height.mean, self.config.height.stddev
         )
 
@@ -80,4 +85,4 @@ class ImageGenerator(BaseGenerator):
             A PIL Image object randomly selected from the source images.
             Returns a copy to prevent accidental mutation of cached images.
         """
-        return self._rng.choice(self._source_images).copy()
+        return self._source_rng.choice(self._source_images).copy()

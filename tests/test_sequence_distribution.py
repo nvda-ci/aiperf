@@ -143,18 +143,18 @@ class TestSequenceLengthDistribution:
         # With seed 42, sample 10000 times and check first 10 + overall distribution
         samples = [dist.sample() for _ in range(10000)]
 
-        # Check exact sequence for first 10 samples (updated for 8-byte seeds)
+        # Check exact sequence for first 10 samples (single RNG design)
         expected_first_10 = [
-            (256, 128), (256, 128), (256, 128), (256, 128), (256, 128),
-            (512, 256), (256, 128), (512, 256), (256, 128), (512, 256)
+            (256, 128), (256, 128), (512, 256), (256, 128), (256, 128),
+            (256, 128), (256, 128), (256, 128), (512, 256), (256, 128)
         ]  # fmt: skip
         assert samples[:10] == expected_first_10
 
-        # Check exact counts for all 10000 samples with seed 42 (updated for 8-byte seeds)
+        # Check exact counts for all 10000 samples with seed 42 (single RNG design)
         count_256_128 = sum(1 for s in samples if s == (256, 128))
         count_512_256 = sum(1 for s in samples if s == (512, 256))
-        assert count_256_128 == 6080
-        assert count_512_256 == 3920
+        assert count_256_128 == 6113
+        assert count_512_256 == 3887
 
     def test_stddev_distribution_sampling(self):
         """Test sampling from distribution with standard deviations produces exact expected results."""
@@ -163,22 +163,22 @@ class TestSequenceLengthDistribution:
         # With seed 42, sample 1000 times and check first 10 + statistics
         samples = [dist.sample() for _ in range(1000)]
 
-        # Check exact sequence for first 10 samples (updated for Python gauss backend)
+        # Check exact sequence for first 10 samples (single RNG design)
         expected_first_10 = [
-            (242, 124), (232, 141), (264, 121), (448, 268), (481, 245),
-            (281, 125), (502, 267), (539, 257), (475, 270), (272, 124)
+            (318, 144), (264, 135), (247, 144), (272, 125), (272, 142),
+            (226, 116), (236, 127), (262, 134), (541, 243), (310, 133)
         ]  # fmt: skip
         assert samples[:10] == expected_first_10
 
-        # Verify exact statistics with seed 42 (updated for Python gauss backend)
+        # Verify exact statistics with seed 42 (single RNG design)
         isl_values = [s[0] for s in samples]
         osl_values = [s[1] for s in samples]
 
-        # Exact expected statistics with seed 42 and Python gauss (6x faster!)
-        assert np.std(isl_values) == pytest.approx(126.733, abs=0.001)
-        assert np.std(osl_values) == pytest.approx(63.658, abs=0.001)
-        assert np.mean(isl_values) == pytest.approx(358.717, abs=0.001)
-        assert np.mean(osl_values) == pytest.approx(180.579, abs=0.001)
+        # Exact expected statistics with seed 42 and single RNG design
+        assert np.std(isl_values) == pytest.approx(125.977, abs=0.001)
+        assert np.std(osl_values) == pytest.approx(63.532, abs=0.001)
+        assert np.mean(isl_values) == pytest.approx(352.231, abs=0.001)
+        assert np.mean(osl_values) == pytest.approx(176.930, abs=0.001)
 
         # All values should be positive (clamped)
         assert all(isl > 0 for isl in isl_values)
@@ -482,15 +482,15 @@ class TestIntegration:
         # Sample many times
         samples = dist.sample_batch(10000)
 
-        # Verify exact distribution with seed 42 (updated for 8-byte seeds)
+        # Verify exact distribution with seed 42 (single RNG design)
         counts = {}
         for sample in samples:
             counts[sample] = counts.get(sample, 0) + 1
 
-        # Exact expected counts with seed 42 and 8-byte seeds
-        assert counts[(128, 64)] == 3070
-        assert counts[(256, 128)] == 5005
-        assert counts[(512, 256)] == 1925
+        # Exact expected counts with seed 42 and single RNG design
+        assert counts[(128, 64)] == 3014
+        assert counts[(256, 128)] == 4957
+        assert counts[(512, 256)] == 2029
 
     def test_end_to_end_workflow_with_stddev(self):
         """Test complete workflow with standard deviations produces exact expected statistics."""
@@ -501,15 +501,15 @@ class TestIntegration:
         # Sample many times
         samples = dist.sample_batch(5000)
 
-        # Check exact variance with seed 42 (updated for Python gauss backend)
+        # Check exact variance with seed 42 (single RNG design)
         isl_values = [s[0] for s in samples]
         osl_values = [s[1] for s in samples]
 
-        # Exact expected statistics with seed 42 and Python gauss (6x faster!)
-        assert np.std(isl_values) == pytest.approx(65.055, abs=0.001)
-        assert np.std(osl_values) == pytest.approx(32.663, abs=0.001)
-        assert np.mean(isl_values) == pytest.approx(216.761, abs=0.001)
-        assert np.mean(osl_values) == pytest.approx(109.071, abs=0.001)
+        # Exact expected statistics with seed 42 and single RNG design
+        assert np.std(isl_values) == pytest.approx(64.939, abs=0.001)
+        assert np.std(osl_values) == pytest.approx(32.499, abs=0.001)
+        assert np.mean(isl_values) == pytest.approx(218.620, abs=0.001)
+        assert np.mean(osl_values) == pytest.approx(109.770, abs=0.001)
 
         # All values should still be positive
         assert all(isl > 0 for isl in isl_values)

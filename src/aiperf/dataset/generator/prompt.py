@@ -36,7 +36,12 @@ class PromptGenerator(BaseGenerator):
         self._tokenized_corpus = None
         self._corpus_size = 0
         self._prefix_prompts: list[str] = []
-        self._rng = rng.derive("dataset.prompt_generator")
+
+        # Separate RNGs for independent concerns
+        self._length_rng = rng.derive("dataset.prompt.length")
+        self._corpus_rng = rng.derive("dataset.prompt.corpus")
+        self._prefix_rng = rng.derive("dataset.prompt.prefix")
+
         super().__init__(config=config, tokenizer=tokenizer, **kwargs)
 
         # Cached prompts: block ID -> list of tokens
@@ -146,7 +151,7 @@ class PromptGenerator(BaseGenerator):
                 mean, hash_ids, self.config.input_tokens.block_size
             )
 
-        num_tokens = self._rng.sample_positive_normal_integer(mean, stddev)
+        num_tokens = self._length_rng.sample_positive_normal_integer(mean, stddev)
         return self._generate_prompt(num_tokens)
 
     def _generate_prompt(self, num_tokens: int) -> str:
@@ -238,7 +243,7 @@ class PromptGenerator(BaseGenerator):
                 f"Returning a prompt of length {self._corpus_size}."
             )
 
-        start_idx = self._rng.randrange(self._corpus_size)
+        start_idx = self._corpus_rng.randrange(self._corpus_size)
 
         end_idx = start_idx + num_tokens
         prompt_tokens = self._tokenized_corpus[start_idx:end_idx]
@@ -263,4 +268,4 @@ class PromptGenerator(BaseGenerator):
                 "Attempted to sample a prefix prompt but the prefix prompts pool is empty. "
                 "Please ensure that the prefix prompts pool is initialized."
             )
-        return self._rng.choice(self._prefix_prompts)
+        return self._prefix_rng.choice(self._prefix_prompts)
