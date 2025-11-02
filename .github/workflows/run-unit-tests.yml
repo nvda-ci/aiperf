@@ -24,8 +24,13 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
+      if: matrix.os != 'windows-latest'
       run: |
         make first-time-setup PYTHON_VERSION=${{ matrix.python-version }}
+    - run: pip install -e ".[dev]"
+      if: matrix.os == 'windows-latest'
+    - run: pytest -v
+      if: matrix.os == 'windows-latest'
     - name: Run unit tests
       run: |
         make coverage PYTHON_VERSION=${{ matrix.python-version }}
