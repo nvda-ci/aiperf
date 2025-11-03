@@ -44,6 +44,11 @@ jobs:
         docker rm uv-container
         chmod +x ./uv
 
+    - name: Fix workspace permissions for container user
+      run: |
+        # Make workspace writable by container user (UID 1000)
+        sudo chown -R 1000:1000 ${{ github.workspace }}
+
     - name: Run integration tests in container
       run: |
         docker run --rm \
