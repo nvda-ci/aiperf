@@ -160,13 +160,14 @@ aiperf profile \
     --url localhost:8000 \
     --video-width 640 \
     --video-height 480 \
-    --video-codec libx264 \
+    --video-codec libopenh264 \
     --request-count 20
 ```
 
 **Available CPU Codecs:**
-- `libx264`: H.264 encoding, widely compatible (default)
-- `libx265`: H.265 encoding, smaller file sizes, slower encoding
+- `libopenh264`: H.264 encoding, BSD-licensed (default)
+- `libx264`: H.264 encoding, GPL-licensed, widely compatible
+- `libx265`: H.265 encoding, GPL-licensed, smaller file sizes, slower encoding
 
 #### GPU Encoding (NVIDIA)
 
@@ -316,7 +317,7 @@ This allows seamless integration with vision-language model APIs that accept bas
 
 ### Encoding Performance
 
-- **CPU codecs** (`libx264`, `libx265`): Slower but universally available
+- **CPU codecs** (`libopenh264`, `libx264`, `libx265`): Slower but universally available
 - **GPU codecs** (`h264_nvenc`, `hevc_nvenc`): Much faster, requires NVIDIA GPU
 - Higher resolution and frame rates increase encoding time
 
@@ -359,7 +360,7 @@ Error: Encoder 'h264_nvenc' not found
 Solutions:
 1. Verify NVIDIA GPU is available: `nvidia-smi`
 2. Check FFmpeg was compiled with NVENC support: `ffmpeg -encoders | grep nvenc`
-3. Fall back to CPU codec: `--video-codec libx264`
+3. Fall back to CPU codec: `--video-codec libopenh264` or `--video-codec libx264`
 
 ### Out of Memory
 

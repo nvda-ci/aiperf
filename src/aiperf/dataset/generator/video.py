@@ -282,7 +282,7 @@ class VideoGenerator(BaseGenerator):
             elif "Codec" in str(e) or "codec" in str(e):
                 raise RuntimeError(
                     f"Video codec '{self.config.codec}' is not supported. "
-                    f"Please use a valid FFmpeg codec (e.g., libx264, libx265, h264_nvenc)."
+                    f"Please use a valid FFmpeg codec (e.g., libopenh264, libx264, libx265, h264_nvenc)."
                 ) from e
             else:
                 raise RuntimeError(

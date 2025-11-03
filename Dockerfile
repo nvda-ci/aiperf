@@ -82,7 +82,7 @@ FROM base AS env-builder
 
 WORKDIR /workspace
 
-# Build ffmpeg from source
+# Build ffmpeg from source with OpenH264
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
@@ -90,18 +90,28 @@ RUN apt-get update -y && \
         pkg-config \
         wget \
         yasm \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and build ffmpeg
+# Build OpenH264 (BSD-licensed H.264 codec)
+RUN git clone https://github.com/cisco/openh264.git \
+    && cd openh264 \
+    && make -j$(nproc) \
+    && make install PREFIX=/usr/local \
+    && cd .. \
+    && rm -rf openh264
+
+# Download and build ffmpeg with OpenH264
 RUN wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz \
     && tar -xf ffmpeg-7.1.tar.xz \
     && cd ffmpeg-7.1 \
-    && ./configure \
+    && PKG_CONFIG_PATH=/usr/local/lib/pkgconfig ./configure \
         --prefix=/opt/ffmpeg \
         --disable-gpl \
         --disable-nonfree \
         --enable-shared \
         --disable-static \
+        --enable-libopenh264 \
         --disable-doc \
         --disable-htmlpages \
         --disable-manpages \
@@ -137,10 +147,13 @@ COPY LICENSE ATTRIBUTIONS*.md /legal/
 # Copy bash with executable permissions preserved using --chmod
 COPY --from=env-builder --chown=1000:1000 --chmod=755 /bin/bash /bin/bash
 
+# Copy OpenH264 libraries
+COPY --from=env-builder --chown=1000:1000 /usr/local/lib/libopenh264.so* /usr/local/lib/
+
 # Copy ffmpeg binaries and libraries
 COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
 ENV PATH="/opt/ffmpeg/bin:${PATH}" \
-    LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
+    LD_LIBRARY_PATH="/opt/ffmpeg/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
 
 # Setup the directories with permissions for nvs user
 COPY --from=env-builder --chown=1000:1000 /app /app

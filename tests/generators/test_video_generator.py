@@ -22,7 +22,7 @@ def base_config():
         duration=0.5,
         fps=2,
         format=VideoFormat.MP4,
-        codec="libx264",
+        codec="libopenh264",
         synth_type=VideoSynthType.MOVING_SHAPES,
     )
 
@@ -108,7 +108,7 @@ class TestVideoGenerator:
             duration=1.0,
             fps=4,
             format=VideoFormat.MP4,
-            codec="libx264",
+            codec="libopenh264",
             synth_type=VideoSynthType.MOVING_SHAPES,
         )
         generator = VideoGenerator(config)
@@ -130,7 +130,7 @@ class TestVideoGenerator:
             duration=duration,
             fps=fps,
             format=VideoFormat.MP4,
-            codec="libx264",
+            codec="libopenh264",
             synth_type=synth_type,
         )
         generator = VideoGenerator(config)
