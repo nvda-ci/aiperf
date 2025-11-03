@@ -36,4 +36,5 @@ jobs:
           aiperf:test \
           bash -c "source /opt/aiperf/venv/bin/activate && \
                    uv pip install pytest pytest-xdist pytest-asyncio pytest-cov && \
+                   uv pip install -e 'tests/aiperf_mock_server[dev]' && \
                    pytest tests/integration/ -m 'integration and not performance and not stress' -n auto -v --tb=long"
