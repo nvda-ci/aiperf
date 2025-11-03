@@ -188,12 +188,12 @@ class TestVideoGenerator:
             patch.object(generator, "_check_ffmpeg_availability", return_value=True),
             patch.object(
                 generator,
-                "_create_mp4_with_pipes",
+                "_create_video_with_pipes",
                 side_effect=Exception("Codec not supported"),
             ),
             patch.object(
                 generator,
-                "_create_mp4_with_temp_files",
+                "_create_video_with_temp_files",
                 side_effect=Exception("Codec not supported"),
             ),
             pytest.raises(RuntimeError, match="[Cc]odec"),
