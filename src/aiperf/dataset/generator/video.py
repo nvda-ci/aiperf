@@ -20,8 +20,8 @@ class VideoGenerator(BaseGenerator):
     """A class that generates synthetic videos.
 
     This class provides methods to create synthetic videos with different patterns
-    like moving shapes or grid clocks. The videos are generated in MP4 format and
-    returned as base64 encoded strings. Currently only MP4 format is supported.
+    like moving shapes or grid clocks. The videos are generated in MP4 or WebM format
+    and returned as base64 encoded strings.
     """
 
     def __init__(self, config: VideoConfig, **kwargs):
@@ -246,7 +246,7 @@ class VideoGenerator(BaseGenerator):
     def _encode_frames_to_base64(self, frames: list[Image.Image]) -> str:
         """Convert frames to video data and encode as base64 string.
 
-        Creates video data using the format specified in config. Currently only MP4 is supported.
+        Creates video data using the format specified in config. Supports MP4 and WebM formats.
         """
         if not frames:
             return ""
@@ -254,9 +254,9 @@ class VideoGenerator(BaseGenerator):
         # Validate format
         from aiperf.common.enums import VideoFormat
 
-        if self.config.format != VideoFormat.MP4:
+        if self.config.format not in [VideoFormat.MP4, VideoFormat.WEBM]:
             raise ValueError(
-                f"Unsupported video format: {self.config.format}. Only MP4 is supported."
+                f"Unsupported video format: {self.config.format}. Only MP4 and WebM are supported."
             )
 
         # Check if FFmpeg is available before proceeding
@@ -270,9 +270,11 @@ class VideoGenerator(BaseGenerator):
             )
 
         try:
-            return self._create_mp4_with_ffmpeg(frames)
+            return self._create_video_with_ffmpeg(frames)
         except Exception as e:
-            self.logger.error(f"Failed to create MP4 with ffmpeg: {e}")
+            self.logger.error(
+                f"Failed to create {self.config.format.value.upper()} with ffmpeg: {e}"
+            )
 
             # Provide specific error messages based on the error type
             if "No such file or directory" in str(e) or "not found" in str(e):
@@ -282,7 +284,7 @@ class VideoGenerator(BaseGenerator):
             elif "Codec" in str(e) or "codec" in str(e):
                 raise RuntimeError(
                     f"Video codec '{self.config.codec}' is not supported. "
-                    f"Please use a valid FFmpeg codec (e.g., libopenh264, libx264, libx265, h264_nvenc)."
+                    f"Please use a valid FFmpeg codec (e.g., libvpx-vp9, libopenh264, libx264, libx265, h264_nvenc)."
                 ) from e
             else:
                 raise RuntimeError(
@@ -290,23 +292,24 @@ class VideoGenerator(BaseGenerator):
                     f"Codec: {self.config.codec}, Size: {self.config.width}x{self.config.height}, FPS: {self.config.fps}"
                 ) from e
 
-    def _create_mp4_with_ffmpeg(self, frames: list[Image.Image]) -> str:
-        """Create MP4 data using ffmpeg-python with improved error handling."""
+    def _create_video_with_ffmpeg(self, frames: list[Image.Image]) -> str:
+        """Create video data using ffmpeg-python with improved error handling."""
 
         try:
             # First try the in-memory approach
-            return self._create_mp4_with_pipes(frames)
+            return self._create_video_with_pipes(frames)
         except (BrokenPipeError, OSError, RuntimeError) as e:
             self.logger.warning(
                 f"Pipe method failed ({e}), falling back to temporary file method"
             )
             # Fall back to temporary file approach if pipes fail
-            return self._create_mp4_with_temp_files(frames)
+            return self._create_video_with_temp_files(frames)
 
-    def _create_mp4_with_pipes(self, frames: list[Image.Image]) -> str:
-        """Create MP4 using pipes via temporary file (preferred method)."""
-        # MP4 muxer doesn't support non-seekable output (pipes), so we use a temp file
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
+    def _create_video_with_pipes(self, frames: list[Image.Image]) -> str:
+        """Create video using pipes via temporary file (preferred method)."""
+        # Use temp file since some muxers don't support non-seekable output (pipes)
+        file_ext = f".{self.config.format.value}"
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp_file:
             temp_path = tmp_file.name
 
         try:
@@ -328,6 +331,17 @@ class VideoGenerator(BaseGenerator):
             # Combine all frame data
             all_data = b"".join(frame_data)
 
+            # Build output options based on format
+            output_options = {
+                "format": self.config.format.value,
+                "vcodec": self.config.codec,
+                "pix_fmt": "yuv420p",
+            }
+
+            # Add format-specific options
+            if self.config.format.value == "mp4":
+                output_options["movflags"] = "faststart"
+
             # Use ffmpeg.run with input data, output to temporary file
             _ = (
                 ffmpeg.input(
@@ -337,26 +351,20 @@ class VideoGenerator(BaseGenerator):
                     s=f"{self.config.width}x{self.config.height}",
                     r=self.config.fps,
                 )
-                .output(
-                    temp_path,
-                    format="mp4",
-                    vcodec=self.config.codec,
-                    pix_fmt="yuv420p",
-                    movflags="faststart",
-                )
+                .output(temp_path, **output_options)
                 .overwrite_output()  # Allow overwriting the temp file
                 .run(input=all_data, capture_stdout=True, capture_stderr=True)
             )
 
-            # Read the MP4 file back
+            # Read the video file back
             with open(temp_path, "rb") as f:
-                mp4_data = f.read()
+                video_data = f.read()
 
-            if not mp4_data:
+            if not video_data:
                 raise RuntimeError("FFmpeg produced no output")
 
             # Encode as base64
-            base64_data = base64.b64encode(mp4_data).decode("utf-8")
+            base64_data = base64.b64encode(video_data).decode("utf-8")
             return f"data:video/{self.config.format.value};base64,{base64_data}"
 
         except ffmpeg.Error as e:
@@ -368,8 +376,8 @@ class VideoGenerator(BaseGenerator):
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    def _create_mp4_with_temp_files(self, frames: list[Image.Image]) -> str:
-        """Create MP4 using temporary files (fallback method)."""
+    def _create_video_with_temp_files(self, frames: list[Image.Image]) -> str:
+        """Create video using temporary files (fallback method)."""
         # Create temporary directory for frames
         temp_dir = tempfile.mkdtemp(prefix="aiperf_frames_")
 
@@ -387,32 +395,38 @@ class VideoGenerator(BaseGenerator):
                 frame.save(frame_path, "PNG", compress_level=6, optimize=False)
 
             # Create output file in the same temp directory
-            output_path = os.path.join(temp_dir, "output.mp4")
+            file_ext = self.config.format.value
+            output_path = os.path.join(temp_dir, f"output.{file_ext}")
             frame_pattern = os.path.join(temp_dir, "frame_%06d.png")
 
-            # Use ffmpeg to create MP4 from frames
+            # Build output options based on format
+            output_options = {
+                "format": self.config.format.value,
+                "vcodec": self.config.codec,
+                "pix_fmt": "yuv420p",
+            }
+
+            # Add format-specific options
+            if self.config.format.value == "mp4":
+                output_options["movflags"] = "faststart"
+
+            # Use ffmpeg to create video from frames
             _ = (
                 ffmpeg.input(frame_pattern, r=self.config.fps)
-                .output(
-                    output_path,
-                    format="mp4",
-                    vcodec=self.config.codec,
-                    pix_fmt="yuv420p",
-                    movflags="faststart",
-                )
+                .output(output_path, **output_options)
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
 
             # Read the output file
             with open(output_path, "rb") as f:
-                mp4_data = f.read()
+                video_data = f.read()
 
-            if not mp4_data:
+            if not video_data:
                 raise RuntimeError("FFmpeg produced no output")
 
             # Encode as base64
-            base64_data = base64.b64encode(mp4_data).decode("utf-8")
+            base64_data = base64.b64encode(video_data).decode("utf-8")
             return f"data:video/{self.config.format.value};base64,{base64_data}"
 
         except ffmpeg.Error as e:
