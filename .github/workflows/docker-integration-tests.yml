@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: "Docker Integration Tests"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  docker-integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        target: env-builder
+        tags: aiperf:test
+        load: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Run integration tests in container
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          aiperf:test \
+          bash -c "source /opt/aiperf/venv/bin/activate && \
+                   uv pip install pytest pytest-xdist pytest-asyncio pytest-cov && \
+                   pytest tests/integration/ -m 'integration and not performance and not stress' -n auto -v --tb=long"
