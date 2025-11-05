@@ -67,6 +67,38 @@ class TelemetryExportData(AIPerfBaseModel):
     endpoints: dict[str, EndpointData]
 
 
+class ServerMetricsSummary(AIPerfBaseModel):
+    """Summary information for server metrics collection."""
+
+    endpoints_configured: list[str]
+    endpoints_successful: list[str]
+    start_time: datetime
+    end_time: datetime
+
+
+class ServerSummary(AIPerfBaseModel):
+    """Summary of server metrics data."""
+
+    server_id: str
+    server_type: str | None = None
+    hostname: str | None = None
+    instance: str | None = None
+    metrics: dict[str, JsonMetricResult]  # metric_key -> {stat_key -> value}
+
+
+class ServerEndpointData(AIPerfBaseModel):
+    """Data for a single server endpoint."""
+
+    servers: dict[str, ServerSummary]
+
+
+class ServerMetricsExportData(AIPerfBaseModel):
+    """Server metrics data structure for JSON export."""
+
+    summary: ServerMetricsSummary
+    endpoints: dict[str, ServerEndpointData]
+
+
 class TimesliceData(AIPerfBaseModel):
     """Data for a single timeslice.
 
@@ -129,6 +161,7 @@ class JsonExportData(AIPerfBaseModel):
     error_isl: JsonMetricResult | None = None
     total_error_isl: JsonMetricResult | None = None
     telemetry_data: TelemetryExportData | None = None
+    server_metrics_data: ServerMetricsExportData | None = None
     input_config: UserConfig | None = None
     was_cancelled: bool | None = None
     error_summary: list[ErrorDetailsCount] | None = None

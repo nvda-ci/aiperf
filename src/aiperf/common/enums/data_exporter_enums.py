@@ -9,6 +9,7 @@ class ConsoleExporterType(CaseInsensitiveStrEnum):
     EXPERIMENTAL_METRICS = "experimental_metrics"
     INTERNAL_METRICS = "internal_metrics"
     METRICS = "metrics"
+    SERVER_METRICS = "server_metrics"
     TELEMETRY = "telemetry"
     USAGE_DISCREPANCY_WARNING = "usage_discrepancy_warning"
 

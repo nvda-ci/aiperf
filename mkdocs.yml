@@ -20,6 +20,7 @@ nav:
     - Goodput: tutorials/goodput.md
     - Request Rate with Max Concurrency: tutorials/request-rate-concurrency.md
     - GPU Telemetry: tutorials/gpu-telemetry.md
+    - Server Metrics: tutorials/server-metrics.md
     - Template Endpoint: tutorials/template-endpoint.md
   - Reference:
     - Architecture: architecture.md

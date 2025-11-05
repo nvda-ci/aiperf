@@ -144,6 +144,7 @@ async def test_metrics_csv_exporter_writes_two_sections_and_values(
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -194,6 +195,7 @@ async def test_metrics_csv_exporter_empty_records_creates_empty_file(
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -233,6 +235,7 @@ async def test_metrics_csv_exporter_deterministic_sort_order(
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -289,6 +292,7 @@ async def test_metrics_csv_exporter_unit_aware_number_formatting(
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -349,6 +353,7 @@ async def test_metrics_csv_exporter_logs_and_raises_on_write_failure(
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -397,6 +402,7 @@ async def test_format_number_various_types(mock_user_config, value, expected):
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
+        server_metrics_results=None,
     )
     exporter = MetricsCsvExporter(cfg)
     assert exporter._format_number(value) == expected
@@ -435,6 +441,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=sample_telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -478,6 +485,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -509,6 +517,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=sample_telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -570,6 +579,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -598,6 +608,7 @@ class TestMetricsCsvExporterTelemetry:
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -708,6 +719,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -768,6 +780,7 @@ class TestMetricsCsvExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsCsvExporter(cfg)
@@ -793,6 +806,7 @@ class TestMetricsCsvExporterTelemetry:
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -818,6 +832,7 @@ class TestMetricsCsvExporterTelemetry:
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = MetricsCsvExporter(cfg)
@@ -837,6 +852,7 @@ def test_metrics_csv_exporter_inherits_from_base(mock_user_config):
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
+        server_metrics_results=None,
     )
 
     exporter = MetricsCsvExporter(cfg)
@@ -859,6 +875,7 @@ async def test_metrics_csv_exporter_uses_base_export(mock_user_config):
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
+        server_metrics_results=None,
     )
 
     exporter = MetricsCsvExporter(cfg)
@@ -897,6 +914,7 @@ def test_metrics_csv_exporter_generate_content_uses_instance_data_members(
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
+        server_metrics_results=None,
     )
 
     exporter = MetricsCsvExporter(cfg)
@@ -929,6 +947,7 @@ def test_metrics_csv_exporter_generate_content_uses_telemetry_results_from_insta
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=sample_telemetry_results,
+        server_metrics_results=None,
     )
 
     exporter = MetricsCsvExporter(cfg)
@@ -958,6 +977,7 @@ async def test_metrics_csv_exporter_export_calls_generate_content_internally(
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
+        server_metrics_results=None,
     )
 
     exporter = MetricsCsvExporter(cfg)

@@ -26,6 +26,42 @@ from aiperf.common.utils import load_json_str
 _logger = AIPerfLogger(__name__)
 
 
+def _parse_metrics_urls(
+    items: list[str], special_markers: set[str] | None = None
+) -> list[str]:
+    """Parse and normalize metrics endpoint URLs from configuration list.
+
+    This is a shared helper for parsing both GPU telemetry and server metrics URLs.
+
+    Args:
+        items: List of configuration items (URLs and special markers)
+        special_markers: Set of special marker strings to skip (e.g., {"dashboard", "console"})
+
+    Returns:
+        List of normalized URLs (with http:// prefix added if missing)
+
+    Example:
+        >>> _parse_metrics_urls(["node1:9401", "dashboard", "http://node2:9401"], {"dashboard"})
+        ["http://node1:9401", "http://node2:9401"]
+    """
+    special_markers = special_markers or set()
+    urls = []
+
+    for item in items:
+        # Skip special markers that aren't actual URLs
+        if item in special_markers:
+            continue
+        # Skip CSV files (for GPU telemetry)
+        if item.endswith(".csv"):
+            continue
+        # Process actual URL entries
+        if item.startswith("http") or ":" in item:
+            normalized_url = item if item.startswith("http") else f"http://{item}"
+            urls.append(normalized_url)
+
+    return urls
+
+
 def _should_quote_arg(x: Any) -> bool:
     """Determine if the value should be quoted in the CLI command."""
     return isinstance(x, str) and not x.startswith("-") and x not in ("profile")
@@ -235,31 +271,45 @@ class UserConfig(BaseConfig):
     _gpu_telemetry_urls: list[str] = []
     _gpu_telemetry_metrics_file: Path | None = None
 
+    server_metrics: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description="Enable console display of server metrics. Server metrics are ALWAYS collected automatically from inference endpoint URL + /metrics (even without this flag), but console display requires this flag. Use without parameters to show collected metrics in console. Optionally specify additional URLs to collect from (e.g., http://frontend:8080/metrics http://worker:8081/metrics). Supports Dynamo inference server metrics. JSONL export always generated at server_metrics_export.jsonl if data collected",
+        ),
+        BeforeValidator(parse_str_or_list),
+        CLIParameter(
+            name=("--server-metrics",),
+            consume_multiple=True,
+            group=Groups.TELEMETRY,
+        ),
+    ]
+
+    _server_metrics_urls: list[str] = []
+
     @model_validator(mode="after")
     def _parse_gpu_telemetry_config(self) -> Self:
         """Parse gpu_telemetry list into mode, URLs, and metrics file."""
         if not self.gpu_telemetry:
             return self
 
+        # Check for special mode markers
         mode = GPUTelemetryMode.SUMMARY
-        urls = []
-        metrics_file = None
+        if "dashboard" in self.gpu_telemetry:
+            mode = GPUTelemetryMode.REALTIME_DASHBOARD
 
+        # Check for CSV file (file extension heuristic)
+        metrics_file = None
         for item in self.gpu_telemetry:
-            # Check for CSV file (file extension heuristic)
             if item.endswith(".csv"):
                 metrics_file = Path(item)
                 if not metrics_file.exists():
                     raise ValueError(f"GPU metrics file not found: {item}")
-                continue
+                break
 
-            # Check for dashboard mode
-            if item in ["dashboard"]:
-                mode = GPUTelemetryMode.REALTIME_DASHBOARD
-            # Check for URLs
-            elif item.startswith("http") or ":" in item:
-                normalized_url = item if item.startswith("http") else f"http://{item}"
-                urls.append(normalized_url)
+        # Parse URLs using shared helper (skips dashboard and csv files)
+        special_markers = {"dashboard"}
+        urls = _parse_metrics_urls(self.gpu_telemetry, special_markers=special_markers)
 
         self._gpu_telemetry_mode = mode
         self._gpu_telemetry_urls = urls
@@ -285,6 +335,27 @@ class UserConfig(BaseConfig):
     def gpu_telemetry_metrics_file(self) -> Path | None:
         """Get the path to custom GPU metrics CSV file."""
         return self._gpu_telemetry_metrics_file
+
+    @model_validator(mode="after")
+    def _parse_server_metrics_config(self) -> Self:
+        """Parse server_metrics list into URLs.
+
+        Handles special markers:
+        - "console": Presence marker to enable server metrics (URLs auto-derived from inference endpoint)
+        """
+        if not self.server_metrics:
+            return self
+
+        # Parse URLs using shared helper
+        urls = _parse_metrics_urls(self.server_metrics, special_markers={"console"})
+
+        self._server_metrics_urls = urls
+        return self
+
+    @property
+    def server_metrics_urls(self) -> list[str]:
+        """Get the parsed server metrics endpoint URLs."""
+        return self._server_metrics_urls
 
     @model_validator(mode="after")
     def _compute_config(self) -> Self:

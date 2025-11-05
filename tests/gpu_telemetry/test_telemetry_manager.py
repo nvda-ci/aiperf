@@ -50,7 +50,9 @@ class TestTelemetryManagerInitialization:
         mock_user_config.gpu_telemetry_urls = None
 
         manager = self._create_manager_with_mocked_base(mock_user_config)
-        assert manager._dcgm_endpoints == list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
+        assert manager._configured_endpoints == list(
+            Environment.GPU.DEFAULT_DCGM_ENDPOINTS
+        )
 
     def test_initialization_custom_endpoints(self):
         """Test initialization with custom user-provided endpoints."""
@@ -63,9 +65,9 @@ class TestTelemetryManagerInitialization:
 
         # Should have both defaults + custom endpoint
         for default_endpoint in Environment.GPU.DEFAULT_DCGM_ENDPOINTS:
-            assert default_endpoint in manager._dcgm_endpoints
-        assert custom_endpoint in manager._dcgm_endpoints
-        assert len(manager._dcgm_endpoints) == 3
+            assert default_endpoint in manager._configured_endpoints
+        assert custom_endpoint in manager._configured_endpoints
+        assert len(manager._configured_endpoints) == 3
 
     def test_initialization_string_endpoint(self):
         """Test initialization converts single string endpoint to list and prepends defaults."""
@@ -75,11 +77,11 @@ class TestTelemetryManagerInitialization:
 
         manager = self._create_manager_with_mocked_base(mock_user_config)
 
-        assert isinstance(manager._dcgm_endpoints, list)
+        assert isinstance(manager._configured_endpoints, list)
         for default_endpoint in Environment.GPU.DEFAULT_DCGM_ENDPOINTS:
-            assert default_endpoint in manager._dcgm_endpoints
-        assert "http://single-node:9401/metrics" in manager._dcgm_endpoints
-        assert len(manager._dcgm_endpoints) == 3
+            assert default_endpoint in manager._configured_endpoints
+        assert "http://single-node:9401/metrics" in manager._configured_endpoints
+        assert len(manager._configured_endpoints) == 3
 
     def test_initialization_filters_invalid_urls(self):
         """Test initialization with only valid URLs (invalid ones filtered by user_config validator)."""
@@ -96,11 +98,11 @@ class TestTelemetryManagerInitialization:
         manager = self._create_manager_with_mocked_base(mock_user_config)
 
         # Should have 2 defaults + 2 valid URLs
-        assert len(manager._dcgm_endpoints) == 4
+        assert len(manager._configured_endpoints) == 4
         for default_endpoint in Environment.GPU.DEFAULT_DCGM_ENDPOINTS:
-            assert default_endpoint in manager._dcgm_endpoints
-        assert "http://valid:9401/metrics" in manager._dcgm_endpoints
-        assert "http://another-valid:9401/metrics" in manager._dcgm_endpoints
+            assert default_endpoint in manager._configured_endpoints
+        assert "http://valid:9401/metrics" in manager._configured_endpoints
+        assert "http://another-valid:9401/metrics" in manager._configured_endpoints
 
     def test_initialization_deduplicates_endpoints(self):
         """Test initialization removes duplicate endpoints while preserving order."""
@@ -116,11 +118,17 @@ class TestTelemetryManagerInitialization:
         manager = self._create_manager_with_mocked_base(mock_user_config)
 
         # Should have 2 defaults + 2 unique user endpoints (duplicate removed)
-        assert len(manager._dcgm_endpoints) == 4
-        assert manager._dcgm_endpoints[0] == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[0]
-        assert manager._dcgm_endpoints[1] == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[1]
-        assert manager._dcgm_endpoints[2] == "http://node1:9401/metrics"
-        assert manager._dcgm_endpoints[3] == "http://node2:9401/metrics"
+        assert len(manager._configured_endpoints) == 4
+        assert (
+            manager._configured_endpoints[0]
+            == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[0]
+        )
+        assert (
+            manager._configured_endpoints[1]
+            == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[1]
+        )
+        assert manager._configured_endpoints[2] == "http://node1:9401/metrics"
+        assert manager._configured_endpoints[3] == "http://node2:9401/metrics"
 
     def test_user_provides_default_endpoint(self):
         """Test that explicitly providing a default endpoint doesn't duplicate it."""
@@ -136,10 +144,16 @@ class TestTelemetryManagerInitialization:
         manager = self._create_manager_with_mocked_base(mock_user_config)
 
         # Should have 2 defaults + 1 unique user endpoint (defaults not duplicated)
-        assert len(manager._dcgm_endpoints) == 3
-        assert manager._dcgm_endpoints[0] == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[0]
-        assert manager._dcgm_endpoints[1] == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[1]
-        assert manager._dcgm_endpoints[2] == "http://node1:9401/metrics"
+        assert len(manager._configured_endpoints) == 3
+        assert (
+            manager._configured_endpoints[0]
+            == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[0]
+        )
+        assert (
+            manager._configured_endpoints[1]
+            == Environment.GPU.DEFAULT_DCGM_ENDPOINTS[1]
+        )
+        assert manager._configured_endpoints[2] == "http://node1:9401/metrics"
         # Verify user_provided_endpoints excludes the defaults
         assert len(manager._user_provided_endpoints) == 1
         assert "http://node1:9401/metrics" in manager._user_provided_endpoints
@@ -148,36 +162,36 @@ class TestTelemetryManagerInitialization:
 
 
 class TestUrlNormalization:
-    """Test _normalize_dcgm_url static method."""
+    """Test URL normalization via _normalize_endpoint_url method."""
 
     def test_normalize_adds_metrics_suffix(self):
         """Test normalization adds /metrics suffix when missing."""
         url = "http://localhost:9401"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_preserves_metrics_suffix(self):
         """Test normalization preserves existing /metrics suffix."""
         url = "http://localhost:9401/metrics"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_removes_trailing_slash(self):
         """Test normalization removes trailing slash."""
         url = "http://localhost:9401/"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_trailing_slash_with_metrics(self):
         """Test normalization handles trailing slash after /metrics."""
         url = "http://localhost:9401/metrics/"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_complex_path(self):
         """Test normalization with complex URL paths."""
         url = "http://node1:9401/dcgm"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://node1:9401/dcgm/metrics"
 
 
@@ -191,15 +205,16 @@ class TestCallbackFunctions:
         manager.service_id = "test_manager"
         manager._collectors = {}
         manager._collector_id_to_url = {}
-        manager._dcgm_endpoints = []
+        manager._configured_endpoints = []
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
         manager._collection_interval = 0.33
         return manager
 
     @pytest.mark.asyncio
-    async def test_on_telemetry_records_valid(self, sample_telemetry_records):
-        """Test _on_telemetry_records with valid records."""
+    async def test_on_metric_records_valid(self, sample_telemetry_records):
+        """Test _on_metric_records with valid records."""
         manager = self._create_test_manager()
         manager._collector_id_to_url["test_collector"] = "http://localhost:9400/metrics"
 
@@ -208,7 +223,7 @@ class TestCallbackFunctions:
         manager.records_push_client = mock_push_client
 
         # Call the callback
-        await manager._on_telemetry_records(sample_telemetry_records, "test_collector")
+        await manager._on_metric_records(sample_telemetry_records, "test_collector")
 
         # Verify push was called with correct message
         mock_push_client.push.assert_called_once()
@@ -221,8 +236,8 @@ class TestCallbackFunctions:
         assert call_args.error is None
 
     @pytest.mark.asyncio
-    async def test_on_telemetry_records_empty(self):
-        """Test _on_telemetry_records with empty records list skips sending."""
+    async def test_on_metric_records_empty(self):
+        """Test _on_metric_records with empty records list skips sending."""
         manager = self._create_test_manager()
 
         # Mock the push client
@@ -230,16 +245,14 @@ class TestCallbackFunctions:
         manager.records_push_client = mock_push_client
 
         # Call with empty records
-        await manager._on_telemetry_records([], "test_collector")
+        await manager._on_metric_records([], "test_collector")
 
         # Verify push was NOT called
         mock_push_client.push.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_on_telemetry_records_exception_handling(
-        self, sample_telemetry_records
-    ):
-        """Test _on_telemetry_records handles exceptions gracefully."""
+    async def test_on_metric_records_exception_handling(self, sample_telemetry_records):
+        """Test _on_metric_records handles exceptions gracefully."""
         manager = self._create_test_manager()
 
         # Mock the push client to raise exception
@@ -249,14 +262,14 @@ class TestCallbackFunctions:
         manager.error = MagicMock()  # Mock error logging
 
         # Should not raise exception
-        await manager._on_telemetry_records(sample_telemetry_records, "test_collector")
+        await manager._on_metric_records(sample_telemetry_records, "test_collector")
 
         # Verify error was logged
         manager.error.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_on_telemetry_error(self):
-        """Test _on_telemetry_error callback."""
+    async def test_on_metric_error(self):
+        """Test _on_metric_error callback."""
         manager = self._create_test_manager()
         manager._collector_id_to_url["test_collector"] = "http://localhost:9400/metrics"
 
@@ -267,7 +280,7 @@ class TestCallbackFunctions:
         error_details = ErrorDetails(message="Collection failed")
 
         # Call the error callback
-        await manager._on_telemetry_error(error_details, "test_collector")
+        await manager._on_metric_error(error_details, "test_collector")
 
         # Verify push was called with error message
         mock_push_client.push.assert_called_once()
@@ -280,8 +293,8 @@ class TestCallbackFunctions:
         assert call_args.error == error_details
 
     @pytest.mark.asyncio
-    async def test_on_telemetry_error_exception_handling(self):
-        """Test _on_telemetry_error handles exceptions during message sending."""
+    async def test_on_metric_error_exception_handling(self):
+        """Test _on_metric_error handles exceptions during message sending."""
         manager = self._create_test_manager()
 
         # Mock the push client to raise exception
@@ -293,7 +306,7 @@ class TestCallbackFunctions:
         error_details = ErrorDetails(message="Collection failed")
 
         # Should not raise exception
-        await manager._on_telemetry_error(error_details, "test_collector")
+        await manager._on_metric_error(error_details, "test_collector")
 
         # Verify error was logged
         manager.error.assert_called_once()
@@ -308,15 +321,16 @@ class TestStatusMessaging:
         manager.service_id = "test_manager"
         manager._collectors = {}
         manager._collector_id_to_url = {}
-        manager._dcgm_endpoints = []
+        manager._configured_endpoints = []
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
         manager._collection_interval = 0.33
         return manager
 
     @pytest.mark.asyncio
-    async def test_send_telemetry_status_enabled(self):
-        """Test _send_telemetry_status with enabled status."""
+    async def test_send_status_message_enabled(self):
+        """Test _send_status_message with enabled status."""
         manager = self._create_test_manager()
 
         # Mock publish method
@@ -325,7 +339,10 @@ class TestStatusMessaging:
         endpoints_tested = ["http://node1:9401/metrics", "http://node2:9401/metrics"]
         endpoints_reachable = ["http://node1:9401/metrics"]
 
-        await manager._send_telemetry_status(
+        # Set user provided endpoints so they are displayed
+        manager._user_provided_endpoints = endpoints_tested
+
+        await manager._send_status_message(
             enabled=True,
             endpoints_configured=endpoints_tested,
             endpoints_reachable=endpoints_reachable,
@@ -341,8 +358,8 @@ class TestStatusMessaging:
         assert call_args.endpoints_reachable == endpoints_reachable
 
     @pytest.mark.asyncio
-    async def test_send_telemetry_status_disabled_with_reason(self):
-        """Test _send_telemetry_status with disabled status and reason."""
+    async def test_send_status_message_disabled_with_reason(self):
+        """Test _send_status_message with disabled status and reason."""
         manager = self._create_test_manager()
 
         # Mock publish method
@@ -351,7 +368,7 @@ class TestStatusMessaging:
         reason = "no DCGM endpoints reachable"
         endpoints_tested = ["http://node1:9401/metrics"]
 
-        await manager._send_telemetry_status(
+        await manager._send_status_message(
             enabled=False,
             reason=reason,
             endpoints_configured=endpoints_tested,
@@ -367,8 +384,8 @@ class TestStatusMessaging:
         assert call_args.endpoints_reachable == []
 
     @pytest.mark.asyncio
-    async def test_send_telemetry_status_exception_handling(self):
-        """Test _send_telemetry_status handles exceptions during publish."""
+    async def test_send_status_message_exception_handling(self):
+        """Test _send_status_message handles exceptions during publish."""
         manager = self._create_test_manager()
 
         # Mock publish to raise exception
@@ -376,7 +393,7 @@ class TestStatusMessaging:
         manager.error = MagicMock()  # Mock error logging
 
         # Should not raise exception
-        await manager._send_telemetry_status(
+        await manager._send_status_message(
             enabled=True, endpoints_configured=[], endpoints_reachable=[]
         )
 
@@ -433,7 +450,8 @@ class TestCollectorManagement:
         manager.service_id = "test_manager"
         manager._collectors = {}
         manager._collector_id_to_url = {}
-        manager._dcgm_endpoints = []
+        manager._configured_endpoints = []
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
         manager._collection_interval = 0.33
@@ -546,17 +564,17 @@ class TestEdgeCases:
         manager = self._create_manager_with_mocked_base(mock_user_config)
 
         # Only 2 defaults + valid endpoint should remain
-        assert len(manager._dcgm_endpoints) == 3
+        assert len(manager._configured_endpoints) == 3
         for default_endpoint in Environment.GPU.DEFAULT_DCGM_ENDPOINTS:
-            assert default_endpoint in manager._dcgm_endpoints
-        assert "http://valid:9401/metrics" in manager._dcgm_endpoints
+            assert default_endpoint in manager._configured_endpoints
+        assert "http://valid:9401/metrics" in manager._configured_endpoints
 
     def test_normalize_url_preserves_valid_structure(self):
         """Test URL normalization only works with properly structured URLs."""
-        # normalize_dcgm_url is a simple string operation that assumes valid input
+        # URL normalization is a simple string operation that assumes valid input
         # Invalid inputs are filtered before normalization in __init__
         url = "http://localhost:9401"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = TelemetryManager._normalize_url_with_suffix(url)
         assert normalized == "http://localhost:9401/metrics"
 
 
@@ -594,28 +612,9 @@ class TestBothDefaultEndpoints:
         assert len(Environment.GPU.DEFAULT_DCGM_ENDPOINTS) == 2
         assert "http://localhost:9400/metrics" in Environment.GPU.DEFAULT_DCGM_ENDPOINTS
         assert "http://localhost:9401/metrics" in Environment.GPU.DEFAULT_DCGM_ENDPOINTS
-        assert manager._dcgm_endpoints == list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
-
-    def test_user_explicitly_configured_telemetry_flag(self):
-        """Test that _user_explicitly_configured_telemetry flag is set correctly."""
-        # Test with None (not configured)
-        mock_user_config = MagicMock(spec=UserConfig)
-        mock_user_config.gpu_telemetry = None
-        mock_user_config.gpu_telemetry_urls = None
-        manager = self._create_manager_with_mocked_base(mock_user_config)
-        assert manager._user_explicitly_configured_telemetry is False
-
-        # Test with value (configured)
-        mock_user_config.gpu_telemetry = ["dashboard"]  # User configured telemetry
-        mock_user_config.gpu_telemetry_urls = ["http://custom:9401/metrics"]
-        manager = self._create_manager_with_mocked_base(mock_user_config)
-        assert manager._user_explicitly_configured_telemetry is True
-
-        # Test with empty list (configured)
-        mock_user_config.gpu_telemetry = []  # User explicitly passed --gpu-telemetry with no args
-        mock_user_config.gpu_telemetry_urls = []
-        manager = self._create_manager_with_mocked_base(mock_user_config)
-        assert manager._user_explicitly_configured_telemetry is True
+        assert manager._configured_endpoints == list(
+            Environment.GPU.DEFAULT_DCGM_ENDPOINTS
+        )
 
 
 class TestProfileConfigureCommand:
@@ -627,7 +626,8 @@ class TestProfileConfigureCommand:
         manager.service_id = "test_manager"
         manager._collectors = {}
         manager._collector_id_to_url = {}
-        manager._dcgm_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
+        manager._configured_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
         manager._collection_interval = 0.33
@@ -654,7 +654,7 @@ class TestProfileConfigureCommand:
         manager.publish.assert_called_once()
         call_args = manager.publish.call_args[0][0]
         assert call_args.enabled is False
-        assert call_args.reason == "no DCGM endpoints reachable"
+        assert call_args.reason == "no endpoints reachable"
 
         # Should NOT have collectors
         assert len(manager._collectors) == 0
@@ -703,7 +703,8 @@ class TestProfileStartCommand:
         manager = TelemetryManager.__new__(TelemetryManager)
         manager.service_id = "test_manager"
         manager._collectors = {}
-        manager._dcgm_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
+        manager._configured_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
         manager._collection_interval = 0.33
@@ -765,9 +766,10 @@ class TestSmartDefaultVisibility:
         manager.service_id = "test_manager"
         manager._collectors = {}
         manager._collector_id_to_url = {}
-        manager._dcgm_endpoints = (
+        manager._configured_endpoints = (
             list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS) + user_endpoints
         )
+        manager._default_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = user_endpoints
         manager._user_explicitly_configured_telemetry = user_requested
         manager._collection_interval = 0.33
@@ -797,7 +799,7 @@ class TestSmartDefaultVisibility:
         if reachable_defaults:
             endpoints_to_report = reachable_endpoints
         elif manager._user_explicitly_configured_telemetry:
-            endpoints_to_report = manager._dcgm_endpoints
+            endpoints_to_report = manager._configured_endpoints
         else:
             endpoints_to_report = manager._user_provided_endpoints
 

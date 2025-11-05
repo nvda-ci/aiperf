@@ -1,13 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import numpy as np
 from pydantic import ConfigDict, Field
 
-from aiperf.common.exceptions import NoMetricValue
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
-from aiperf.common.models.record_models import MetricResult
+from aiperf.common.models.metrics_hierarchy_base import (
+    BaseMetricSnapshot,
+    BaseMetricTimeSeries,
+    BaseResourceMetricsData,
+)
 
 
 class TelemetryMetrics(AIPerfBaseModel):
@@ -101,117 +103,33 @@ class GpuMetadata(AIPerfBaseModel):
     hostname: str | None = Field(default=None, description="Host machine name")
 
 
-class GpuTelemetrySnapshot(AIPerfBaseModel):
+class GpuTelemetrySnapshot(BaseMetricSnapshot):
     """All metrics for a single GPU at one point in time.
 
     Groups all metric values collected during a single collection cycle,
     eliminating timestamp duplication across individual metrics.
     """
 
-    timestamp_ns: int = Field(description="Collection timestamp for all metrics")
-    metrics: dict[str, float] = Field(
-        default_factory=dict, description="All metric values at this timestamp"
-    )
+    pass  # Inherits all functionality from BaseMetricSnapshot
 
 
-class GpuMetricTimeSeries(AIPerfBaseModel):
+class GpuMetricTimeSeries(BaseMetricTimeSeries):
     """Time series data for all metrics on a single GPU.
 
     Uses grouped snapshots instead of individual metric time series to eliminate
     timestamp duplication and improve storage efficiency.
     """
 
-    snapshots: list[GpuTelemetrySnapshot] = Field(
-        default_factory=list, description="Chronological snapshots of all metrics"
-    )
-
-    def append_snapshot(self, metrics: dict[str, float], timestamp_ns: int) -> None:
-        """Add new snapshot with all metrics at once.
-
-        Args:
-            metrics: Dictionary of metric_name -> value for this timestamp
-            timestamp_ns: Timestamp when measurements were taken
-        """
-        snapshot = GpuTelemetrySnapshot(
-            timestamp_ns=timestamp_ns,
-            metrics={k: v for k, v in metrics.items() if v is not None},
-        )
-        self.snapshots.append(snapshot)
-
-    def get_metric_values(self, metric_name: str) -> list[tuple[float, int]]:
-        """Extract time series data for a specific metric.
-
-        Args:
-            metric_name: Name of the metric to extract
-
-        Returns:
-            List of (value, timestamp_ns) tuples for the specified metric
-        """
-        return [
-            (snapshot.metrics[metric_name], snapshot.timestamp_ns)
-            for snapshot in self.snapshots
-            if metric_name in snapshot.metrics
-        ]
-
-    def to_metric_result(
-        self, metric_name: str, tag: str, header: str, unit: str
-    ) -> MetricResult:
-        """Convert metric time series to MetricResult with statistical summary.
-
-        Args:
-            metric_name: Name of the metric to analyze
-            tag: Unique identifier for this metric (used by dashboard, exports, API)
-            header: Human-readable name for display
-            unit: Unit of measurement (e.g., "W" for Watts, "%" for percentage)
-
-        Returns:
-            MetricResult with min/max/avg/percentiles computed from time series
-
-        Raises:
-            NoMetricValue: If no data points are available for the specified metric
-        """
-        data_points = self.get_metric_values(metric_name)
-
-        if not data_points:
-            raise NoMetricValue(
-                f"No telemetry data available for metric '{metric_name}'"
-            )
-
-        values = np.array([point[0] for point in data_points])
-        p1, p5, p10, p25, p50, p75, p90, p95, p99 = np.percentile(
-            values, [1, 5, 10, 25, 50, 75, 90, 95, 99]
-        )
-
-        return MetricResult(
-            tag=tag,
-            header=header,
-            unit=unit,
-            min=np.min(values),
-            max=np.max(values),
-            avg=float(np.mean(values)),
-            std=float(np.std(values)),
-            count=len(values),
-            current=float(data_points[-1][0]),
-            p1=p1,
-            p5=p5,
-            p10=p10,
-            p25=p25,
-            p50=p50,
-            p75=p75,
-            p90=p90,
-            p95=p95,
-            p99=p99,
-        )
+    pass  # Inherits all functionality from BaseMetricTimeSeries
 
 
-class GpuTelemetryData(AIPerfBaseModel):
+class GpuTelemetryData(BaseResourceMetricsData[GpuMetadata]):
     """Complete telemetry data for one GPU: metadata + grouped metric time series.
 
     This combines static GPU information with dynamic time-series data,
     providing the complete picture for one GPU's telemetry using efficient grouped snapshots.
     """
 
-    metadata: GpuMetadata = Field(description="Static GPU information")
     time_series: GpuMetricTimeSeries = Field(
         default_factory=GpuMetricTimeSeries,
         description="Grouped time series for all metrics",
@@ -229,22 +147,6 @@ class GpuTelemetryData(AIPerfBaseModel):
         valid_metrics = {k: v for k, v in metric_mapping.items() if v is not None}
         if valid_metrics:
             self.time_series.append_snapshot(valid_metrics, record.timestamp_ns)
-
-    def get_metric_result(
-        self, metric_name: str, tag: str, header: str, unit: str
-    ) -> MetricResult:
-        """Get MetricResult for a specific metric.
-
-        Args:
-            metric_name: Name of the metric to analyze
-            tag: Unique identifier for this metric
-            header: Human-readable name for display
-            unit: Unit of measurement
-
-        Returns:
-            MetricResult with statistical summary for the specified metric
-        """
-        return self.time_series.to_metric_result(metric_name, tag, header, unit)
 
 
 class TelemetryHierarchy(AIPerfBaseModel):

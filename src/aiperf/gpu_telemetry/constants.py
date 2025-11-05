@@ -3,15 +3,21 @@
 
 """Constants specific to GPU telemetry collection."""
 
-from aiperf.common.enums.metric_enums import (
-    EnergyMetricUnit,
-    GenericMetricUnit,
-    MetricSizeUnit,
-    MetricTimeUnit,
-    MetricUnitT,
-    PowerMetricUnit,
-    TemperatureMetricUnit,
+from aiperf.common.metrics import (
+    METRIC_NAME_ACRONYMS,
+    format_metric_display_name,
+    infer_metric_unit,
 )
+
+# Re-export for backward compatibility
+__all__ = [
+    "METRIC_NAME_ACRONYMS",
+    "format_metric_display_name",
+    "infer_metric_unit",
+    "SCALING_FACTORS",
+    "DCGM_TO_FIELD_MAPPING",
+]
+
 
 # Unit conversion scaling factors
 SCALING_FACTORS = {
@@ -20,6 +26,7 @@ SCALING_FACTORS = {
 }
 
 # DCGM field mapping to telemetry record fields
+# This mapping is required because DCGM uses specific field IDs that need translation
 DCGM_TO_FIELD_MAPPING = {
     "DCGM_FI_DEV_POWER_USAGE": "gpu_power_usage",
     "DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION": "energy_consumption",
@@ -29,23 +36,3 @@ DCGM_TO_FIELD_MAPPING = {
     "DCGM_FI_DEV_XID_ERRORS": "xid_errors",
     "DCGM_FI_DEV_POWER_VIOLATION": "power_violation",
 }
-
-# GPU Telemetry Metrics Configuration
-# Format: (display_name, field_name, unit_enum)
-# - display_name: Human-readable metric name shown in outputs
-# - field_name: Corresponds to TelemetryMetrics model field name
-# - unit_enum: MetricUnitT enum (use .value in exporters to get string)
-GPU_TELEMETRY_METRICS_CONFIG: list[tuple[str, str, MetricUnitT]] = [
-    ("GPU Power Usage", "gpu_power_usage", PowerMetricUnit.WATT),
-    ("Energy Consumption", "energy_consumption", EnergyMetricUnit.MEGAJOULE),
-    ("GPU Utilization", "gpu_utilization", GenericMetricUnit.PERCENT),
-    ("GPU Memory Used", "gpu_memory_used", MetricSizeUnit.GIGABYTES),
-    ("GPU Temperature", "gpu_temperature", TemperatureMetricUnit.CELSIUS),
-    ("XID Errors", "xid_errors", GenericMetricUnit.COUNT),
-    ("Power Violation", "power_violation", MetricTimeUnit.MICROSECONDS),
-]
-
-
-def get_gpu_telemetry_metrics_config() -> list[tuple[str, str, MetricUnitT]]:
-    """Get the current GPU telemetry metrics configuration."""
-    return GPU_TELEMETRY_METRICS_CONFIG

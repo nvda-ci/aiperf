@@ -77,6 +77,7 @@ class TestExporterManager:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
             await manager.export_data()
         for mock_class, mock_instance in zip(
@@ -123,6 +124,7 @@ class TestExporterManager:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
             await manager.export_console(Console())
         for mock_class, mock_instance in zip(

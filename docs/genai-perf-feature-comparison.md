@@ -66,7 +66,7 @@ This comparison matrix shows the supported CLI options between GenAI-Perf and AI
 | **Backend Selection** | `--backend`<br>`{tensorrtllm,vllm}` | ✅ | ❌ | |
 | **Custom Endpoint** | `--endpoint` | ✅ | ✅ | |
 | **Endpoint Type** | `--endpoint-type` | ✅ | ✅ | [See detailed comparison above](#endpoint-types-support-matrix) |
-| **Server Metrics URL** | `--server-metrics-url` | ✅ | ❌ | |
+| **Server Metrics** | `--server-metrics-url`<br>`--server-metrics` | ✅ | ✅ | AIPerf auto-discovers endpoints, supports dynamic metric discovery |
 | **Streaming** | `--streaming` | ✅ | ✅ | |
 | **URL** | `-u URL`<br>`--url` | ✅ | ✅ | |
 | **Request Timeout** | `--request-timeout-seconds` | ❌ | ✅ | |

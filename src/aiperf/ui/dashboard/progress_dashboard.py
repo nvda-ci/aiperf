@@ -205,6 +205,10 @@ class ProgressDashboard(Container, MaximizableWidget):
 
         stats_table.add_row("Request Rate:", f"{stats.per_second or 0:,.1f} requests/s")
 
+        # Display in-flight requests for RequestsStats (has in_flight property)
+        if hasattr(stats, "in_flight"):
+            stats_table.add_row("InFlight Requests:", f"{stats.in_flight:,}")
+
         if self.records_stats:
             stats_table.add_row(
                 "Processing Rate:",

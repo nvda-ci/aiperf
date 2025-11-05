@@ -161,7 +161,11 @@ def empty_telemetry_results():
 
 
 def create_exporter_config(
-    profile_results, user_config, telemetry_results=None, verbose=True
+    profile_results,
+    user_config,
+    telemetry_results=None,
+    server_metrics_results=None,
+    verbose=True,
 ):
     """Helper to create ExporterConfig with common defaults."""
     return ExporterConfig(
@@ -169,6 +173,7 @@ def create_exporter_config(
         user_config=user_config,
         service_config=ServiceConfig(verbose=verbose),
         telemetry_results=telemetry_results,
+        server_metrics_results=server_metrics_results,
     )
 
 

@@ -25,6 +25,7 @@ from aiperf_mock_server.models import (
     TextChoice,
     TextCompletionResponse,
 )
+from aiperf_mock_server.server_metrics_faker import ServerMetricsFaker
 from aiperf_mock_server.utils import (
     RequestContext,
     stream_chat_completion,
@@ -35,6 +36,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 dcgm_fakers: list[DCGMFaker] = []
+server_metrics_fakers: list[ServerMetricsFaker] = []
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,17 @@ def _create_dcgm_faker(seed: int | None) -> DCGMFaker:
         seed=seed,
         hostname=server_config.dcgm_hostname,
         initial_load=server_config.dcgm_initial_load,
+    )
+
+
+def _create_server_metrics_faker(seed: int | None) -> ServerMetricsFaker:
+    """Create a server metrics faker instance with current config."""
+    return ServerMetricsFaker(
+        config_name=server_config.server_metrics_config_name,
+        num_servers=server_config.server_metrics_num_servers,
+        seed=seed,
+        instance_prefix=server_config.server_metrics_instance_prefix,
+        initial_load=server_config.server_metrics_initial_load,
     )
 
 
@@ -67,6 +80,23 @@ async def lifespan(_: FastAPI):
         "DCGM faker initialized with %d %s GPUs",
         server_config.dcgm_num_gpus,
         server_config.dcgm_gpu_name,
+    )
+
+    server_metrics_fakers.append(
+        _create_server_metrics_faker(server_config.server_metrics_seed)
+    )
+    server_metrics_fakers.append(
+        _create_server_metrics_faker(
+            None
+            if server_config.server_metrics_seed is None
+            else server_config.server_metrics_seed + 1
+        )
+    )
+
+    logger.info(
+        "Server metrics faker initialized with %d %s servers",
+        server_config.server_metrics_num_servers,
+        server_config.server_metrics_config_name,
     )
     yield
 
@@ -422,3 +452,19 @@ async def dcgm_metrics(instance_id: int) -> PlainTextResponse:
     if index < 0 or index >= len(dcgm_fakers):
         raise HTTPException(status_code=404, detail="Invalid DCGM instance")
     return PlainTextResponse(dcgm_fakers[index].generate(), media_type="text/plain")
+
+
+# ============================================================================
+# Server Metrics (AI/Dynamo)
+# ============================================================================
+
+
+@app.get("/server{instance_id:int}/metrics")
+async def server_metrics_endpoint(instance_id: int) -> PlainTextResponse:
+    """AI server metrics endpoint (Prometheus format)."""
+    index = instance_id - 1
+    if index < 0 or index >= len(server_metrics_fakers):
+        raise HTTPException(status_code=404, detail="Invalid server instance")
+    return PlainTextResponse(
+        server_metrics_fakers[index].generate(), media_type="text/plain"
+    )

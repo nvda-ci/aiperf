@@ -40,6 +40,11 @@ class AIPerfMockServer:
         """AIPerfMockServer server DCGM metrics URLs."""
         return [f"{self.url}/dcgm{i}/metrics" for i in [1, 2]]
 
+    @property
+    def server_metrics_urls(self) -> list[str]:
+        """AIPerfMockServer server metrics URLs."""
+        return [f"{self.url}/server{i}/metrics" for i in [1, 2]]
+
 
 class VideoDetails(BaseModel):
     """Video file metadata extracted from ffprobe."""
@@ -252,6 +257,11 @@ class AIPerfResults:
     def has_gpu_telemetry(self) -> bool:
         """Check if GPU telemetry exists."""
         return self.json is not None and self.json.telemetry_data is not None
+
+    @property
+    def has_server_metrics(self) -> bool:
+        """Check if server metrics exist."""
+        return self.json is not None and self.json.server_metrics_data is not None
 
     def assert_valid(self) -> None:
         """Assert that the results are valid and all Pydantic models are properly loaded."""

@@ -64,6 +64,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -85,6 +86,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -105,6 +107,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -128,6 +131,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -154,6 +158,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results_with_failures,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -177,6 +182,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=empty_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -201,6 +207,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -244,6 +251,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=sample_telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -298,6 +306,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -355,6 +364,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -393,6 +403,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -435,6 +446,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -454,6 +466,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -471,6 +484,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -488,6 +502,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)
@@ -539,6 +554,7 @@ class TestGPUTelemetryConsoleExporter:
             user_config=mock_user_config,
             service_config=service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=None,
         )
 
         exporter = GPUTelemetryConsoleExporter(exporter_config)

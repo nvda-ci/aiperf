@@ -1,0 +1,79 @@
+================================================================================
+MULTI-RUN COMPARISON REPORT
+================================================================================
+
+Comparing 2 benchmark runs:
+  - c30-8K/1K
+  - c100-8K/1K
+
+WORKLOAD VALIDATION:
+--------------------------------------------------------------------------------
+
+c30-8K/1K:
+  ISL: 8000 tokens
+  OSL: 1000 tokens
+  Total: 9000 tokens/request
+  Requests: 300
+
+c100-8K/1K:
+  ISL: 8000 tokens
+  OSL: 1000 tokens
+  Total: 9000 tokens/request
+  Requests: 1,000
+
+Workload Similarity:
+  ISL Variance: 0.0%
+  OSL Variance: 0.0%
+  ✅ WORKLOADS MATCH - Comparison is VALID
+
+
+PERFORMANCE COMPARISON:
+--------------------------------------------------------------------------------
+
+TTFT Mean:
+  c30-8K/1K: 541.14
+  c100-8K/1K: 10,074.77
+
+TTFT P99:
+  c30-8K/1K: 6,092.58
+  c100-8K/1K: 94,532.99
+
+Latency Mean:
+  c30-8K/1K: 50,594.04
+  c100-8K/1K: 114,591.00
+
+Latency P99:
+  c30-8K/1K: 58,071.27
+  c100-8K/1K: 189,931.74
+
+Inter-Token Latency:
+  c30-8K/1K: 50.11
+  c100-8K/1K: 104.64
+
+Prefill Throughput:
+  c30-8K/1K: 50,138.53
+  c100-8K/1K: 3,440.63
+
+Output Throughput:
+  c30-8K/1K: 19.98
+  c100-8K/1K: 9.88
+
+
+RESOURCE COMPARISON:
+--------------------------------------------------------------------------------
+
+c30-8K/1K:
+  Cache Usage: 50.6% (max: 59.8%)
+  GPU Util: 97.1%
+  GPU Power: 262.7 W
+  GPU Temp: 77.4 °C
+  Preemptions: 0
+
+c100-8K/1K:
+  Cache Usage: 95.4% (max: 100.0%)
+  GPU Util: 97.4%
+  GPU Power: 267.7 W
+  GPU Temp: 80.7 °C
+  Preemptions: 404
+
+================================================================================

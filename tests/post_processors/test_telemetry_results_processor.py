@@ -64,7 +64,7 @@ class TestTelemetryResultsProcessor:
         """Test processor initialization sets up hierarchy and metric units."""
         processor = TelemetryResultsProcessor(mock_user_config)
 
-        assert isinstance(processor._telemetry_hierarchy, TelemetryHierarchy)
+        assert isinstance(processor._hierarchy, TelemetryHierarchy)
 
     @pytest.mark.asyncio
     async def test_process_telemetry_record(
@@ -78,8 +78,8 @@ class TestTelemetryResultsProcessor:
         dcgm_url = sample_telemetry_record.dcgm_url
         gpu_uuid = sample_telemetry_record.gpu_uuid
 
-        assert dcgm_url in processor._telemetry_hierarchy.dcgm_endpoints
-        assert gpu_uuid in processor._telemetry_hierarchy.dcgm_endpoints[dcgm_url]
+        assert dcgm_url in processor._hierarchy.dcgm_endpoints
+        assert gpu_uuid in processor._hierarchy.dcgm_endpoints[dcgm_url]
 
     @pytest.mark.asyncio
     async def test_get_telemetry_hierarchy(
@@ -150,7 +150,7 @@ class TestTelemetryResultsProcessor:
             model_name="Test GPU",
         )
         mock_telemetry_data = GpuTelemetryData(metadata=mock_metadata)
-        processor._telemetry_hierarchy.dcgm_endpoints = {
+        processor._hierarchy.dcgm_endpoints = {
             "http://test:9401/metrics": {
                 "GPU-12345678": mock_telemetry_data,
             }
@@ -186,7 +186,7 @@ class TestTelemetryResultsProcessor:
             "Unexpected error"
         )
 
-        processor._telemetry_hierarchy.dcgm_endpoints = {
+        processor._hierarchy.dcgm_endpoints = {
             "http://test:9401/metrics": {
                 "GPU-87654321": mock_telemetry_data,
             }
@@ -243,7 +243,7 @@ class TestTelemetryResultsProcessor:
 
         mock_telemetry_data.get_metric_result.side_effect = side_effect_func
 
-        processor._telemetry_hierarchy.dcgm_endpoints = {
+        processor._hierarchy.dcgm_endpoints = {
             "http://test:9401/metrics": {
                 "GPU-mixed-results": mock_telemetry_data,
             }

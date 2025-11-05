@@ -60,6 +60,7 @@ Features
 | **[Goodput](docs/tutorials/goodput.md)** | Throughput of requests meeting user-defined SLOs | SLO validation, capacity planning, runtime/model comparisons |
 | **[Request Rate with Max Concurrency](docs/tutorials/request-rate-concurrency.md)** | Dual control of request timing and concurrent connection ceiling (Poisson or constant modes) | Testing API rate/concurrency limits, avoiding thundering herd, realistic client simulation |
 | **[GPU Telemetry](docs/tutorials/gpu-telemetry.md)** | Real-time GPU metrics collection via DCGM (power, utilization, memory, temperature, etc) | Performance optimization, resource monitoring, multi-node telemetry |
+| **[Server Metrics](docs/tutorials/server-metrics.md)** | Automatic collection of Prometheus metrics from inference servers (requests, KV cache, latency, throughput, etc) | Server performance monitoring, dynamic metric discovery, works with any Prometheus endpoint |
 | **[Template Endpoint](docs/tutorials/template-endpoint.md)** | Benchmark custom APIs with flexible Jinja2 request templates | Custom API formats, rapid prototyping, non-standard endpoints |
 
 ### Working with Benchmark Data

@@ -7,17 +7,18 @@ Provides a hierarchical, type-safe configuration system using Pydantic BaseSetti
 All settings can be configured via environment variables with the AIPERF_ prefix.
 
 Structure:
-    Environment.DATASET.*  - Dataset management
-    Environment.DEV.*      - Development and debugging settings
-    Environment.GPU.*      - GPU telemetry collection
-    Environment.HTTP.*     - HTTP client socket and connection settings
-    Environment.LOGGING.*  - Logging configuration
-    Environment.METRICS.*  - Metrics collection and storage
-    Environment.RECORD.*   - Record processing
-    Environment.SERVICE.*  - Service lifecycle and communication
-    Environment.UI.*       - User interface settings
-    Environment.WORKER.*   - Worker management and scaling
-    Environment.ZMQ.*      - ZMQ communication settings
+    Environment.DATASET.*        - Dataset management
+    Environment.DEV.*            - Development and debugging settings
+    Environment.GPU.*            - GPU telemetry collection
+    Environment.HTTP.*           - HTTP client socket and connection settings
+    Environment.LOGGING.*        - Logging configuration
+    Environment.METRICS.*        - Metrics collection and storage
+    Environment.RECORD.*         - Record processing
+    Environment.SERVER_METRICS.* - Server metrics collection
+    Environment.SERVICE.*        - Service lifecycle and communication
+    Environment.UI.*             - User interface settings
+    Environment.WORKER.*         - Worker management and scaling
+    Environment.ZMQ.*            - ZMQ communication settings
 
 Examples:
     # Via environment variables:
@@ -158,6 +159,57 @@ class _GPUSettings(BaseSettings):
         le=300.0,
         default=5.0,
         description="Timeout in seconds for joining GPU telemetry collection threads during shutdown",
+    )
+
+
+class _ServerMetricsSettings(BaseSettings):
+    """Server metrics collection configuration.
+
+    Controls server metrics collection frequency, endpoint detection, and default endpoints.
+    Metrics are collected from Prometheus /metrics endpoints at the specified interval.
+    The inference endpoint is always automatically derived and attempted in addition to these defaults.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="AIPERF_SERVER_METRICS_",
+        env_parse_enums=True,
+    )
+
+    COLLECTION_INTERVAL: float = Field(
+        ge=0.01,
+        le=300.0,
+        default=0.33,
+        description="Server metrics collection interval in seconds (default: 330ms, ~3Hz)",
+    )
+    DEFAULT_ENDPOINTS: Annotated[
+        str | list[str],
+        BeforeValidator(parse_str_or_csv_list),
+    ] = Field(
+        default=[
+            # "http://localhost:2379/metrics",  # Disable etcd endpoint by default
+            "http://localhost:8081/metrics",  # Dynamo backend
+            # "http://localhost:7777/metrics",  # Not sure. NATS?
+            "http://localhost:6880/metrics",  # KVBM
+        ],
+        description="Default server metrics endpoint URLs to check in addition to auto-derived inference endpoint (comma-separated string or JSON array)",
+    )
+    REACHABILITY_TIMEOUT: int = Field(
+        ge=1,
+        le=300,
+        default=5,
+        description="Timeout in seconds for checking server metrics endpoint reachability during init",
+    )
+    SHUTDOWN_DELAY: float = Field(
+        ge=1.0,
+        le=300.0,
+        default=5.0,
+        description="Delay in seconds before shutting down server metrics service to allow command response transmission",
+    )
+    THREAD_JOIN_TIMEOUT: float = Field(
+        ge=1.0,
+        le=300.0,
+        default=5.0,
+        description="Timeout in seconds for joining server metrics collection threads during shutdown",
     )
 
 
@@ -648,6 +700,10 @@ class _Environment(BaseSettings):
     RECORD: _RecordSettings = Field(
         default_factory=_RecordSettings,
         description="Record processing and export settings",
+    )
+    SERVER_METRICS: _ServerMetricsSettings = Field(
+        default_factory=_ServerMetricsSettings,
+        description="Server metrics collection settings",
     )
     SERVICE: _ServiceSettings = Field(
         default_factory=_ServiceSettings,
