@@ -17,6 +17,15 @@ def main() -> int:
         if idx >= len(sys.argv) - 1 or sys.argv[idx + 1].startswith("-"):
             for endpoint in reversed(Environment.GPU.DEFAULT_DCGM_ENDPOINTS):
                 sys.argv.insert(idx + 1, endpoint)
+
+    # Similar hack for --server-metrics flag to enable console output
+    # When used without a value, insert "console" marker to enable console display
+    # The actual endpoint is auto-derived from --url, so we just need a presence marker
+    if "--server-metrics" in sys.argv:
+        idx = sys.argv.index("--server-metrics")
+        if idx >= len(sys.argv) - 1 or sys.argv[idx + 1].startswith("-"):
+            sys.argv.insert(idx + 1, "console")
+
     return app(sys.argv[1:])
 
 

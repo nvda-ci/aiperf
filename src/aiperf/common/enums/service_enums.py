@@ -45,6 +45,7 @@ class ServiceType(CaseInsensitiveStrEnum):
     WORKER_MANAGER = "worker_manager"
     WORKER = "worker"
     TELEMETRY_MANAGER = "telemetry_manager"
+    SERVER_METRICS_MANAGER = "server_metrics_manager"
 
     # For testing purposes only
     TEST = "test_service"

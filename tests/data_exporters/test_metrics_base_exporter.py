@@ -5,10 +5,11 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+import aiperf.exporters.metrics_base_exporter as mbe
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.enums import EndpointType
 from aiperf.common.models import MetricResult
@@ -73,6 +74,7 @@ def exporter_config(mock_results, mock_user_config):
             user_config=mock_user_config,
             service_config=ServiceConfig(),
             telemetry_results=None,
+            server_metrics_results=None,
         )
 
 
@@ -88,6 +90,7 @@ class TestMetricsBaseExporterInitialization:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -114,6 +117,7 @@ class TestMetricsBaseExporterPrepareMetrics:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -126,8 +130,6 @@ class TestMetricsBaseExporterPrepareMetrics:
                     avg=45.2,
                 )
             }
-
-            import aiperf.exporters.metrics_base_exporter as mbe
 
             with patch.object(
                 mbe, "convert_all_metrics_to_display_units", return_value=converted
@@ -153,6 +155,7 @@ class TestMetricsBaseExporterPrepareMetrics:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -163,8 +166,6 @@ class TestMetricsBaseExporterPrepareMetrics:
             )
 
             converted = {"request_latency": experimental_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
 
             # Mock the metric class to have EXPERIMENTAL flag
             with (
@@ -195,6 +196,7 @@ class TestMetricsBaseExporterPrepareMetrics:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -204,8 +206,6 @@ class TestMetricsBaseExporterPrepareMetrics:
             )
 
             converted = {"internal_metric": internal_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
 
             # Mock to indicate it has INTERNAL flag
             with (
@@ -231,6 +231,7 @@ class TestMetricsBaseExporterPrepareMetrics:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -243,8 +244,6 @@ class TestMetricsBaseExporterPrepareMetrics:
             )
 
             converted = {"time_to_first_token": public_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
 
             # Mock to indicate no EXPERIMENTAL or INTERNAL flags
             with (
@@ -272,11 +271,10 @@ class TestMetricsBaseExporterPrepareMetrics:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
-
-            import aiperf.exporters.metrics_base_exporter as mbe
 
             with patch.object(
                 mbe, "convert_all_metrics_to_display_units", return_value={}
@@ -298,6 +296,7 @@ class TestMetricsBaseExporterShouldExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -327,6 +326,7 @@ class TestMetricsBaseExporterShouldExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -353,6 +353,7 @@ class TestMetricsBaseExporterShouldExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -377,6 +378,7 @@ class TestMetricsBaseExporterShouldExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -410,6 +412,7 @@ class TestMetricsBaseExporterExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -431,6 +434,7 @@ class TestMetricsBaseExporterExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -452,6 +456,7 @@ class TestMetricsBaseExporterExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -476,6 +481,7 @@ class TestMetricsBaseExporterExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)
@@ -488,10 +494,6 @@ class TestMetricsBaseExporterExport:
 
             with patch.object(exporter, "error", _err):
                 # Mock aiofiles.open to raise an error
-                from unittest.mock import AsyncMock, MagicMock
-
-                import aiperf.exporters.metrics_base_exporter as mbe
-
                 # Create a mock that raises when used as async context manager
                 mock_file = MagicMock()
                 mock_file.__aenter__ = AsyncMock(side_effect=OSError("disk full"))
@@ -514,6 +516,7 @@ class TestMetricsBaseExporterExport:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(verbose=True),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = ConcreteExporter(config)

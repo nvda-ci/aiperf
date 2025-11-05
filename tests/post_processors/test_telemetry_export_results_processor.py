@@ -191,7 +191,7 @@ class TestTelemetryExportResultsProcessorInitialization:
             )
 
             assert any(
-                "GPU telemetry export enabled" in record.message
+                "TelemetryExportResultsProcessor export enabled" in record.message
                 for record in caplog.records
             )
             assert any(
@@ -347,7 +347,7 @@ class TestTelemetryExportResultsProcessorProcessing:
             await processor.process_telemetry_record(sample_telemetry_record)
             assert mock_error.call_count >= 1
             call_args = str(mock_error.call_args_list[0])
-            assert "Failed to write GPU telemetry record" in call_args
+            assert "Failed to write TelemetryRecord" in call_args
 
         # lines_written should not increment
         assert processor.lines_written == 0

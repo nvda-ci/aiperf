@@ -142,7 +142,7 @@ DCGM_FI_DEV_FB_TOTAL{gpu="1",UUID="GPU-9876fedc-ba09-8765-4321-fedcba098765",dev
 
         with patch("aiohttp.ClientSession.get", side_effect=mock_aiohttp_get):
             collector1 = TelemetryDataCollector(
-                dcgm_url="http://node1:9401/metrics",
+                endpoint_url="http://node1:9401/metrics",
                 collection_interval=0.05,
                 record_callback=self.record_callback,
                 error_callback=self.error_callback,
@@ -150,7 +150,7 @@ DCGM_FI_DEV_FB_TOTAL{gpu="1",UUID="GPU-9876fedc-ba09-8765-4321-fedcba098765",dev
             )
 
             collector2 = TelemetryDataCollector(
-                dcgm_url="http://node2:9401/metrics",
+                endpoint_url="http://node2:9401/metrics",
                 collection_interval=0.05,
                 record_callback=self.record_callback,
                 error_callback=self.error_callback,
@@ -175,12 +175,12 @@ DCGM_FI_DEV_FB_TOTAL{gpu="1",UUID="GPU-9876fedc-ba09-8765-4321-fedcba098765",dev
                 await processor.process_telemetry_record(record)
             metric_results = await processor.summarize()
 
-            assert len(processor._telemetry_hierarchy.dcgm_endpoints) == 2
+            assert len(processor._hierarchy.dcgm_endpoints) == 2
 
-            node1_data = processor._telemetry_hierarchy.dcgm_endpoints.get(
+            node1_data = processor._hierarchy.dcgm_endpoints.get(
                 "http://node1:9401/metrics", {}
             )
-            node2_data = processor._telemetry_hierarchy.dcgm_endpoints.get(
+            node2_data = processor._hierarchy.dcgm_endpoints.get(
                 "http://node2:9401/metrics", {}
             )
 
@@ -282,7 +282,7 @@ DCGM_FI_DEV_FB_TOTAL{gpu="1",UUID="GPU-9876fedc-ba09-8765-4321-fedcba098765",dev
 
         with patch("aiohttp.ClientSession.get", side_effect=mock_aiohttp_get_error):
             collector = TelemetryDataCollector(
-                dcgm_url="http://node1:9401/metrics",
+                endpoint_url="http://node1:9401/metrics",
                 collection_interval=0.05,
                 record_callback=failing_record_callback,
                 error_callback=self.error_callback,
@@ -338,7 +338,7 @@ DCGM_FI_DEV_FB_TOTAL{gpu="1",UUID="GPU-9876fedc-ba09-8765-4321-fedcba098765",dev
 
         with patch("aiohttp.ClientSession.get", side_effect=mock_aiohttp_get_empty):
             collector = TelemetryDataCollector(
-                dcgm_url="http://empty-node:9401/metrics",
+                endpoint_url="http://empty-node:9401/metrics",
                 collection_interval=0.1,
                 record_callback=self.record_callback,
                 error_callback=self.error_callback,
@@ -383,7 +383,7 @@ DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{gpu="0",UUID="GPU-test-1234",device="nvidia
 
         with patch("aiohttp.ClientSession.get", side_effect=mock_aiohttp_get_scaling):
             collector = TelemetryDataCollector(
-                dcgm_url="http://testnode:9401/metrics",
+                endpoint_url="http://testnode:9401/metrics",
                 collection_interval=0.1,
                 record_callback=self.record_callback,
                 error_callback=self.error_callback,

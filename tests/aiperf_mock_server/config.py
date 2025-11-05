@@ -122,6 +122,39 @@ class MockServerConfig(BaseSettings):
         Parameter(name="--dcgm-seed"),
     ] = None
 
+    # Server Metrics Faker Options (always enabled)
+    server_metrics_config_name: Annotated[
+        str,
+        Field(description="Server config name (small, medium, large, xlarge)"),
+        Parameter(name="--server-metrics-config-name"),
+    ] = "medium"
+
+    server_metrics_num_servers: Annotated[
+        int,
+        Field(description="Number of servers to simulate", ge=1, le=16),
+        Parameter(name="--server-metrics-num-servers"),
+    ] = 1
+
+    server_metrics_initial_load: Annotated[
+        float,
+        Field(
+            description="Initial server load level (0.0=idle, 1.0=max)", ge=0.0, le=1.0
+        ),
+        Parameter(name="--server-metrics-initial-load"),
+    ] = 0.5
+
+    server_metrics_instance_prefix: Annotated[
+        str,
+        Field(description="Instance prefix for server metrics"),
+        Parameter(name="--server-metrics-instance-prefix"),
+    ] = "server"
+
+    server_metrics_seed: Annotated[
+        int | None,
+        Field(description="Random seed for server metrics"),
+        Parameter(name="--server-metrics-seed"),
+    ] = None
+
 
 server_config: MockServerConfig = MockServerConfig()
 

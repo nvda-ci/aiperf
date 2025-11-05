@@ -16,7 +16,18 @@ from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.display_units_utils import normalize_endpoint_display
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
-from aiperf.gpu_telemetry.constants import GPU_TELEMETRY_METRICS_CONFIG
+from aiperf.gpu_telemetry.constants import (
+    format_metric_display_name as format_gpu_metric_display_name,
+)
+from aiperf.gpu_telemetry.constants import (
+    infer_metric_unit as infer_gpu_metric_unit,
+)
+from aiperf.server_metrics.constants import (
+    format_metric_display_name as format_server_metric_display_name,
+)
+from aiperf.server_metrics.constants import (
+    infer_metric_unit as infer_server_metric_unit,
+)
 
 
 def _percentile_keys_from(stat_keys: Sequence[str]) -> list[str]:
@@ -70,6 +81,10 @@ class MetricsCsvExporter(MetricsBaseExporter):
         # Add telemetry data section if available
         if self._telemetry_results:
             self._write_telemetry_section(writer)
+
+        # Add server metrics section if available
+        if self._server_metrics_results:
+            self._write_server_metrics_section(writer)
 
         return buf.getvalue()
 
@@ -183,23 +198,27 @@ class MetricsCsvExporter(MetricsBaseExporter):
             endpoint_display = normalize_endpoint_display(dcgm_url)
 
             for gpu_uuid, gpu_data in gpus_data.items():
-                for (
-                    metric_display,
-                    metric_key,
-                    unit_enum,
-                ) in GPU_TELEMETRY_METRICS_CONFIG:
-                    if not self._gpu_has_metric(gpu_data, metric_key):
-                        continue
+                # Dynamically discover metrics from GPU data
+                if hasattr(gpu_data, "time_series") and gpu_data.time_series.snapshots:
+                    first_snapshot = gpu_data.time_series.snapshots[0]
+                    field_names = sorted(first_snapshot.metrics.keys())
 
-                    self._write_gpu_metric_row_structured(
-                        writer,
-                        endpoint_display,
-                        gpu_data,
-                        gpu_uuid,
-                        metric_key,
-                        metric_display,
-                        unit_enum.value,
-                    )
+                    for metric_key in field_names:
+                        if not self._gpu_has_metric(gpu_data, metric_key):
+                            continue
+
+                        metric_display = format_gpu_metric_display_name(metric_key)
+                        unit_enum = infer_gpu_metric_unit(metric_key)
+
+                        self._write_gpu_metric_row_structured(
+                            writer,
+                            endpoint_display,
+                            gpu_data,
+                            gpu_uuid,
+                            metric_key,
+                            metric_display,
+                            unit_enum.value,
+                        )
 
     def _write_gpu_metric_row_structured(
         self,
@@ -269,4 +288,178 @@ class MetricsCsvExporter(MetricsBaseExporter):
             return True
         except Exception as e:
             self.debug(f"GPU metric {metric_key} not available: {e}")
+            return False
+
+    def _write_server_metrics_section(self, writer: csv.writer) -> None:
+        """Write server metrics data section to CSV in structured table format.
+
+        Uses self._server_metrics_results instance data member.
+
+        Creates a single flat table with all server metrics (including histograms)
+        that's easy to parse programmatically for visualization platforms.
+
+        Each row represents one metric for one server with all statistics in columns.
+
+        Args:
+            writer: CSV writer object
+        """
+        writer.writerow([])
+        writer.writerow([])
+
+        # Write header row for server metrics table
+        header_row = [
+            "Endpoint",
+            "Server_ID",
+            "Server_Type",
+            "Hostname",
+            "Instance",
+            "Metric",
+        ]
+        header_row.extend(STAT_KEYS)
+        writer.writerow(header_row)
+
+        for (
+            server_url,
+            servers_data,
+        ) in self._server_metrics_results.metrics_data.server_endpoints.items():
+            if not servers_data:
+                continue
+
+            endpoint_display = normalize_endpoint_display(server_url)
+
+            for server_id, server_data in servers_data.items():
+                # Dynamically discover metrics from server data
+                if (
+                    hasattr(server_data, "time_series")
+                    and server_data.time_series.snapshots
+                ):
+                    first_snapshot = server_data.time_series.snapshots[0]
+
+                    # Export scalar metrics
+                    field_names = sorted(first_snapshot.metrics.keys())
+                    for metric_key in field_names:
+                        if not self._server_has_metric(server_data, metric_key, False):
+                            continue
+
+                        metric_display = format_server_metric_display_name(metric_key)
+                        unit_enum = infer_server_metric_unit(metric_key)
+
+                        self._write_server_metric_row_structured(
+                            writer,
+                            endpoint_display,
+                            server_data,
+                            server_id,
+                            metric_key,
+                            metric_display,
+                            unit_enum.value,
+                            is_histogram=False,
+                        )
+
+                    # Export histogram metrics
+                    histogram_names = sorted(first_snapshot.histograms.keys())
+                    for histogram_key in histogram_names:
+                        if not self._server_has_metric(
+                            server_data, histogram_key, True
+                        ):
+                            continue
+
+                        metric_display = format_server_metric_display_name(
+                            histogram_key
+                        )
+                        unit_enum = infer_server_metric_unit(histogram_key)
+
+                        self._write_server_metric_row_structured(
+                            writer,
+                            endpoint_display,
+                            server_data,
+                            server_id,
+                            histogram_key,
+                            metric_display,
+                            unit_enum.value,
+                            is_histogram=True,
+                        )
+
+    def _write_server_metric_row_structured(
+        self,
+        writer,
+        endpoint_display,
+        server_data,
+        server_id,
+        metric_key,
+        metric_display,
+        unit,
+        is_histogram=False,
+    ):
+        """Write a single server metric row in structured table format.
+
+        Each row contains: endpoint, server info, metric name with unit, and all stats.
+        This format is optimized for programmatic extraction and visualization.
+
+        Args:
+            writer: CSV writer object
+            endpoint_display: Display name of the server endpoint
+            server_data: ServerMetricsData containing metric time series
+            server_id: Identifier for the server
+            metric_key: Internal metric name (e.g., "requests_total")
+            metric_display: Display name for the metric (e.g., "Requests Total")
+            unit: Unit of measurement (e.g., "req/s", "ms", "%")
+            is_histogram: Whether this is a histogram metric
+        """
+        try:
+            if is_histogram:
+                metric_result = server_data.time_series.histogram_to_metric_result(
+                    metric_key, metric_key, metric_display, unit
+                )
+                metric_with_unit = f"{metric_display} ({unit}) [histogram]"
+            else:
+                metric_result = server_data.get_metric_result(
+                    metric_key, metric_key, metric_display, unit
+                )
+                metric_with_unit = f"{metric_display} ({unit})"
+
+            row = [
+                endpoint_display,
+                server_id,
+                server_data.metadata.server_type or "",
+                server_data.metadata.hostname or "",
+                server_data.metadata.instance or "",
+                metric_with_unit,
+            ]
+
+            for stat in STAT_KEYS:
+                value = getattr(metric_result, stat, None)
+                row.append(self._format_number(value))
+
+            writer.writerow(row)
+        except Exception as e:
+            self.warning(
+                f"Failed to write metric row for server {server_id}, metric {metric_key}: {e}"
+            )
+
+    def _server_has_metric(
+        self, server_data, metric_key: str, is_histogram: bool
+    ) -> bool:
+        """Check if server has data for the specified metric.
+
+        Attempts to retrieve metric result to determine if the metric has any data.
+        Used to filter out metrics with no collected data.
+
+        Args:
+            server_data: ServerMetricsData containing metric time series
+            metric_key: Internal metric name to check (e.g., "requests_total")
+            is_histogram: Whether this is a histogram metric
+
+        Returns:
+            bool: True if metric has data, False if metric is unavailable or has no data
+        """
+        try:
+            if is_histogram:
+                server_data.time_series.histogram_to_metric_result(
+                    metric_key, metric_key, "test", "test"
+                )
+            else:
+                server_data.get_metric_result(metric_key, metric_key, "test", "test")
+            return True
+        except Exception as e:
+            self.debug(f"Server metric {metric_key} not available: {e}")
             return False

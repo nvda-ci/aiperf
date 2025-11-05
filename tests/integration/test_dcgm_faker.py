@@ -20,7 +20,7 @@ class TestDCGMFaker:
         print(metrics_text)
 
         # Use real TelemetryDataCollector to parse the output
-        collector = TelemetryDataCollector(dcgm_url="http://fake")
+        collector = TelemetryDataCollector(endpoint_url="http://fake")
         records = collector._parse_metrics_to_records(metrics_text)
 
         # Should get 2 TelemetryRecord objects (one per GPU)
@@ -73,7 +73,7 @@ class TestDCGMFaker:
     def test_load_affects_telemetry_records(self):
         """Test that load changes affect TelemetryRecords when parsed by real collector."""
         faker = DCGMFaker(gpu_name="b200", num_gpus=1, seed=42)
-        collector = TelemetryDataCollector(dcgm_url="http://fake")
+        collector = TelemetryDataCollector(endpoint_url="http://fake")
 
         # Low load
         faker.set_load(0.1)
@@ -96,7 +96,7 @@ class TestDCGMFaker:
     def test_metrics_clamped_to_bounds(self):
         """Test that all metrics are clamped to [0, max] bounds."""
         faker = DCGMFaker(gpu_name="h100", num_gpus=2, seed=42)
-        collector = TelemetryDataCollector(dcgm_url="http://fake")
+        collector = TelemetryDataCollector(endpoint_url="http://fake")
 
         # Test extreme high load
         faker.set_load(1.0)

@@ -42,6 +42,7 @@ CommandCallbackMapT: TypeAlias = dict[
 ]
 CommandTypeT: TypeAlias = CommandType | str
 ConfigT = TypeVar("ConfigT", bound=Any, covariant=True)
+HierarchyT = TypeVar("HierarchyT", bound="BaseModel")
 HooksMixinT = TypeVar("HooksMixinT", bound="HooksMixin")
 HookParamsT = TypeVar("HookParamsT", bound=Any)
 HookCallableParamsT = HookParamsT | Callable[["SelfT"], HookParamsT]
@@ -62,6 +63,7 @@ PluginClassT = TypeVar("PluginClassT", bound=Any)
 ProtocolT = TypeVar("ProtocolT", bound=Any)
 RawRequestT = TypeVar("RawRequestT", bound=Any, contravariant=True)
 RawResponseT = TypeVar("RawResponseT", bound=Any, contravariant=True)
+RecordT = TypeVar("RecordT", bound="BaseModel")
 RequestInputT = TypeVar("RequestInputT", bound=Any, contravariant=True)
 RequestOutputT = TypeVar("RequestOutputT", bound=Any, covariant=True)
 ResponseT = TypeVar("ResponseT", bound=Any, covariant=True)

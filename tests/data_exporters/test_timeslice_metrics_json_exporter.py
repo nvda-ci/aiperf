@@ -143,6 +143,7 @@ class TestTimesliceMetricsJsonExporterInitialization:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -163,6 +164,7 @@ class TestTimesliceMetricsJsonExporterInitialization:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             with pytest.raises(DataExporterDisabled) as exc_info:
@@ -183,6 +185,7 @@ class TestTimesliceMetricsJsonExporterInitialization:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -207,6 +210,7 @@ class TestTimesliceMetricsJsonExporterGetExportInfo:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -231,6 +235,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -277,6 +282,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -334,6 +340,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -388,6 +395,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -442,6 +450,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -482,6 +491,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -529,6 +539,7 @@ class TestTimesliceMetricsJsonExporterIntegration:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -567,6 +578,7 @@ class TestTimesliceMetricsJsonExporterIntegration:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)
@@ -615,6 +627,7 @@ class TestTimesliceMetricsJsonExporterIntegration:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = TimesliceMetricsJsonExporter(config)

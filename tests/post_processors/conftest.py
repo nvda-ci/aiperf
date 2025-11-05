@@ -218,6 +218,7 @@ def create_exporter_config(user_config: UserConfig) -> ExporterConfig:
             end_ns=DEFAULT_LAST_RESPONSE_NS,
         ),
         telemetry_results=None,
+        server_metrics_results=None,
     )
 
 

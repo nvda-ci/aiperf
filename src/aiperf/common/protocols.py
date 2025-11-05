@@ -14,6 +14,7 @@ from aiperf.common.models import (
     ParsedResponseRecord,
     RequestInfo,
     RequestRecord,
+    ServerMetricRecord,
     ServiceRunInfo,
     TelemetryRecord,
 )
@@ -525,6 +526,33 @@ class TelemetryResultsProcessorProtocol(Protocol):
         Returns:
             List of MetricResult objects with hierarchical tags that preserve
             dcgm_url -> gpu_uuid grouping structure for dashboard filtering.
+        """
+        ...
+
+
+@runtime_checkable
+class ServerMetricsResultsProcessorProtocol(Protocol):
+    """Protocol for server metrics results processors that handle ServerMetricRecord objects.
+
+    This protocol is separate from ResultsProcessorProtocol because server metrics data
+    has fundamentally different structure (hierarchical with metadata) compared
+    to inference metrics (flat key-value pairs).
+    """
+
+    async def process_server_metric_record(self, record: ServerMetricRecord) -> None:
+        """Process individual server metric record with rich metadata.
+
+        Args:
+            record: ServerMetricRecord containing server metrics and hierarchical metadata
+        """
+        ...
+
+    async def summarize(self) -> list["MetricResult"]:
+        """Generate MetricResult list with hierarchical tags for server metrics data.
+
+        Returns:
+            List of MetricResult objects with hierarchical tags that preserve
+            server_url -> server_id grouping structure for dashboard filtering.
         """
         ...
 

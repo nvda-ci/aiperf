@@ -14,6 +14,10 @@ from aiperf.common.models.export_models import (
     GpuSummary,
     JsonExportData,
     JsonMetricResult,
+    ServerEndpointData,
+    ServerMetricsExportData,
+    ServerMetricsSummary,
+    ServerSummary,
     TelemetryExportData,
     TelemetrySummary,
 )
@@ -21,7 +25,12 @@ from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.display_units_utils import normalize_endpoint_display
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
-from aiperf.gpu_telemetry.constants import GPU_TELEMETRY_METRICS_CONFIG
+from aiperf.gpu_telemetry.constants import (
+    infer_metric_unit as infer_gpu_metric_unit,
+)
+from aiperf.server_metrics.constants import (
+    infer_metric_unit as infer_server_metric_unit,
+)
 
 
 @DataExporterFactory.register(DataExporterType.JSON)
@@ -45,9 +54,10 @@ class MetricsJsonExporter(MetricsBaseExporter):
         )
 
     def _generate_content(self) -> str:
-        """Generate JSON content string from inference and telemetry data.
+        """Generate JSON content string from inference, telemetry, and server metrics data.
 
-        Uses instance data members self._results.records and self._telemetry_results.
+        Uses instance data members self._results.records, self._telemetry_results,
+        and self._server_metrics_results.
 
         Returns:
             str: Complete JSON content with all sections formatted and ready to write
@@ -83,6 +93,23 @@ class MetricsJsonExporter(MetricsBaseExporter):
                 endpoints=self._generate_telemetry_statistical_summary(),
             )
 
+        server_metrics_export_data = None
+        if self._server_metrics_results:
+            summary = ServerMetricsSummary(
+                endpoints_configured=self._server_metrics_results.endpoints_configured,
+                endpoints_successful=self._server_metrics_results.endpoints_successful,
+                start_time=datetime.fromtimestamp(
+                    self._server_metrics_results.start_ns / NANOS_PER_SECOND
+                ),
+                end_time=datetime.fromtimestamp(
+                    self._server_metrics_results.end_ns / NANOS_PER_SECOND
+                ),
+            )
+            server_metrics_export_data = ServerMetricsExportData(
+                summary=summary,
+                endpoints=self._generate_server_metrics_statistical_summary(),
+            )
+
         export_data = JsonExportData(
             input_config=self._user_config,
             was_cancelled=self._results.was_cancelled,
@@ -90,6 +117,7 @@ class MetricsJsonExporter(MetricsBaseExporter):
             start_time=start_time,
             end_time=end_time,
             telemetry_data=telemetry_export_data,
+            server_metrics_data=server_metrics_export_data,
         )
 
         # Add all prepared metrics dynamically
@@ -145,19 +173,21 @@ class MetricsJsonExporter(MetricsBaseExporter):
             for gpu_uuid, gpu_data in gpus_data.items():
                 metrics_dict = {}
 
-                for (
-                    _metric_display,
-                    metric_key,
-                    unit_enum,
-                ) in GPU_TELEMETRY_METRICS_CONFIG:
-                    try:
-                        unit = unit_enum.value
-                        metric_result = gpu_data.get_metric_result(
-                            metric_key, metric_key, metric_key, unit
-                        )
-                        metrics_dict[metric_key] = metric_result.to_json_result()
-                    except Exception:
-                        continue
+                # Dynamically discover metrics from GPU data
+                if hasattr(gpu_data, "time_series") and gpu_data.time_series.snapshots:
+                    first_snapshot = gpu_data.time_series.snapshots[0]
+                    field_names = sorted(first_snapshot.metrics.keys())
+
+                    for metric_key in field_names:
+                        try:
+                            unit_enum = infer_gpu_metric_unit(metric_key)
+                            unit = unit_enum.value
+                            metric_result = gpu_data.get_metric_result(
+                                metric_key, metric_key, metric_key, unit
+                            )
+                            metrics_dict[metric_key] = metric_result.to_json_result()
+                        except Exception:
+                            continue
 
                 gpu_summary = GpuSummary(
                     gpu_index=gpu_data.metadata.gpu_index,
@@ -170,5 +200,85 @@ class MetricsJsonExporter(MetricsBaseExporter):
                 gpus_dict[f"gpu_{gpu_data.metadata.gpu_index}"] = gpu_summary
 
             summary[endpoint_display] = EndpointData(gpus=gpus_dict)
+
+        return summary
+
+    def _generate_server_metrics_statistical_summary(
+        self,
+    ) -> dict[str, ServerEndpointData]:
+        """Generate clean statistical summary of server metrics data for JSON export.
+
+        Processes server metrics hierarchy into a structured dict with:
+        - Endpoints organized by normalized display name
+        - Server data with metadata (server_id, type, hostname, instance)
+        - Metric statistics (avg, min, max, p99, p90, p75, std, count) per server
+        - Only includes metrics with available data
+        - Uses dynamic field discovery from actual server data
+
+        Returns:
+            dict: Nested structure of endpoints -> servers -> metrics with statistics.
+                Empty dict if no server metrics data available.
+        """
+        summary = {}
+
+        if (
+            not self._server_metrics_results
+            or not self._server_metrics_results.metrics_data
+        ):
+            return summary
+
+        for (
+            server_url,
+            servers_data,
+        ) in self._server_metrics_results.metrics_data.server_endpoints.items():
+            endpoint_display = normalize_endpoint_display(server_url)
+            servers_dict = {}
+
+            for server_id, server_data in servers_data.items():
+                metrics_dict = {}
+
+                # Dynamically discover metrics from server data
+                if server_data.time_series.snapshots:
+                    first_snapshot = server_data.time_series.snapshots[0]
+
+                    # Export scalar metrics
+                    field_names = sorted(first_snapshot.metrics.keys())
+                    for metric_key in field_names:
+                        try:
+                            unit_enum = infer_server_metric_unit(metric_key)
+                            unit = unit_enum.value
+                            metric_result = server_data.get_metric_result(
+                                metric_key, metric_key, metric_key, unit
+                            )
+                            metrics_dict[metric_key] = metric_result.to_json_result()
+                        except Exception:
+                            continue
+
+                    # Export histogram metrics
+                    histogram_names = sorted(first_snapshot.histograms.keys())
+                    for histogram_key in histogram_names:
+                        try:
+                            unit_enum = infer_server_metric_unit(histogram_key)
+                            unit = unit_enum.value
+                            metric_result = (
+                                server_data.time_series.histogram_to_metric_result(
+                                    histogram_key, histogram_key, histogram_key, unit
+                                )
+                            )
+                            metrics_dict[histogram_key] = metric_result.to_json_result()
+                        except Exception:
+                            continue
+
+                server_summary = ServerSummary(
+                    server_id=server_id,
+                    server_type=server_data.metadata.server_type,
+                    hostname=server_data.metadata.hostname,
+                    instance=server_data.metadata.instance,
+                    metrics=metrics_dict,
+                )
+
+                servers_dict[server_id] = server_summary
+
+            summary[endpoint_display] = ServerEndpointData(servers=servers_dict)
 
         return summary

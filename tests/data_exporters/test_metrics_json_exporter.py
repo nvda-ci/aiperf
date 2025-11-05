@@ -93,6 +93,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -142,6 +143,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -166,6 +168,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -196,6 +199,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -229,6 +233,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=sample_telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -263,6 +268,7 @@ class TestMetricsJsonExporter:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -304,6 +310,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=sample_telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -348,6 +355,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -376,6 +384,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=sample_telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -456,6 +465,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -515,6 +525,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -552,6 +563,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -611,6 +623,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -694,6 +707,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
@@ -758,6 +772,7 @@ class TestMetricsJsonExporterTelemetry:
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=telemetry_results,
+                server_metrics_results=None,
             )
 
             exporter = MetricsJsonExporter(exporter_config)
