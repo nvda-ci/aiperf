@@ -14,5 +14,17 @@ from aiperf.plot.core.mode_detector import (
     ModeDetector,
     VisualizationMode,
 )
+from aiperf.plot.core.plot_generator import (
+    PlotGenerator,
+    get_nvidia_color_scheme,
+)
 
-__all__ = ["DataLoader", "ModeDetector", "RunData", "RunMetadata", "VisualizationMode"]
+__all__ = [
+    "DataLoader",
+    "ModeDetector",
+    "PlotGenerator",
+    "RunData",
+    "RunMetadata",
+    "VisualizationMode",
+    "get_nvidia_color_scheme",
+]

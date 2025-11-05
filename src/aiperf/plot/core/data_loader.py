@@ -10,7 +10,7 @@ formats suitable for visualization and analysis.
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,9 @@ class RunMetadata:
         request_count: Total number of requests.
         duration_seconds: Duration of the run in seconds.
         endpoint_type: Type of endpoint (e.g., "chat", "completions").
-        swept_params: Dictionary of swept parameters and their values.
+        start_time: ISO timestamp when the profiling run started.
+        end_time: ISO timestamp when the profiling run ended.
+        was_cancelled: Whether the profiling run was cancelled early.
     """
 
     run_name: str
@@ -49,7 +51,9 @@ class RunMetadata:
     request_count: int | None = None
     duration_seconds: float | None = None
     endpoint_type: str | None = None
-    swept_params: dict[str, Any] = field(default_factory=dict)
+    start_time: str | None = None
+    end_time: str | None = None
+    was_cancelled: bool = False
 
 
 @dataclass
@@ -106,12 +110,6 @@ class DataLoader(AIPerfLoggerMixin):
 
         Raises:
             DataLoadError: If data cannot be loaded from the run directory.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/my_run"))
-            >>> print(run.requests.shape)
-            (100, 15)
         """
         if not run_path.exists():
             raise DataLoadError("Run path does not exist", path=str(run_path))
@@ -121,18 +119,12 @@ class DataLoader(AIPerfLoggerMixin):
 
         self.info(f"Loading run from: {run_path}")
 
+        jsonl_path = run_path / PROFILE_EXPORT_JSONL
+        if not jsonl_path.exists():
+            raise DataLoadError("Required JSONL file not found", path=str(jsonl_path))
+
         # Load JSONL per-request data (conditionally)
-        if load_per_request_data:
-            requests_df = self._load_jsonl(run_path / PROFILE_EXPORT_JSONL)
-        else:
-            # Verify JSONL exists but don't load it
-            jsonl_path = run_path / PROFILE_EXPORT_JSONL
-            if not jsonl_path.exists():
-                raise DataLoadError(
-                    "Required JSONL file not found", path=str(jsonl_path)
-                )
-            requests_df = None
-            self.info(f"Skipping per-request data load from {jsonl_path}")
+        requests_df = self._load_jsonl(jsonl_path) if load_per_request_data else None
 
         # Load aggregated JSON
         aggregated = self._load_aggregated_json(run_path / PROFILE_EXPORT_AIPERF_JSON)
@@ -159,20 +151,9 @@ class DataLoader(AIPerfLoggerMixin):
 
         Raises:
             DataLoadError: If any run cannot be loaded.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> runs = loader.load_multiple_runs([
-            ...     Path("results/run1"),
-            ...     Path("results/run2")
-            ... ])
-            >>> print(len(runs))
-            2
         """
         if not run_paths:
             raise DataLoadError("No run paths provided")
-
-        self.info(f"Loading {len(run_paths)} runs (skipping per-request data)")
 
         # Load all runs with only aggregated summary data, not per-request data
         runs = []
@@ -184,12 +165,7 @@ class DataLoader(AIPerfLoggerMixin):
                 self.error(f"Failed to load run from {path}: {e}")
                 raise
 
-        swept_params = self._detect_swept_parameters(runs)
-        self.info(f"Detected swept parameters: {list(swept_params.keys())}")
-
-        # Update metadata with swept params
-        for run in runs:
-            run.metadata.swept_params = self._extract_swept_params(run, swept_params)
+        # Note: swept parameter detection removed until configuration system is implemented
 
         return runs
 
@@ -220,11 +196,181 @@ class DataLoader(AIPerfLoggerMixin):
         """
         return self.load_run(run_path, load_per_request_data=True)
 
+    def extract_telemetry_data(
+        self, aggregated: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """
+        Extract telemetry data from aggregated statistics.
+
+        Args:
+            aggregated: The aggregated data dictionary from profile_export_aiperf.json
+
+        Returns:
+            Telemetry data dictionary with 'summary' and 'endpoints' keys, or None if
+            telemetry data is not available.
+
+        Examples:
+            >>> loader = DataLoader()
+            >>> run = loader.load_run(Path("results/run1"))
+            >>> telemetry = loader.extract_telemetry_data(run.aggregated)
+            >>> if telemetry:
+            ...     print(telemetry['summary']['start_time'])
+            ...     print(telemetry['endpoints'].keys())
+        """
+        if not aggregated or "telemetry_data" not in aggregated:
+            self.debug("No telemetry data found in aggregated statistics")
+            return None
+
+        telemetry = aggregated.get("telemetry_data")
+
+        if not isinstance(telemetry, dict):
+            self.warning("Telemetry data exists but has unexpected structure")
+            return None
+
+        if "summary" not in telemetry or "endpoints" not in telemetry:
+            self.warning("Telemetry data missing expected keys (summary, endpoints)")
+            return None
+
+        self.info(
+            f"Extracted telemetry data with {len(telemetry.get('endpoints', {}))} endpoints"
+        )
+        return telemetry
+
+    def get_telemetry_summary(
+        self, aggregated: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """
+        Get telemetry summary information (start_time, end_time, endpoints).
+
+        Args:
+            aggregated: The aggregated data dictionary
+
+        Returns:
+            Dictionary with keys: start_time, end_time, endpoints_configured,
+            endpoints_successful, or None if not available.
+
+        Examples:
+            >>> loader = DataLoader()
+            >>> run = loader.load_run(Path("results/run1"))
+            >>> summary = loader.get_telemetry_summary(run.aggregated)
+            >>> if summary:
+            ...     print(f"Started: {summary['start_time']}")
+            ...     print(f"Ended: {summary['end_time']}")
+        """
+        telemetry = self.extract_telemetry_data(aggregated)
+        return telemetry.get("summary") if telemetry else None
+
+    def calculate_gpu_count_from_telemetry(
+        self, aggregated: dict[str, Any]
+    ) -> int | None:
+        """
+        Calculate total GPU count from telemetry data.
+
+        Counts unique GPUs across all endpoints in the telemetry data structure.
+
+        Args:
+            aggregated: The aggregated data dictionary from profile_export_aiperf.json
+
+        Returns:
+            Total GPU count across all endpoints, or None if telemetry data is not
+            available.
+
+        Examples:
+            >>> loader = DataLoader()
+            >>> run = loader.load_run(Path("results/run1"))
+            >>> gpu_count = loader.calculate_gpu_count_from_telemetry(run.aggregated)
+            >>> if gpu_count:
+            ...     print(f"Total GPUs: {gpu_count}")
+        """
+        telemetry = self.extract_telemetry_data(aggregated)
+        if not telemetry:
+            return None
+
+        endpoints = telemetry.get("endpoints", {})
+        if not isinstance(endpoints, dict):
+            self.warning("Telemetry endpoints data has unexpected structure")
+            return None
+
+        gpu_count = 0
+        for _endpoint_name, endpoint_data in endpoints.items():
+            if not isinstance(endpoint_data, dict):
+                continue
+
+            gpus = endpoint_data.get("gpus", {})
+            if isinstance(gpus, dict):
+                gpu_count += len(gpus)
+
+        if gpu_count == 0:
+            self.debug("No GPUs found in telemetry data")
+            return None
+
+        self.info(f"Calculated GPU count from telemetry: {gpu_count}")
+        return gpu_count
+
+    def add_derived_gpu_metrics(self, aggregated: dict[str, Any]) -> dict[str, Any]:
+        """
+        Add derived GPU metrics to aggregated data when telemetry is available.
+
+        Creates output_token_throughput_per_gpu by dividing output_token_throughput
+        by the GPU count extracted from telemetry data. If telemetry data is not
+        available or GPU count cannot be determined, no metrics are added.
+
+        Args:
+            aggregated: The aggregated data dictionary (will be modified in-place)
+
+        Returns:
+            The modified aggregated dictionary (same object as input)
+
+        Examples:
+            >>> loader = DataLoader()
+            >>> run = loader.load_run(Path("results/run1"))
+            >>> loader.add_derived_gpu_metrics(run.aggregated)
+            >>> if "output_token_throughput_per_gpu" in run.aggregated:
+            ...     print("GPU metric available")
+        """
+        gpu_count = self.calculate_gpu_count_from_telemetry(aggregated)
+
+        if gpu_count is None or gpu_count == 0:
+            self.debug(
+                "Skipping derived GPU metrics: telemetry data not available or no GPUs found"
+            )
+            return aggregated
+
+        if "output_token_throughput" not in aggregated:
+            self.debug(
+                "Skipping derived GPU metrics: output_token_throughput metric not found"
+            )
+            return aggregated
+
+        throughput_data = aggregated["output_token_throughput"]
+        if not isinstance(throughput_data, dict):
+            self.warning(
+                "output_token_throughput has unexpected structure, skipping derived metrics"
+            )
+            return aggregated
+
+        per_gpu_data = {}
+        per_gpu_data["unit"] = "tokens/sec/gpu"
+
+        for key, value in throughput_data.items():
+            if key == "unit":
+                continue
+            if isinstance(value, int | float):
+                per_gpu_data[key] = value / gpu_count
+
+        aggregated["output_token_throughput_per_gpu"] = per_gpu_data
+        self.info(
+            f"Added derived metric: output_token_throughput_per_gpu (divided by {gpu_count} GPUs)"
+        )
+
+        return aggregated
+
     def get_available_metrics(self, run_data: RunData) -> dict[str, dict[str, str]]:
         """
         Get metrics available in the loaded data.
 
-        Extracts metric information directly from MetricResult objects in the data.
+        Extracts metric information from the aggregated data, which has a flat structure
+        where metrics are stored at the top level (not nested under a "metrics" key).
 
         Args:
             run_data: RunData object with loaded aggregated data.
@@ -241,25 +387,34 @@ class DataLoader(AIPerfLoggerMixin):
             >>> print(available["display_names"])
             {'time_to_first_token': 'Time to First Token', 'inter_token_latency': 'Inter Token Latency'}
         """
-        if not run_data.aggregated or "metrics" not in run_data.aggregated:
-            self.warning("No metrics found in aggregated data")
+        from aiperf.plot.constants import NON_METRIC_KEYS
+        from aiperf.plot.metric_names import get_metric_display_name
+
+        if not run_data.aggregated:
+            self.warning("No aggregated data available")
             return {"display_names": {}, "units": {}}
 
-        metrics = run_data.aggregated["metrics"]
         display_names = {}
         units = {}
 
-        for tag, metric in metrics.items():
-            if isinstance(metric, MetricResult):
-                display_names[tag] = metric.header
-                units[tag] = metric.unit
-            else:
-                # Fallback for raw dicts (if parsing failed)
-                self.warning(f"Metric {tag} is not a MetricResult object, skipping")
+        # Iterate through top-level keys in aggregated data
+        for key, value in run_data.aggregated.items():
+            # Skip known non-metric keys
+            if key in NON_METRIC_KEYS:
+                continue
 
-        self.info(
-            f"Found {len(display_names)} available metrics: {sorted(display_names.keys())}"
-        )
+            # Check if this looks like a metric (has unit field)
+            if isinstance(value, dict) and "unit" in value and value is not None:
+                # Get display name from MetricRegistry/GPU telemetry config
+                display_names[key] = get_metric_display_name(key)
+                units[key] = value["unit"]
+
+        if not display_names:
+            self.warning("No metrics found in aggregated data")
+        else:
+            self.info(
+                f"Found {len(display_names)} available metrics: {sorted(display_names.keys())}"
+            )
 
         return {"display_names": display_names, "units": units}
 
@@ -277,7 +432,7 @@ class DataLoader(AIPerfLoggerMixin):
             DataLoadError: If file cannot be read or parsed.
         """
         if not jsonl_path.exists():
-            raise DataLoadError("Required JSONL file not found", path=str(jsonl_path))
+            raise DataLoadError("JSONL file not found", path=str(jsonl_path))
 
         records = []
         corrupted_lines = 0
@@ -314,19 +469,11 @@ class DataLoader(AIPerfLoggerMixin):
 
             df = pd.DataFrame(records)
 
-            # Convert timestamp columns to datetime with UTC timezone
-            timestamp_cols = [
-                "request_start_ns",
-                "request_ack_ns",
-                "request_end_ns",
-                "cancellation_time_ns",
-            ]
-            for col in timestamp_cols:
-                if col in df.columns:
-                    # Convert nanoseconds to datetime
-                    df[col] = pd.to_datetime(
-                        df[col], unit="ns", utc=True, errors="coerce"
-                    )
+            # Convert timestamp columns to UTC datetime
+            timestamp_columns = [col for col in df.columns if col.endswith("_ns")]
+            for col in timestamp_columns:
+                if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+                    df[col] = pd.to_datetime(df[col], unit="ns", utc=True)
 
             self.info(f"Loaded {len(df)} records from {jsonl_path}")
             return df
@@ -496,6 +643,9 @@ class DataLoader(AIPerfLoggerMixin):
         concurrency = None
         request_count = None
         endpoint_type = None
+        start_time = None
+        end_time = None
+        was_cancelled = False
 
         if aggregated and "input_config" in aggregated:
             config = aggregated["input_config"]
@@ -518,6 +668,12 @@ class DataLoader(AIPerfLoggerMixin):
             if "endpoint" in config and "type" in config["endpoint"]:
                 endpoint_type = config["endpoint"]["type"]
 
+        # Extract run timing information from top-level keys
+        if aggregated:
+            start_time = aggregated.get("start_time")
+            end_time = aggregated.get("end_time")
+            was_cancelled = aggregated.get("was_cancelled", False)
+
         # Calculate duration from requests (if available)
         duration_seconds = None
         if (
@@ -529,10 +685,12 @@ class DataLoader(AIPerfLoggerMixin):
             start_times = requests_df["request_start_ns"].dropna()
             end_times = requests_df["request_end_ns"].dropna()
             if not start_times.empty and not end_times.empty:
-                duration_ns = (
-                    end_times.max() - start_times.min()
-                ).total_seconds() * 1e9
-                duration_seconds = duration_ns / 1e9
+                duration = end_times.max() - start_times.min()
+                # Handle both Timedelta (from datetime subtraction) and int/float (from ns values)
+                if isinstance(duration, pd.Timedelta):
+                    duration_seconds = duration.total_seconds()
+                else:
+                    duration_seconds = duration / 1e9
 
         return RunMetadata(
             run_name=run_name,
@@ -542,118 +700,7 @@ class DataLoader(AIPerfLoggerMixin):
             request_count=request_count,
             duration_seconds=duration_seconds,
             endpoint_type=endpoint_type,
+            start_time=start_time,
+            end_time=end_time,
+            was_cancelled=was_cancelled,
         )
-
-    def _detect_swept_parameters(self, runs: list[RunData]) -> dict[str, set[Any]]:
-        """
-        Detect which parameters were swept across multiple runs.
-
-        A parameter is considered swept if it has different values across runs.
-
-        Args:
-            runs: List of RunData objects.
-
-        Returns:
-            Dictionary mapping parameter names to sets of values.
-        """
-        if len(runs) < 2:
-            return {}
-
-        # Collect all config parameters from all runs
-        param_values: dict[str, list[Any]] = {}
-
-        for run in runs:
-            if not run.aggregated or "input_config" not in run.aggregated:
-                continue
-
-            config = run.aggregated["input_config"]
-
-            # Flatten config to extract parameters
-            flat_config = self._flatten_config(config)
-
-            for key, value in flat_config.items():
-                if key not in param_values:
-                    param_values[key] = []
-                param_values[key].append(value)
-
-        # Identify swept parameters (multiple unique values)
-        swept = {}
-        for key, values in param_values.items():
-            # Get unique values, preserving type
-            unique_values = set()
-            for v in values:
-                # Convert unhashable types to hashable
-                if isinstance(v, list):
-                    # Single element lists → extract the value (common for model_names)
-                    v = v[0] if len(v) == 1 else tuple(v)
-                elif isinstance(v, dict):
-                    v = tuple(sorted(v.items()))
-                unique_values.add(v)
-
-            if len(unique_values) > 1:
-                swept[key] = unique_values
-
-        return swept
-
-    def _flatten_config(
-        self, config: dict[str, Any], prefix: str = ""
-    ) -> dict[str, Any]:
-        """
-        Flatten nested configuration dictionary.
-
-        Args:
-            config: Nested configuration dictionary.
-            prefix: Prefix for keys (used in recursion).
-
-        Returns:
-            Flattened dictionary.
-        """
-        flat = {}
-        for key, value in config.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-
-            if isinstance(value, dict):
-                # Recurse into nested dicts
-                flat.update(self._flatten_config(value, full_key))
-            else:
-                flat[full_key] = value
-
-        return flat
-
-    def _extract_swept_params(
-        self, run: RunData, swept_params: dict[str, set[Any]]
-    ) -> dict[str, Any]:
-        """
-        Extract swept parameter values for a specific run.
-
-        Args:
-            run: RunData object.
-            swept_params: Dictionary of swept parameters from
-                _detect_swept_parameters.
-
-        Returns:
-            Dictionary mapping swept parameter names to their values for this
-            run.
-        """
-        if not swept_params:
-            return {}
-
-        if not run.aggregated or "input_config" not in run.aggregated:
-            return {}
-
-        config = run.aggregated["input_config"]
-        flat_config = self._flatten_config(config)
-
-        # Extract values for swept parameters
-        swept_values = {}
-        for param_name in swept_params:
-            if param_name in flat_config:
-                value = flat_config[param_name]
-                # Apply same normalization as in _detect_swept_parameters
-                if isinstance(value, list):
-                    value = value[0] if len(value) == 1 else tuple(value)
-                elif isinstance(value, dict):
-                    value = tuple(sorted(value.items()))
-                swept_values[param_name] = value
-
-        return swept_values

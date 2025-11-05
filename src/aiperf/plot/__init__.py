@@ -9,31 +9,46 @@ including data loading, plot generation, and various output modes (PNG, HTML, da
 """
 
 __version__ = "0.1.0"
+from aiperf.plot.cli_runner import (
+    run_plot_controller,
+)
 from aiperf.plot.constants import (
-    COLOR_SCHEME_DEFAULT,
-    COLOR_SCHEME_NVIDIA,
+    ALL_STAT_KEYS,
+    AVAILABLE_STATS,
     DEFAULT_HTML_OUTPUT_DIR,
     DEFAULT_OUTPUT_DIR,
+    DEFAULT_PERCENTILE,
     DEFAULT_PERCENTILES,
     DEFAULT_PLOT_DPI,
     DEFAULT_PLOT_HEIGHT,
     DEFAULT_PLOT_WIDTH,
     DEFAULT_PNG_OUTPUT_DIR,
     INPUTS_JSON,
+    NON_METRIC_KEYS,
+    NVIDIA_BORDER,
+    NVIDIA_CARD_BG,
+    NVIDIA_DARK,
+    NVIDIA_DARK_BG,
+    NVIDIA_GOLD,
+    NVIDIA_GRAY,
+    NVIDIA_GREEN,
+    NVIDIA_TEXT_LIGHT,
+    NVIDIA_WHITE,
+    PLOT_FONT_FAMILY,
     PLOT_LOG_FILE,
-    PLOT_SIZE_LARGE,
-    PLOT_SIZE_MEDIUM,
-    PLOT_SIZE_SMALL,
     PROFILE_EXPORT_AIPERF_CSV,
     PROFILE_EXPORT_AIPERF_JSON,
     PROFILE_EXPORT_JSONL,
+    PlotMode,
 )
 from aiperf.plot.core import (
     DataLoader,
     ModeDetector,
+    PlotGenerator,
     RunData,
     RunMetadata,
     VisualizationMode,
+    get_nvidia_color_scheme,
 )
 from aiperf.plot.exceptions import (
     ConfigError,
@@ -42,16 +57,32 @@ from aiperf.plot.exceptions import (
     PlotError,
     PlotGenerationError,
 )
+from aiperf.plot.exporters import (
+    BaseExporter,
+    BasePNGExporter,
+    MultiRunPNGExporter,
+    SingleRunPNGExporter,
+)
 from aiperf.plot.logging import (
     setup_plot_logging,
 )
+from aiperf.plot.metric_names import (
+    get_all_metric_display_names,
+    get_metric_display_name,
+)
+from aiperf.plot.plot_controller import (
+    PlotController,
+)
 
 __all__ = [
-    "COLOR_SCHEME_DEFAULT",
-    "COLOR_SCHEME_NVIDIA",
+    "ALL_STAT_KEYS",
+    "AVAILABLE_STATS",
+    "BaseExporter",
+    "BasePNGExporter",
     "ConfigError",
     "DEFAULT_HTML_OUTPUT_DIR",
     "DEFAULT_OUTPUT_DIR",
+    "DEFAULT_PERCENTILE",
     "DEFAULT_PERCENTILES",
     "DEFAULT_PLOT_DPI",
     "DEFAULT_PLOT_HEIGHT",
@@ -62,17 +93,34 @@ __all__ = [
     "INPUTS_JSON",
     "ModeDetectionError",
     "ModeDetector",
+    "MultiRunPNGExporter",
+    "NON_METRIC_KEYS",
+    "NVIDIA_BORDER",
+    "NVIDIA_CARD_BG",
+    "NVIDIA_DARK",
+    "NVIDIA_DARK_BG",
+    "NVIDIA_GOLD",
+    "NVIDIA_GRAY",
+    "NVIDIA_GREEN",
+    "NVIDIA_TEXT_LIGHT",
+    "NVIDIA_WHITE",
+    "PLOT_FONT_FAMILY",
     "PLOT_LOG_FILE",
-    "PLOT_SIZE_LARGE",
-    "PLOT_SIZE_MEDIUM",
-    "PLOT_SIZE_SMALL",
     "PROFILE_EXPORT_AIPERF_CSV",
     "PROFILE_EXPORT_AIPERF_JSON",
     "PROFILE_EXPORT_JSONL",
+    "PlotController",
     "PlotError",
     "PlotGenerationError",
+    "PlotGenerator",
+    "PlotMode",
     "RunData",
     "RunMetadata",
+    "SingleRunPNGExporter",
     "VisualizationMode",
+    "get_all_metric_display_names",
+    "get_metric_display_name",
+    "get_nvidia_color_scheme",
+    "run_plot_controller",
     "setup_plot_logging",
 ]

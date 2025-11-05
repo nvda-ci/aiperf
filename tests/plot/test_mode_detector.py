@@ -24,29 +24,35 @@ class TestModeDetection:
         self, mode_detector: ModeDetector, populated_run_dir: Path
     ) -> None:
         """Test detection of single run mode."""
-        mode = mode_detector.detect_mode([populated_run_dir])
+        mode, run_dirs = mode_detector.detect_mode([populated_run_dir])
         assert mode == VisualizationMode.SINGLE_RUN
+        assert len(run_dirs) == 1
+        assert run_dirs[0] == populated_run_dir
 
     def test_multiple_runs_explicit_paths(
         self, mode_detector: ModeDetector, multiple_run_dirs: list[Path]
     ) -> None:
         """Test detection of multi-run mode with explicit paths."""
-        mode = mode_detector.detect_mode(multiple_run_dirs)
+        mode, run_dirs = mode_detector.detect_mode(multiple_run_dirs)
         assert mode == VisualizationMode.MULTI_RUN
+        assert len(run_dirs) == 3
+        assert set(run_dirs) == set(multiple_run_dirs)
 
     def test_multiple_runs_parent_directory(
         self, mode_detector: ModeDetector, parent_dir_with_runs: Path
     ) -> None:
         """Test detection of multi-run mode from parent directory."""
-        mode = mode_detector.detect_mode([parent_dir_with_runs])
+        mode, run_dirs = mode_detector.detect_mode([parent_dir_with_runs])
         assert mode == VisualizationMode.MULTI_RUN
+        assert len(run_dirs) == 3
 
     def test_parent_directory_with_single_run(
         self, mode_detector: ModeDetector, parent_dir_with_single_run: Path
     ) -> None:
         """Test that parent directory with only one run is detected as SINGLE_RUN."""
-        mode = mode_detector.detect_mode([parent_dir_with_single_run])
+        mode, run_dirs = mode_detector.detect_mode([parent_dir_with_single_run])
         assert mode == VisualizationMode.SINGLE_RUN
+        assert len(run_dirs) == 1
 
     def test_empty_paths_raises_error(self, mode_detector: ModeDetector) -> None:
         """Test that empty path list raises error."""
@@ -78,7 +84,7 @@ class TestModeDetection:
 
         with pytest.raises(
             ModeDetectionError,
-            match="No valid run directories found",
+            match="does not contain any valid run directories",
         ):
             mode_detector.detect_mode([empty_dir])
 
@@ -91,7 +97,9 @@ class TestModeDetection:
         dir2 = tmp_path / "dir2"
         dir2.mkdir()
 
-        with pytest.raises(ModeDetectionError, match="No valid run directories found"):
+        with pytest.raises(
+            ModeDetectionError, match="does not contain any valid run directories"
+        ):
             mode_detector.detect_mode([dir1, dir2])
 
 
@@ -213,8 +221,9 @@ class TestSymlinkEdgeCases:
         """Test symlink to valid run directory."""
         symlink = tmp_path / "symlink_run"
         symlink.symlink_to(populated_run_dir)
-        mode = mode_detector.detect_mode([symlink])
+        mode, run_dirs = mode_detector.detect_mode([symlink])
         assert mode == VisualizationMode.SINGLE_RUN
+        assert len(run_dirs) == 1
 
     def test_broken_symlink_directory(
         self, mode_detector: ModeDetector, tmp_path: Path
@@ -260,9 +269,12 @@ class TestDuplicatePaths:
         self, mode_detector: ModeDetector, populated_run_dir: Path
     ) -> None:
         """Test same path specified multiple times."""
-        mode = mode_detector.detect_mode([populated_run_dir, populated_run_dir])
+        mode, run_dirs_from_mode = mode_detector.detect_mode(
+            [populated_run_dir, populated_run_dir]
+        )
         # Should deduplicate to single run
         assert mode == VisualizationMode.SINGLE_RUN
+        assert len(run_dirs_from_mode) == 1
 
         # Should deduplicate
         runs = mode_detector.find_run_directories(
@@ -306,8 +318,9 @@ class TestNestedRunDirectories:
         assert len(runs) == 2
 
         # Should detect as multi-run (2 runs found)
-        mode = mode_detector.detect_mode([nested_run_dirs])
+        mode, run_dirs = mode_detector.detect_mode([nested_run_dirs])
         assert mode == VisualizationMode.MULTI_RUN
+        assert len(run_dirs) == 2
 
     def test_nested_runs_counted_separately(
         self, mode_detector: ModeDetector, nested_run_dirs: Path, sample_jsonl_data
@@ -363,7 +376,9 @@ class TestPermissionErrors:
 
         try:
             # Should handle gracefully - no runs found
-            with pytest.raises(ModeDetectionError, match="No valid run directories"):
+            with pytest.raises(
+                ModeDetectionError, match="does not contain any valid run directories"
+            ):
                 mode_detector.detect_mode([no_read_dir])
         finally:
             no_read_dir.chmod(0o755)  # Cleanup
@@ -399,8 +414,9 @@ class TestFileContentEdgeCases:
 
         # Mode detection treats as valid
         assert mode_detector._is_run_directory(run_dir)
-        mode = mode_detector.detect_mode([run_dir])
+        mode, run_dirs = mode_detector.detect_mode([run_dir])
         assert mode == VisualizationMode.SINGLE_RUN
+        assert len(run_dirs) == 1
 
         # DataLoader will fail (tested elsewhere)
 

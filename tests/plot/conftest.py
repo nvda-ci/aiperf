@@ -69,6 +69,8 @@ def sample_jsonl_data() -> list[dict[str, Any]]:
                 "request_end_ns": 1000001000000,
                 "benchmark_phase": "profiling",
                 "was_cancelled": False,
+                "worker_id": "0",
+                "record_processor_id": "0",
             },
             "metrics": {
                 "time_to_first_token": {"value": 45.5, "unit": "ms"},
@@ -88,6 +90,8 @@ def sample_jsonl_data() -> list[dict[str, Any]]:
                 "request_end_ns": 1000001500000,
                 "benchmark_phase": "profiling",
                 "was_cancelled": False,
+                "worker_id": "0",
+                "record_processor_id": "0",
             },
             "metrics": {
                 "time_to_first_token": {"value": 50.2, "unit": "ms"},

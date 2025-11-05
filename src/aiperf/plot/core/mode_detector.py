@@ -35,9 +35,9 @@ class ModeDetector(AIPerfLoggerMixin):
     def __init__(self):
         super().__init__()
 
-    def detect_mode(self, paths: list[Path]) -> VisualizationMode:
+    def detect_mode(self, paths: list[Path]) -> tuple[VisualizationMode, list[Path]]:
         """
-        Detect visualization mode based on input paths.
+        Detect visualization mode based on input paths and return run directories.
 
         This function analyzes the provided paths to determine whether they
         represent a single profiling run or multiple runs by counting the total
@@ -58,76 +58,40 @@ class ModeDetector(AIPerfLoggerMixin):
                 - Multiple paths to run directories or parent directories
 
         Returns:
-            VisualizationMode.SINGLE_RUN if exactly 1 run directory is found,
-            VisualizationMode.MULTI_RUN if 2 or more run directories are found.
+            Tuple of (VisualizationMode, list of Path objects):
+                - VisualizationMode.SINGLE_RUN if exactly 1 run directory is found
+                - VisualizationMode.MULTI_RUN if 2 or more run directories are found
+                - List of unique run directory paths (sorted)
 
         Raises:
             ModeDetectionError: If mode cannot be determined or paths are invalid.
 
         Examples:
             >>> # Single run
-            >>> detect_mode([Path("results/run1")])
+            >>> mode, runs = detect_mode([Path("results/run1")])
+            >>> mode
             VisualizationMode.SINGLE_RUN
-
-            >>> # Parent directory with single run
-            >>> detect_mode([Path("results")])  # Contains only run1/
-            VisualizationMode.SINGLE_RUN
+            >>> len(runs)
+            1
 
             >>> # Multiple runs (explicit paths)
-            >>> detect_mode([Path("results/run1"), Path("results/run2")])
+            >>> mode, runs = detect_mode([Path("results/run1"), Path("results/run2")])
+            >>> mode
             VisualizationMode.MULTI_RUN
-
-            >>> # Multiple runs (parent directory)
-            >>> detect_mode([Path("results")])  # Contains run1/, run2/ subdirs
-            VisualizationMode.MULTI_RUN
-
-            >>> # Multiple runs (multiple parent directories)
-            >>> detect_mode([Path("results1"), Path("results2")])  # Contains run1/, run2/ subdirs
-            VisualizationMode.MULTI_RUN
+            >>> len(runs)
+            2
         """
         if not paths:
             raise ModeDetectionError("No paths provided")
 
-        # Validate all paths exist and are directories
-        for path in paths:
-            if not path.exists():
-                raise ModeDetectionError(f"Path does not exist: {path}")
-            if not path.is_dir():
-                raise ModeDetectionError(f"Path is not a directory: {path}")
+        run_dirs = self.find_run_directories(paths)
 
-        # Collect all run directories from all paths, with deduplication
-        all_run_dirs = []
-        seen_resolved = set()
-
-        for path in paths:
-            # Find all run directories recursively
-            run_dirs = self._find_all_run_directories_recursive(path)
-
-            # Deduplicate based on resolved paths
-            for run_dir in run_dirs:
-                try:
-                    resolved = run_dir.resolve(strict=True)
-                    if resolved not in seen_resolved:
-                        all_run_dirs.append(run_dir)
-                        seen_resolved.add(resolved)
-                except (OSError, RuntimeError):
-                    # If we can't resolve, include it if not seen by path equality
-                    if run_dir not in all_run_dirs:
-                        all_run_dirs.append(run_dir)
-
-        # Count total unique run directories
-        run_count = len(all_run_dirs)
-
-        if run_count == 0:
-            raise ModeDetectionError(
-                f"No valid run directories found in provided paths: {paths}"
-            )
-        elif run_count == 1:
+        if len(run_dirs) == 1:
             self.info("Detected SINGLE_RUN mode: 1 run directory found")
-            return VisualizationMode.SINGLE_RUN
+            return VisualizationMode.SINGLE_RUN, run_dirs
         else:
-            self.info(f"Detected MULTI_RUN mode: {run_count} run directories found")
-            return VisualizationMode.MULTI_RUN
+            self.info(f"Detected MULTI_RUN mode: {len(run_dirs)} run directories found")
+            return VisualizationMode.MULTI_RUN, run_dirs
 
     def find_run_directories(self, paths: list[Path]) -> list[Path]:
         """

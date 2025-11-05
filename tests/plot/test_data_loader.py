@@ -93,19 +93,6 @@ class TestDataLoaderLoadMultipleRuns:
         assert len(runs) == 3
         assert all(isinstance(r, RunData) for r in runs)
 
-    def test_swept_parameter_detection(self, multiple_run_dirs: list[Path]) -> None:
-        """Test detection of swept parameters across runs."""
-        loader = DataLoader()
-        runs = loader.load_multiple_runs(multiple_run_dirs)
-
-        # Concurrency is swept (2, 4, 8)
-        concurrencies = [r.metadata.concurrency for r in runs]
-        assert set(concurrencies) == {2, 4, 8}
-
-        # Check that swept_params are populated
-        for run in runs:
-            assert "loadgen.concurrency" in run.metadata.swept_params
-
     def test_load_empty_list_raises_error(self) -> None:
         """Test that empty run list raises error."""
         loader = DataLoader()
@@ -152,13 +139,22 @@ class TestDataLoaderLoadJsonl:
         loader = DataLoader()
         jsonl_path = tmp_path / "corrupted.jsonl"
 
-        # Write JSONL with one good line and one bad line
+        # Write JSONL with two good lines and one bad line
         with open(jsonl_path, "w") as f:
             f.write(
                 json.dumps(
                     {
-                        "metadata": {"session_num": 0},
-                        "metrics": {"time_to_first_token": {"value": 45.0}},
+                        "metadata": {
+                            "session_num": 0,
+                            "request_start_ns": 1000000000,
+                            "request_end_ns": 1500000000,
+                            "worker_id": "worker-0",
+                            "record_processor_id": "processor-0",
+                            "benchmark_phase": "profiling",
+                        },
+                        "metrics": {
+                            "time_to_first_token": {"value": 45.0, "unit": "ms"}
+                        },
                     }
                 )
                 + "\n"
@@ -167,8 +163,17 @@ class TestDataLoaderLoadJsonl:
             f.write(
                 json.dumps(
                     {
-                        "metadata": {"session_num": 1},
-                        "metrics": {"time_to_first_token": {"value": 50.0}},
+                        "metadata": {
+                            "session_num": 1,
+                            "request_start_ns": 2000000000,
+                            "request_end_ns": 2500000000,
+                            "worker_id": "worker-0",
+                            "record_processor_id": "processor-0",
+                            "benchmark_phase": "profiling",
+                        },
+                        "metrics": {
+                            "time_to_first_token": {"value": 50.0, "unit": "ms"}
+                        },
                     }
                 )
                 + "\n"
@@ -246,88 +251,6 @@ class TestDataLoaderComputeInterChunkLatencyStats:
         assert jittery_stats["inter_chunk_latency_std"] > 0.0
         assert jittery_stats["inter_chunk_latency_range"] == 40.0
         assert jittery_stats["inter_chunk_latency_max"] == 50.0
-
-
-class TestDataLoaderFlattenJsonlRecord:
-    """Tests for DataLoader._flatten_jsonl_record method."""
-
-    def test_flatten_complete_record(self) -> None:
-        """Test flattening a complete JSONL record."""
-        loader = DataLoader()
-        record = {
-            "metadata": {"session_num": 0, "x_request_id": "req-1"},
-            "metrics": {
-                "time_to_first_token": {"value": 45.5, "unit": "ms"},
-                "output_sequence_length": {"value": 100, "unit": "tokens"},
-            },
-            "error": None,
-        }
-
-        flat = loader._flatten_jsonl_record(record)
-
-        assert flat["session_num"] == 0
-        assert flat["x_request_id"] == "req-1"
-        assert flat["time_to_first_token"] == 45.5
-        assert flat["output_sequence_length"] == 100
-        assert flat["error"] is None
-
-    def test_flatten_computes_inter_chunk_latency_statistics(self) -> None:
-        """Test that inter_chunk_latency array is converted to statistics."""
-        loader = DataLoader()
-        record = {
-            "metadata": {"session_num": 0},
-            "metrics": {
-                "inter_chunk_latency": {
-                    "value": [10.0, 20.0, 30.0, 40.0, 50.0],
-                    "unit": "ms",
-                },
-                "time_to_first_token": {"value": 45.5, "unit": "ms"},
-            },
-        }
-
-        flat = loader._flatten_jsonl_record(record)
-
-        # Raw array should not be present
-        assert "inter_chunk_latency" not in flat
-        # But statistics should be computed
-        assert "inter_chunk_latency_avg" in flat
-        assert "inter_chunk_latency_p50" in flat
-        assert "inter_chunk_latency_p95" in flat
-        assert "inter_chunk_latency_std" in flat
-        assert "inter_chunk_latency_min" in flat
-        assert "inter_chunk_latency_max" in flat
-        assert "inter_chunk_latency_range" in flat
-
-        # Verify values are correct
-        assert flat["inter_chunk_latency_avg"] == 30.0
-        assert flat["inter_chunk_latency_p50"] == 30.0
-        assert flat["inter_chunk_latency_min"] == 10.0
-        assert flat["inter_chunk_latency_max"] == 50.0
-        assert flat["inter_chunk_latency_range"] == 40.0
-
-        # Other metrics should still be present
-        assert "time_to_first_token" in flat
-
-    def test_flatten_inter_chunk_latency_empty_array(self) -> None:
-        """Test that empty inter_chunk_latency array is handled gracefully."""
-        loader = DataLoader()
-        record = {
-            "metadata": {"session_num": 0},
-            "metrics": {
-                "inter_chunk_latency": {
-                    "value": [],
-                    "unit": "ms",
-                },
-                "time_to_first_token": {"value": 45.5, "unit": "ms"},
-            },
-        }
-
-        flat = loader._flatten_jsonl_record(record)
-
-        # No statistics should be added for empty array
-        assert "inter_chunk_latency_avg" not in flat
-        assert "inter_chunk_latency_p50" not in flat
-        assert "time_to_first_token" in flat
 
 
 class TestDataLoaderLoadAggregatedJson:
@@ -426,111 +349,6 @@ class TestDataLoaderExtractMetadata:
         assert metadata.concurrency is None
 
 
-class TestDataLoaderDetectSweptParameters:
-    """Tests for DataLoader._detect_swept_parameters method."""
-
-    def test_detect_single_swept_parameter(self) -> None:
-        """Test detection of a single swept parameter."""
-        loader = DataLoader()
-
-        # Create runs with different concurrency
-        runs = [
-            RunData(
-                metadata=RunMetadata(run_name=f"run{i}", run_path=Path(f"run{i}")),
-                requests=pd.DataFrame(),
-                aggregated={"input_config": {"loadgen": {"concurrency": conc}}},
-            )
-            for i, conc in enumerate([2, 4, 8])
-        ]
-
-        swept = loader._detect_swept_parameters(runs)
-
-        assert "loadgen.concurrency" in swept
-        assert len(swept["loadgen.concurrency"]) == 3
-
-    def test_detect_multiple_swept_parameters(self) -> None:
-        """Test detection of multiple swept parameters."""
-        loader = DataLoader()
-
-        runs = [
-            RunData(
-                metadata=RunMetadata(run_name=f"run{i}", run_path=Path(f"run{i}")),
-                requests=pd.DataFrame(),
-                aggregated={
-                    "input_config": {
-                        "loadgen": {"concurrency": conc},
-                        "endpoint": {"model_names": [model]},
-                    }
-                },
-            )
-            for i, (conc, model) in enumerate([(2, "model-a"), (4, "model-b")])
-        ]
-
-        swept = loader._detect_swept_parameters(runs)
-
-        assert "loadgen.concurrency" in swept
-        assert "endpoint.model_names" in swept
-
-    def test_no_swept_parameters_single_run(self) -> None:
-        """Test that single run has no swept parameters."""
-        loader = DataLoader()
-
-        runs = [
-            RunData(
-                metadata=RunMetadata(run_name="run1", run_path=Path("run1")),
-                requests=pd.DataFrame(),
-                aggregated={"input_config": {"loadgen": {"concurrency": 4}}},
-            )
-        ]
-
-        swept = loader._detect_swept_parameters(runs)
-        assert swept == {}
-
-    def test_no_swept_parameters_identical_runs(self) -> None:
-        """Test that identical runs have no swept parameters."""
-        loader = DataLoader()
-
-        runs = [
-            RunData(
-                metadata=RunMetadata(run_name=f"run{i}", run_path=Path(f"run{i}")),
-                requests=pd.DataFrame(),
-                aggregated={"input_config": {"loadgen": {"concurrency": 4}}},
-            )
-            for i in range(3)
-        ]
-
-        swept = loader._detect_swept_parameters(runs)
-        assert swept == {}
-
-
-class TestDataLoaderFlattenConfig:
-    """Tests for DataLoader._flatten_config method."""
-
-    def test_flatten_nested_config(self) -> None:
-        """Test flattening nested configuration."""
-        loader = DataLoader()
-        config = {
-            "loadgen": {"concurrency": 4, "request_count": 100},
-            "endpoint": {"model_names": ["test-model"], "type": "chat"},
-        }
-
-        flat = loader._flatten_config(config)
-
-        assert flat["loadgen.concurrency"] == 4
-        assert flat["loadgen.request_count"] == 100
-        assert flat["endpoint.model_names"] == ["test-model"]
-        assert flat["endpoint.type"] == "chat"
-
-    def test_flatten_deeply_nested_config(self) -> None:
-        """Test flattening deeply nested configuration."""
-        loader = DataLoader()
-        config = {"a": {"b": {"c": {"d": "value"}}}}
-
-        flat = loader._flatten_config(config)
-
-        assert flat["a.b.c.d"] == "value"
-
-
 class TestDataLoaderReloadWithDetails:
     """Tests for DataLoader.reload_with_details method."""
 
@@ -594,60 +412,6 @@ class TestDataLoaderLoadPerRequestData:
         loader = DataLoader()
         with pytest.raises(DataLoadError, match="Required JSONL file not found"):
             loader.load_run(run_dir, load_per_request_data=False)
-
-
-class TestDataLoaderExtractSweptParams:
-    """Tests for DataLoader._extract_swept_params method."""
-
-    def test_extract_swept_params_from_run(
-        self, sample_aggregated_data: dict[str, Any]
-    ) -> None:
-        """Test extracting swept parameter values from a run."""
-        loader = DataLoader()
-        run = RunData(
-            metadata=RunMetadata(
-                run_name="test_run",
-                run_path=Path("/test"),
-                model="test-model",
-                concurrency=4,
-                request_count=100,
-                duration_seconds=10.0,
-                endpoint_type="chat",
-                swept_params={},
-            ),
-            requests=None,
-            aggregated=sample_aggregated_data,
-        )
-
-        swept_params = {"loadgen.concurrency", "endpoint.model_names"}
-        result = loader._extract_swept_params(run, swept_params)
-
-        assert "loadgen.concurrency" in result
-        assert result["loadgen.concurrency"] == 4
-        assert "endpoint.model_names" in result
-
-    def test_extract_swept_params_missing_in_config(self) -> None:
-        """Test extracting swept params when config is missing."""
-        loader = DataLoader()
-        run = RunData(
-            metadata=RunMetadata(
-                run_name="test_run",
-                run_path=Path("/test"),
-                model=None,
-                concurrency=None,
-                request_count=None,
-                duration_seconds=None,
-                endpoint_type=None,
-                swept_params={},
-            ),
-            requests=None,
-            aggregated={},
-        )
-
-        swept_params = {"loadgen.concurrency": set([2, 4])}
-        result = loader._extract_swept_params(run, swept_params)
-
-        assert result == {}
 
 
 class TestDataLoaderDurationCalculation:
