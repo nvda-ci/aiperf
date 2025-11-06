@@ -73,3 +73,52 @@ class TestMultimodal:
         assert result.request_count == defaults.request_count
         assert result.has_input_images
         assert result.has_input_audio
+
+    async def test_image_batch_size(
+        self, cli: AIPerfCLI, aiperf_mock_server: AIPerfMockServer
+    ):
+        """Test that --batch-size-image produces correct number of images per turn."""
+        batch_size = 3
+        result = await cli.run(
+            f"""
+            aiperf profile \
+                --model {defaults.model} \
+                --url {aiperf_mock_server.url} \
+                --endpoint-type chat \
+                --request-count {defaults.request_count} \
+                --concurrency {defaults.concurrency} \
+                --image-width-mean 64 \
+                --image-height-mean 64 \
+                --batch-size-image {batch_size} \
+                --workers-max {defaults.workers_max} \
+                --ui {defaults.ui}
+            """
+        )
+        assert result.request_count == defaults.request_count
+        assert result.has_input_images
+
+        # Verify inputs.json contains the correct number of images per turn
+        assert result.inputs is not None, "inputs.json should exist"
+        assert result.inputs.data, "inputs.json should contain data"
+
+        for session in result.inputs.data:
+            assert session.payloads, "session should have payloads"
+            for payload in session.payloads:
+                # Check OpenAI message format
+                messages = payload.get("messages", [])
+                assert messages, "payload should have messages"
+
+                for message in messages:
+                    content = message.get("content", [])
+                    if isinstance(content, list):
+                        # Count image_url entries in the content array
+                        image_count = sum(
+                            1
+                            for item in content
+                            if isinstance(item, dict)
+                            and item.get("type") == "image_url"
+                        )
+                        # Each turn should have exactly batch_size images
+                        assert image_count == batch_size, (
+                            f"Expected {batch_size} images per turn, got {image_count}"
+                        )

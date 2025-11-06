@@ -191,3 +191,53 @@ class TestChatEndpoint:
         turns = [turn]
         with pytest.raises(ValueError):
             endpoint._create_messages(turns)
+
+    def test_format_payload_with_multiple_images_batch(
+        self, model_endpoint, sample_conversations
+    ):
+        """Test that image batch_size > 1 creates multiple image_url entries."""
+        endpoint = ChatEndpoint(model_endpoint)
+        turn = sample_conversations["session_1"].turns[0]
+        # Simulate batch_size=3 by adding 3 images to contents
+        turn.images = [
+            type(
+                "Image",
+                (),
+                {
+                    "contents": [
+                        "http://image.url/img1.png",
+                        "http://image.url/img2.png",
+                        "http://image.url/img3.png",
+                    ]
+                },
+            )()
+        ]
+        turns = [turn]
+        request_info = RequestInfo(model_endpoint=model_endpoint, turns=turns)
+        payload = endpoint.format_payload(request_info)
+
+        expected_payload = {
+            "messages": [
+                {
+                    "role": turn.role or "user",
+                    "content": [
+                        {"type": "text", "text": "Hello, world!"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "http://image.url/img1.png"},
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "http://image.url/img2.png"},
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "http://image.url/img3.png"},
+                        },
+                    ],
+                }
+            ],
+            "model": "test-model",
+            "stream": False,
+        }
+        assert payload == expected_payload
