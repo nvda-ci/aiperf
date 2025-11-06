@@ -19,6 +19,9 @@ from aiperf.endpoints.huggingface_generate import (
 from aiperf.endpoints.nim_rankings import (
     NIMRankingsEndpoint,
 )
+from aiperf.endpoints.ollama_generate import (
+    OllamaGenerateEndpoint,
+)
 from aiperf.endpoints.openai_chat import (
     ChatEndpoint,
 )
@@ -45,6 +48,7 @@ __all__ = [
     "HFTeiRankingsEndpoint",
     "HuggingFaceGenerateEndpoint",
     "NIMRankingsEndpoint",
+    "OllamaGenerateEndpoint",
     "SolidoEndpoint",
     "TemplateEndpoint",
 ]
