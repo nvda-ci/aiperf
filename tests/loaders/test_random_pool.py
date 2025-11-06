@@ -232,14 +232,16 @@ class TestRandomPoolDatasetLoader:
         assert len(conversations[0].turns) == 1
         assert conversations[0].turns[0].texts[0].contents == ["Hello world"]
 
-    def test_convert_multimodal_pool_data(self, default_user_config):
+    def test_convert_multimodal_pool_data(self, create_test_image, default_user_config):
         """Test converting multimodal random pool data."""
+        test_image = create_test_image("test_image.jpg")
+
         data = {
             "multimodal.jsonl": [
                 RandomPool(
                     text="What's in this image?",
-                    image="/path/to/image.png",
-                    audio="/path/to/audio.wav",
+                    image=test_image,
+                    audio="https://example.com/audio.wav",
                 )
             ]
         }
@@ -254,17 +256,19 @@ class TestRandomPoolDatasetLoader:
         assert len(turn.texts) == 1
         assert turn.texts[0].contents == ["What's in this image?"]
         assert len(turn.images) == 1
-        assert turn.images[0].contents == ["/path/to/image.png"]
+        # Image should be base64 encoded
+        assert turn.images[0].contents[0].startswith("data:image/")
+        assert ";base64," in turn.images[0].contents[0]
         assert len(turn.audios) == 1
-        assert turn.audios[0].contents == ["/path/to/audio.wav"]
+        assert turn.audios[0].contents == ["https://example.com/audio.wav"]
 
-    def test_convert_batched_pool_data(self, default_user_config):
+    def test_convert_batched_pool_data(self, test_images, default_user_config):
         """Test converting pool data with batched content."""
         data = {
             "batched.jsonl": [
                 RandomPool(
                     texts=["First question", "Second question"],
-                    images=["/image1.png", "/image2.png"],
+                    images=[test_images["image1.jpg"], test_images["image2.jpg"]],
                 )
             ]
         }
@@ -279,7 +283,11 @@ class TestRandomPoolDatasetLoader:
         assert len(turn.texts) == 1
         assert turn.texts[0].contents == ["First question", "Second question"]
         assert len(turn.images) == 1
-        assert turn.images[0].contents == ["/image1.png", "/image2.png"]
+        # Both images should be base64 encoded
+        assert len(turn.images[0].contents) == 2
+        for img_content in turn.images[0].contents:
+            assert img_content.startswith("data:image/")
+            assert ";base64," in img_content
 
     def test_convert_multiple_files_no_name_specified(self, default_user_config):
         """Test converting data from multiple files without name specified."""
@@ -334,16 +342,18 @@ class TestRandomPoolDatasetLoader:
         assert turn.texts[1].name == "def456"  # uses name from Text object
         assert turn.texts[1].contents == ["AI is artificial intelligence"]
 
-    def test_convert_multiple_files_with_multiple_samples(self, default_user_config):
+    def test_convert_multiple_files_with_multiple_samples(
+        self, test_images, default_user_config
+    ):
         """Test converting data from multiple files with multiple samples."""
         data = {
             "queries.jsonl": [
-                RandomPool(text="text1", image="image1.png"),
-                RandomPool(text="text2", image="image2.png"),
+                RandomPool(text="text1", image=test_images["image1.jpg"]),
+                RandomPool(text="text2", image=test_images["image2.jpg"]),
             ],
             "contexts.jsonl": [
-                RandomPool(text="text3", image="image3.png"),
-                RandomPool(text="text4", image="image4.png"),
+                RandomPool(text="text3", image=test_images["image3.jpg"]),
+                RandomPool(text="text4", image=test_images["image4.jpg"]),
             ],
         }
 
@@ -373,19 +383,17 @@ class TestRandomPoolDatasetLoader:
             ("text2", "text3"),
             ("text2", "text4"),
         }
-        possible_image_contents = {
-            ("image1.png", "image3.png"),
-            ("image1.png", "image4.png"),
-            ("image2.png", "image3.png"),
-            ("image2.png", "image4.png"),
-        }
 
         text_contents = tuple(t.contents[0] for t in turn1.texts)
-        image_contents = tuple(i.contents[0] for i in turn1.images)
         assert text_contents in possible_text_contents
-        assert image_contents in possible_image_contents
+        # Images should be base64 encoded
+        for img in turn1.images:
+            assert img.contents[0].startswith("data:image/")
+            assert ";base64," in img.contents[0]
 
         text_contents = tuple(t.contents[0] for t in turn2.texts)
-        image_contents = tuple(i.contents[0] for i in turn2.images)
         assert text_contents in possible_text_contents
-        assert image_contents in possible_image_contents
+        # Images should be base64 encoded
+        for img in turn2.images:
+            assert img.contents[0].startswith("data:image/")
+            assert ";base64," in img.contents[0]

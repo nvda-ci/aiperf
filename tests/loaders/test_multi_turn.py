@@ -485,15 +485,17 @@ class TestMultiTurnDatasetLoaderConvertToConversations:
         assert conversation.turns[0].texts[0].contents == ["First"]
         assert conversation.turns[1].texts[0].contents == ["Second"]
 
-    def test_convert_multimodal_multi_turn_data(self, default_user_config):
+    def test_convert_multimodal_multi_turn_data(self, test_images, default_user_config):
         """Test converting multimodal multi-turn data."""
         data = {
             "session_1": [
                 MultiTurn(
                     session_id="session_1",
                     turns=[
-                        SingleTurn(text="What's this?", image="image1.png"),
-                        SingleTurn(text="Follow up", image="image2.png"),
+                        SingleTurn(
+                            text="What's this?", image=test_images["image1.jpg"]
+                        ),
+                        SingleTurn(text="Follow up", image=test_images["image2.jpg"]),
                     ],
                 )
             ]
@@ -508,15 +510,19 @@ class TestMultiTurnDatasetLoaderConvertToConversations:
         conversation = conversations[0]
         assert len(conversation.turns) == 2
 
-        # First turn
+        # First turn - image should be base64 encoded
         first_turn = conversation.turns[0]
         assert first_turn.texts[0].contents == ["What's this?"]
-        assert first_turn.images[0].contents == ["image1.png"]
+        assert len(first_turn.images[0].contents) == 1
+        assert first_turn.images[0].contents[0].startswith("data:image/")
+        assert ";base64," in first_turn.images[0].contents[0]
 
-        # Second turn
+        # Second turn - image should be base64 encoded
         second_turn = conversation.turns[1]
         assert second_turn.texts[0].contents == ["Follow up"]
-        assert second_turn.images[0].contents == ["image2.png"]
+        assert len(second_turn.images[0].contents) == 1
+        assert second_turn.images[0].contents[0].startswith("data:image/")
+        assert ";base64," in second_turn.images[0].contents[0]
 
     def test_convert_structured_objects_in_turns(self, default_user_config):
         """Test converting MultiTurn with structured Text objects."""

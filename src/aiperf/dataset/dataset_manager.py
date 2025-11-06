@@ -14,6 +14,7 @@ from aiperf.common.enums import (
     CommAddress,
     CommandType,
     ComposerType,
+    CustomDatasetType,
     MessageType,
     ServiceType,
 )
@@ -21,6 +22,7 @@ from aiperf.common.environment import Environment
 from aiperf.common.factories import (
     ComposerFactory,
     DatasetSamplingStrategyFactory,
+    EndpointFactory,
     ServiceFactory,
 )
 from aiperf.common.hooks import on_command, on_request
@@ -82,11 +84,21 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
     ) -> None:
         """Configure the dataset."""
 
-        self.info("Configuring tokenizer(s) for dataset manager")
-        begin = time.perf_counter()
-        await self._configure_tokenizer()
-        duration = time.perf_counter() - begin
-        self.info(lambda: f"Tokenizer(s) configured in {duration:.2f} seconds")
+        endpoint_meta = EndpointFactory.get_metadata(self.user_config.endpoint.type)
+        if (
+            endpoint_meta.tokenizes_input
+            or self.user_config.input.custom_dataset_type
+            == CustomDatasetType.MOONCAKE_TRACE
+        ):
+            self.info("Configuring tokenizer(s) for dataset manager")
+            begin = time.perf_counter()
+            await self._configure_tokenizer()
+            duration = time.perf_counter() - begin
+            self.info(lambda: f"Tokenizer(s) configured in {duration:.2f} seconds")
+        else:
+            self.info(
+                "Endpoint does not tokenize input, skipping tokenizer configuration"
+            )
 
         self.info(lambda: f"Configuring dataset for {self.service_id}")
         begin = time.perf_counter()

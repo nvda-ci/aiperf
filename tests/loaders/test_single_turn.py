@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 import json
+from pathlib import Path
 
 import pytest
 
@@ -329,8 +331,8 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
             "session_1": [
                 SingleTurn(
                     text="What's in this image?",
-                    image="/path/to/image.png",
-                    audio="/path/to/audio.wav",
+                    image="https://example.com/image.png",
+                    audio="https://example.com/audio.wav",
                 )
             ]
         }
@@ -342,9 +344,9 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert len(turn.texts) == 1
         assert turn.texts[0].contents == ["What's in this image?"]
         assert len(turn.images) == 1
-        assert turn.images[0].contents == ["/path/to/image.png"]
+        assert turn.images[0].contents == ["https://example.com/image.png"]
         assert len(turn.audios) == 1
-        assert turn.audios[0].contents == ["/path/to/audio.wav"]
+        assert turn.audios[0].contents == ["https://example.com/audio.wav"]
 
     def test_convert_batched_data(self, default_user_config):
         """Test converting batched data to conversations."""
@@ -355,7 +357,7 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
             "session_1": [
                 SingleTurn(
                     texts=["First message", "Second message"],
-                    images=["/path/1.png", "/path/2.png"],
+                    images=["https://example.com/1.png", "https://example.com/2.png"],
                 )
             ]
         }
@@ -367,7 +369,10 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert len(turn.texts) == 1
         assert turn.texts[0].contents == ["First message", "Second message"]
         assert len(turn.images) == 1
-        assert turn.images[0].contents == ["/path/1.png", "/path/2.png"]
+        assert turn.images[0].contents == [
+            "https://example.com/1.png",
+            "https://example.com/2.png",
+        ]
 
     def test_convert_with_timing_data(self, default_user_config):
         """Test converting data with timestamp and delay."""
@@ -416,3 +421,315 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert turn.texts[0].contents == ["What is AI?"]
         assert turn.texts[1].name == "context"
         assert turn.texts[1].contents == ["AI stands for artificial intelligence"]
+
+
+class TestSingleTurnDatasetLoaderImageEncoding:
+    """Test base64 encoding for local image files."""
+
+    def test_convert_local_image_to_base64(self, create_jsonl_file):
+        """Test that local image files are encoded to base64 data URLs."""
+        # Use an actual test image from the source_images directory
+        test_image = Path(
+            "src/aiperf/dataset/generator/assets/source_images/0bfd8fdf-457f-43c8-9253-a2346d37d26a_1024.jpg"
+        )
+
+        # Skip if the image doesn't exist
+        if not test_image.exists():
+            pytest.skip("Test image not found")
+
+        content = [
+            json.dumps({"text": "What is in this image?", "image": str(test_image)})
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Check that the image was encoded
+        assert len(turn.images) == 1
+        image_content = turn.images[0].contents[0]
+
+        # Verify it's a data URL with base64 encoding
+        assert image_content.startswith("data:image/")
+        assert ";base64," in image_content
+
+        # Extract and verify the base64 content is valid
+        base64_part = image_content.split(";base64,")[1]
+        try:
+            base64.b64decode(base64_part)
+        except Exception as e:
+            pytest.fail(f"Invalid base64 encoding: {e}")
+
+    def test_url_images_not_encoded(self, create_jsonl_file):
+        """Test that URLs are not encoded and passed through as-is."""
+        content = [
+            json.dumps(
+                {"text": "What is this?", "image": "https://example.com/image.png"}
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # URL should remain unchanged
+        assert turn.images[0].contents[0] == "https://example.com/image.png"
+
+    def test_data_url_not_reencoded(self, create_jsonl_file):
+        """Test that existing data URLs are not re-encoded."""
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        content = [json.dumps({"text": "Already encoded", "image": data_url})]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Data URL should remain unchanged
+        assert turn.images[0].contents[0] == data_url
+
+    def test_multiple_images_encoded(self, create_jsonl_file):
+        """Test that multiple local images are all encoded."""
+        test_images = [
+            Path(
+                "src/aiperf/dataset/generator/assets/source_images/0bfd8fdf-457f-43c8-9253-a2346d37d26a_1024.jpg"
+            ),
+            Path(
+                "src/aiperf/dataset/generator/assets/source_images/119544eb-9bbf-47d1-8d93-a51de6370295_861.jpg"
+            ),
+        ]
+
+        # Skip if images don't exist
+        for img in test_images:
+            if not img.exists():
+                pytest.skip("Test images not found")
+
+        content = [
+            json.dumps(
+                {
+                    "text": "What are in these images?",
+                    "images": [str(img) for img in test_images],
+                }
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Check that both images were encoded
+        assert len(turn.images) == 1
+        assert len(turn.images[0].contents) == 2
+
+        for image_content in turn.images[0].contents:
+            assert image_content.startswith("data:image/")
+            assert ";base64," in image_content
+
+    def test_mixed_image_sources(self, create_jsonl_file):
+        """Test handling mixed image sources (local files, URLs, data URLs)."""
+        test_image = Path(
+            "src/aiperf/dataset/generator/assets/source_images/0bfd8fdf-457f-43c8-9253-a2346d37d26a_1024.jpg"
+        )
+
+        if not test_image.exists():
+            pytest.skip("Test image not found")
+
+        url = "https://example.com/image.png"
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+        content = [
+            json.dumps(
+                {"text": "Mixed sources", "images": [str(test_image), url, data_url]}
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Check that we have 3 images
+        assert len(turn.images) == 1
+        assert len(turn.images[0].contents) == 3
+
+        # First one (local file) should be encoded
+        assert turn.images[0].contents[0].startswith("data:image/")
+        assert ";base64," in turn.images[0].contents[0]
+
+        # Second one (URL) should be unchanged
+        assert turn.images[0].contents[1] == url
+
+        # Third one (data URL) should be unchanged
+        assert turn.images[0].contents[2] == data_url
+
+    def test_invalid_image_path_raises_error(self, create_jsonl_file):
+        """Test that invalid local file paths raise appropriate errors."""
+        content = [
+            json.dumps(
+                {"text": "Invalid image", "image": "/nonexistent/path/image.png"}
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+
+        # The error should be raised during conversion
+        with pytest.raises(FileNotFoundError):
+            loader.convert_to_conversations(data)
+
+
+class TestSingleTurnDatasetLoaderAudioEncoding:
+    """Test base64 encoding for local audio files."""
+
+    def test_convert_local_audio_to_base64(self, create_jsonl_file, create_test_audio):
+        """Test that local audio files are encoded to format,base64 strings."""
+        test_audio = create_test_audio("test_audio.wav")
+
+        content = [json.dumps({"text": "Transcribe this audio", "audio": test_audio})]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Check that the audio was encoded
+        assert len(turn.audios) == 1
+        audio_content = turn.audios[0].contents[0]
+
+        # Verify it's in "format,base64" format
+        assert "," in audio_content
+        format_part, base64_part = audio_content.split(",", 1)
+        assert format_part == "wav"
+
+        # Verify the base64 content is valid
+        try:
+            base64.b64decode(base64_part)
+        except Exception as e:
+            pytest.fail(f"Invalid base64 encoding: {e}")
+
+    def test_audio_url_not_encoded(self, create_jsonl_file):
+        """Test that audio URLs are not encoded and passed through as-is."""
+        content = [
+            json.dumps(
+                {"text": "Audio from URL", "audio": "https://example.com/audio.wav"}
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # URL should remain unchanged
+        assert turn.audios[0].contents[0] == "https://example.com/audio.wav"
+
+    def test_audio_already_encoded_not_reencoded(self, create_jsonl_file):
+        """Test that existing format,base64 audio strings are not re-encoded."""
+        encoded_audio = "wav,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        content = [json.dumps({"text": "Already encoded", "audio": encoded_audio})]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Should remain unchanged
+        assert turn.audios[0].contents[0] == encoded_audio
+
+
+class TestSingleTurnDatasetLoaderVideoEncoding:
+    """Test base64 encoding for local video files."""
+
+    def test_convert_local_video_to_base64(self, create_jsonl_file, create_test_video):
+        """Test that local video files are encoded to data URL format."""
+        test_video = create_test_video("test_video.mp4")
+
+        content = [json.dumps({"text": "Describe this video", "video": test_video})]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Check that the video was encoded
+        assert len(turn.videos) == 1
+        video_content = turn.videos[0].contents[0]
+
+        # Verify it's a data URL with base64 encoding
+        assert video_content.startswith("data:video/")
+        assert ";base64," in video_content
+
+        # Extract and verify the base64 content is valid
+        base64_part = video_content.split(";base64,")[1]
+        try:
+            base64.b64decode(base64_part)
+        except Exception as e:
+            pytest.fail(f"Invalid base64 encoding: {e}")
+
+    def test_video_url_not_encoded(self, create_jsonl_file):
+        """Test that video URLs are not encoded and passed through as-is."""
+        content = [
+            json.dumps(
+                {"text": "Video from URL", "video": "https://example.com/video.mp4"}
+            )
+        ]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # URL should remain unchanged
+        assert turn.videos[0].contents[0] == "https://example.com/video.mp4"
+
+    def test_video_data_url_not_reencoded(self, create_jsonl_file):
+        """Test that existing data URL videos are not re-encoded."""
+        data_url = (
+            "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMQAAAAAABW1kYXQ="
+        )
+        content = [json.dumps({"text": "Already encoded", "video": data_url})]
+        filename = create_jsonl_file(content)
+
+        loader = SingleTurnDatasetLoader(filename)
+        data = loader.load_dataset()
+        conversations = loader.convert_to_conversations(data)
+
+        assert len(conversations) == 1
+        turn = conversations[0].turns[0]
+
+        # Data URL should remain unchanged
+        assert turn.videos[0].contents[0] == data_url

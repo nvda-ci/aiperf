@@ -14,7 +14,6 @@ from aiperf.common.protocols import EndpointProtocol
 from aiperf.common.tokenizer import Tokenizer
 
 
-# TODO: Should we create non-tokenizer based parsers?
 class InferenceResultParser(CommunicationMixin):
     """InferenceResultParser is responsible for parsing the inference results."""
 
@@ -47,8 +46,15 @@ class InferenceResultParser(CommunicationMixin):
         """Initialize inference result parser-specific components."""
         self.debug("Initializing inference result parser")
 
-    async def configure(self) -> None:
+    async def _configure_tokenizers(self) -> None:
         """Configure the tokenizers."""
+        endpoint_meta = self.endpoint.metadata()
+        if not endpoint_meta.tokenizes_input and not endpoint_meta.produces_tokens:
+            self.info(
+                "Endpoint does not tokenize input or produce tokens, skipping tokenizer configuration"
+            )
+            return
+
         self.info("Configuring tokenizers for inference result parser")
         begin = time.perf_counter()
         async with self.tokenizer_lock:
@@ -93,14 +99,17 @@ class InferenceResultParser(CommunicationMixin):
         # Make sure any invalid request records are converted to error records for combined processing.
         request_record.create_error_from_invalid()
 
-        if request_record.has_error:
-            # Even for error records, compute input token count if possible
-            try:
+        try:
+            if self.endpoint.metadata().tokenizes_input:
                 input_token_count = await self.compute_input_token_count(request_record)
-            except Exception as e:
-                self.warning(f"Error computing input token count for error record: {e}")
+            else:
                 input_token_count = None
+        except Exception as e:
+            self.warning(f"Error computing input token count: {e!r}")
+            input_token_count = None
 
+        if request_record.has_error:
+            # Even for error records, we still store the input token count if possible.
             return ParsedResponseRecord(
                 request=request_record,
                 responses=[],
@@ -109,7 +118,9 @@ class InferenceResultParser(CommunicationMixin):
 
         else:
             try:
-                record = await self.process_valid_record(request_record)
+                record = await self.process_valid_record(
+                    request_record, input_token_count
+                )
                 self.debug(
                     lambda: f"Received {len(record.request.responses)} responses, input_token_count: {record.input_token_count}, "
                     f"output_token_count: {record.output_token_count}, reasoning_token_count: {record.reasoning_token_count}"
@@ -120,13 +131,6 @@ class InferenceResultParser(CommunicationMixin):
                 self.exception(f"Error processing valid record: {e}")
                 request_record.error = ErrorDetails.from_exception(e)
 
-                try:
-                    input_token_count = await self.compute_input_token_count(
-                        request_record
-                    )
-                except Exception:
-                    input_token_count = None
-
                 return ParsedResponseRecord(
                     request=request_record,
                     responses=[],
@@ -134,7 +138,7 @@ class InferenceResultParser(CommunicationMixin):
                 )
 
     async def process_valid_record(
-        self, request_record: RequestRecord
+        self, request_record: RequestRecord, input_token_count: int | None
     ) -> ParsedResponseRecord:
         """Process a valid request record."""
         if request_record.model_name is None:
@@ -144,12 +148,11 @@ class InferenceResultParser(CommunicationMixin):
             return ParsedResponseRecord(
                 request=request_record,
                 responses=[],
-                input_token_count=None,
+                input_token_count=input_token_count,
                 output_token_count=None,
             )
 
         resp = self.endpoint.extract_response_data(request_record)
-        input_token_count = await self.compute_input_token_count(request_record)
 
         output_texts: list[str] = []
         reasoning_texts: list[str] = []
@@ -164,13 +167,19 @@ class InferenceResultParser(CommunicationMixin):
             else:
                 output_texts.append(response.data.get_text())
 
-        tokenizer = await self.get_tokenizer(request_record.model_name)
-        output_token_count = (
-            len(tokenizer.encode("".join(output_texts))) if output_texts else None
-        )
-        reasoning_token_count = (
-            len(tokenizer.encode("".join(reasoning_texts))) if reasoning_texts else None
-        )
+        if self.endpoint.metadata().produces_tokens:
+            tokenizer = await self.get_tokenizer(request_record.model_name)
+            output_token_count = (
+                len(tokenizer.encode("".join(output_texts))) if output_texts else None
+            )
+            reasoning_token_count = (
+                len(tokenizer.encode("".join(reasoning_texts)))
+                if reasoning_texts
+                else None
+            )
+        else:
+            output_token_count = None
+            reasoning_token_count = None
 
         return ParsedResponseRecord(
             request=request_record,

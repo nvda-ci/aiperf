@@ -173,6 +173,7 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
                         texts=media[MediaType.TEXT],
                         images=media[MediaType.IMAGE],
                         audios=media[MediaType.AUDIO],
+                        videos=media[MediaType.VIDEO],
                     )
                 )
             sampled_dataset[filename] = turns

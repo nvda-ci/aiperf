@@ -32,6 +32,7 @@ class EndpointType(CaseInsensitiveStrEnum):
     NIM_RANKINGS = "nim_rankings"
     SOLIDO_RAG = "solido_rag"
     TEMPLATE = "template"
+    IMAGE_RETRIEVAL = "image_retrieval"
 
 
 class TransportType(CaseInsensitiveStrEnum):

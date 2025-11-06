@@ -49,7 +49,7 @@ class PromptGenerator(BaseGenerator):
 
         # TODO: move this under initialize() method
         # Initialize corpus if not already done
-        if self._tokenized_corpus is None:
+        if self._tokenized_corpus is None and tokenizer:
             self._initialize_corpus()
 
         # Initialize prefix prompts pool if the pool size > 0

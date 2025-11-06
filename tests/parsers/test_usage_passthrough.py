@@ -98,7 +98,9 @@ class TestUsagePassthrough:
         ]
         parser.tokenizers = {"test-model": mock_tokenizer}
 
-        result = await parser.process_valid_record(create_test_record())
+        result = await parser.process_valid_record(
+            create_test_record(), input_token_count=10
+        )
 
         assert len(result.responses) == 1
         assert result.responses[0].usage.prompt_tokens == 10
@@ -126,7 +128,9 @@ class TestUsagePassthrough:
         ]
         parser.tokenizers = {"test-model": mock_tokenizer}
 
-        result = await parser.process_valid_record(create_test_record())
+        result = await parser.process_valid_record(
+            create_test_record(), input_token_count=10
+        )
 
         # Each response has cumulative values - parser doesn't aggregate
         assert len(result.responses) == 3
@@ -150,7 +154,9 @@ class TestUsagePassthrough:
         ]
         parser.tokenizers = {"test-model": mock_tokenizer}
 
-        result = await parser.process_valid_record(create_test_record())
+        result = await parser.process_valid_record(
+            create_test_record(), input_token_count=10
+        )
 
         assert result.responses[0].usage.reasoning_tokens == 50
 
@@ -206,7 +212,9 @@ class TestUsagePassthrough:
         parser.endpoint.extract_response_data.return_value = responses
         parser.tokenizers = {"test-model": mock_tokenizer}
 
-        result = await parser.process_valid_record(create_test_record())
+        result = await parser.process_valid_record(
+            create_test_record(), input_token_count=10
+        )
 
         assert len(result.responses) == len(expected_usage)
         for i, expected in enumerate(expected_usage):

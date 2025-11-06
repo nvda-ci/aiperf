@@ -116,6 +116,7 @@ class SingleTurnDatasetLoader(BaseLoader, MediaConversionMixin):
                         texts=media[MediaType.TEXT],
                         images=media[MediaType.IMAGE],
                         audios=media[MediaType.AUDIO],
+                        videos=media[MediaType.VIDEO],
                         timestamp=single_turn.timestamp,
                         delay=single_turn.delay,
                         role=single_turn.role,

@@ -113,7 +113,7 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
         self, message: ProfileConfigureCommand
     ) -> None:
         """Configure the tokenizers."""
-        await self.inference_result_parser.configure()
+        await self.inference_result_parser._configure_tokenizers()
 
     async def get_tokenizer(self, model: str) -> Tokenizer:
         """Get the tokenizer for a given model."""

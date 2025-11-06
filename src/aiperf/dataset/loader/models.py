@@ -6,7 +6,7 @@ from typing import Literal, TypeVar
 from pydantic import Field, model_validator
 
 from aiperf.common.enums import CustomDatasetType
-from aiperf.common.models import AIPerfBaseModel, Audio, Image, Text
+from aiperf.common.models import AIPerfBaseModel, Audio, Image, Text, Video
 
 
 class SingleTurn(AIPerfBaseModel):
@@ -16,7 +16,7 @@ class SingleTurn(AIPerfBaseModel):
     Each line in the file will be treated as a single turn conversation.
 
     The single turn type
-      - supports multi-modal (e.g. text, image, audio)
+      - supports multi-modal (e.g. text, image, audio, video)
       - supports client-side batching for each data (e.g. batch_size > 1)
       - DOES NOT support multi-turn features (e.g. session_id)
     """
@@ -39,6 +39,11 @@ class SingleTurn(AIPerfBaseModel):
         None,
         description="List of audio strings or Audio objects format",
     )
+    video: str | None = Field(None, description="Simple video string content")
+    videos: list[str] | list[Video] | None = Field(
+        None,
+        description="List of video strings or Video objects format",
+    )
     timestamp: int | None = Field(
         default=None, description="Timestamp of the turn in milliseconds."
     )
@@ -57,6 +62,8 @@ class SingleTurn(AIPerfBaseModel):
             raise ValueError("image and images cannot be set together")
         if self.audio and self.audios:
             raise ValueError("audio and audios cannot be set together")
+        if self.video and self.videos:
+            raise ValueError("video and videos cannot be set together")
         if self.timestamp and self.delay:
             raise ValueError("timestamp and delay cannot be set together")
         return self
@@ -65,7 +72,16 @@ class SingleTurn(AIPerfBaseModel):
     def validate_at_least_one_modality(self) -> "SingleTurn":
         """Ensure at least one modality is provided"""
         if not any(
-            [self.text, self.texts, self.image, self.images, self.audio, self.audios]
+            [
+                self.text,
+                self.texts,
+                self.image,
+                self.images,
+                self.audio,
+                self.audios,
+                self.video,
+                self.videos,
+            ]
         ):
             raise ValueError("At least one modality must be provided")
         return self
@@ -75,7 +91,7 @@ class MultiTurn(AIPerfBaseModel):
     """Defines the schema for multi-turn conversations.
 
     The multi-turn custom dataset
-      - supports multi-modal data (e.g. text, image, audio)
+      - supports multi-modal data (e.g. text, image, audio, video)
       - supports multi-turn features (e.g. delay, sessions, etc.)
       - supports client-side batching for each data (e.g. batch size > 1)
     """
@@ -101,7 +117,7 @@ class RandomPool(AIPerfBaseModel):
     """Defines the schema for random pool data entry.
 
     The random pool custom dataset
-      - supports multi-modal data (e.g. text, image, audio)
+      - supports multi-modal data (e.g. text, image, audio, video)
       - supports client-side batching for each data (e.g. batch size > 1)
       - supports named fields for each modality (e.g. text_field_a, text_field_b, etc.)
       - DOES NOT support multi-turn or its features (e.g. delay, sessions, etc.)
@@ -124,6 +140,11 @@ class RandomPool(AIPerfBaseModel):
         None,
         description="List of audio strings or Audio objects format",
     )
+    video: str | None = Field(None, description="Simple video string content")
+    videos: list[str] | list[Video] | None = Field(
+        None,
+        description="List of video strings or Video objects format",
+    )
 
     @model_validator(mode="after")
     def validate_mutually_exclusive_fields(self) -> "RandomPool":
@@ -134,13 +155,24 @@ class RandomPool(AIPerfBaseModel):
             raise ValueError("image and images cannot be set together")
         if self.audio and self.audios:
             raise ValueError("audio and audios cannot be set together")
+        if self.video and self.videos:
+            raise ValueError("video and videos cannot be set together")
         return self
 
     @model_validator(mode="after")
     def validate_at_least_one_modality(self) -> "RandomPool":
         """Ensure at least one modality is provided"""
         if not any(
-            [self.text, self.texts, self.image, self.images, self.audio, self.audios]
+            [
+                self.text,
+                self.texts,
+                self.image,
+                self.images,
+                self.audio,
+                self.audios,
+                self.video,
+                self.videos,
+            ]
         ):
             raise ValueError("At least one modality must be provided")
         return self
