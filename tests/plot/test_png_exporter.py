@@ -54,6 +54,8 @@ def sample_multi_run_data(tmp_path):
                     "unit": "tokens/s/user",
                 },
             },
+            timeslices=None,
+            slice_duration=None,
         ),
         RunData(
             metadata=RunMetadata(
@@ -73,6 +75,8 @@ def sample_multi_run_data(tmp_path):
                     "unit": "tokens/s/user",
                 },
             },
+            timeslices=None,
+            slice_duration=None,
         ),
     ]
 
@@ -102,6 +106,31 @@ def sample_single_run_data(tmp_path):
             "request_latency": {"p50": 200.0, "avg": 205.0, "unit": "ms"},
             "request_throughput": {"avg": 35.0, "unit": "req/s"},
         },
+        timeslices=None,
+    )
+
+
+@pytest.fixture
+def sample_timeslice_data():
+    """Create sample timeslice data for testing."""
+    return pd.DataFrame(
+        {
+            "Timeslice": [0, 0, 0, 1, 1, 1, 2, 2, 2],
+            "Metric": [
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+                "Time to First Token",
+            ],
+            "Unit": ["ms"] * 9,
+            "Stat": ["avg", "min", "max", "avg", "min", "max", "avg", "min", "max"],
+            "Value": [45.0, 30.0, 60.0, 47.0, 32.0, 65.0, 46.0, 31.0, 62.0],
+        }
     )
 
 
@@ -217,6 +246,8 @@ class TestMultiRunPNGExporter:
                         avg=25.0,
                     ),
                 },
+                timeslices=None,
+                slice_duration=None,
             )
         ]
 
@@ -258,6 +289,8 @@ class TestMultiRunPNGExporter:
                         "unit": "req/s",
                     },  # Dict fallback
                 },
+                timeslices=None,
+                slice_duration=None,
             )
         ]
 
@@ -351,6 +384,8 @@ class TestSingleRunPNGExporter:
             ),
             requests=None,  # No per-request data
             aggregated={},
+            timeslices=None,
+            slice_duration=None,
         )
 
         generated_files = single_run_exporter.export(run_data, sample_available_metrics)
@@ -400,6 +435,494 @@ class TestSingleRunPNGExporter:
         # Should use formatted metric tag as fallback
         assert "Unknown Metric" in label
 
+    def test_export_single_run_with_timeslice_data(
+        self,
+        single_run_exporter,
+        sample_single_run_data,
+        sample_timeslice_data,
+        sample_available_metrics,
+        tmp_path,
+    ):
+        """Test that timeslice plots are generated when timeslice data is available."""
+        # Add timeslice data to the run
+        run_with_timeslices = RunData(
+            metadata=sample_single_run_data.metadata,
+            requests=sample_single_run_data.requests,
+            aggregated=sample_single_run_data.aggregated,
+            timeslices=sample_timeslice_data,
+            slice_duration=10.0,
+        )
+
+        generated_files = single_run_exporter.export(
+            run_with_timeslices, sample_available_metrics
+        )
+
+        # Should generate 3 regular plots + 1 timeslice plot (only TTFT has data)
+        assert len(generated_files) == 4
+
+        # Check that timeslice plot is in the generated files
+        filenames = {f.name for f in generated_files}
+        assert "timeslices_ttft.png" in filenames
+
+        # Validate that the timeslice plot has correct annotations for slice labels
+        ttft_data = sample_timeslice_data[
+            sample_timeslice_data["Metric"] == "Time to First Token"
+        ]
+        unique_slices = ttft_data["Timeslice"].unique()
+
+        # Create a figure to test annotation content
+        plot_df = ttft_data[ttft_data["Stat"] == "avg"][["Timeslice", "Value"]]
+        plot_df = plot_df.rename(columns={"Value": "avg"})
+        fig = single_run_exporter.plot_generator.create_time_series_histogram(
+            df=plot_df,
+            x_col="Timeslice",
+            y_col="avg",
+            title="Test",
+            x_label="Time (s)",
+            y_label="TTFT (ms)",
+            slice_duration=10.0,
+        )
+
+        # Verify annotations exist
+        assert hasattr(fig.layout, "annotations"), "Figure should have annotations"
+        assert len(fig.layout.annotations) > 0, "Should have slice label annotations"
+
+        # Verify correct number of annotations (one per slice)
+        assert len(fig.layout.annotations) == len(unique_slices), (
+            f"Should have {len(unique_slices)} annotations"
+        )
+
+        # Verify annotation content (should be just numbers, not "Slice X")
+        annotation_texts = [ann.text for ann in fig.layout.annotations]
+        for slice_idx in unique_slices:
+            expected_text = str(int(slice_idx))
+            assert expected_text in annotation_texts, (
+                f"Should have annotation '{expected_text}'"
+            )
+
+        # Verify annotation positioning (should be at top of bars)
+        for ann in fig.layout.annotations:
+            assert ann.yref == "y", "Annotations should use data coordinates"
+            assert ann.y > 0, "Annotations should be at bar height (> 0)"
+            assert hasattr(ann, "yshift"), "Annotations should have yshift"
+            assert ann.yshift > 0, "Annotations should be shifted up above bar"
+
+        # Verify legend exists with slice explanation
+        assert fig.layout.showlegend is True, "Legend should be shown"
+        legend_names = [trace.name for trace in fig.data if trace.showlegend]
+        assert any(
+            "bar numbers" in name.lower() and "slice index" in name.lower()
+            for name in legend_names
+        ), "Legend should explain bar numbers and slice index"
+
+    def test_timeslices_plot_handles_missing_data_gracefully(
+        self,
+        single_run_exporter,
+        sample_single_run_data,
+        sample_available_metrics,
+    ):
+        """Test that missing timeslice data is handled gracefully."""
+        # Run without timeslice data (None)
+        generated_files = single_run_exporter.export(
+            sample_single_run_data, sample_available_metrics
+        )
+
+        # Should generate 3 plots without timeslice plots
+        assert len(generated_files) == 3
+
+        filenames = {f.name for f in generated_files}
+        assert "ttft_over_time.png" in filenames
+        assert "itl_over_time.png" in filenames
+        assert "latency_over_time.png" in filenames
+        # No timeslice plots
+        assert "timeslices_ttft.png" not in filenames
+
+    def test_uniform_requests_no_warning(
+        self,
+        single_run_exporter,
+        tmp_path,
+        sample_available_metrics,
+    ):
+        """Test that uniform requests (identical ISL/OSL) show no warning."""
+        per_request_data = pd.DataFrame(
+            {
+                "request_end_ns": [1000000000000 + i * 500000000 for i in range(10)],
+                "time_to_first_token": [45.0 + i * 2 for i in range(10)],
+                "inter_token_latency": [18.0 + i * 0.5 for i in range(10)],
+                "request_latency": [900.0 + i * 10 for i in range(10)],
+                "input_sequence_length": [100] * 10,
+                "output_sequence_length": [200] * 10,
+            }
+        )
+
+        timeslice_data = pd.DataFrame(
+            {
+                "Timeslice": [0, 0, 1, 1],
+                "Metric": ["Request Throughput", "Request Throughput"] * 2,
+                "Unit": ["req/s"] * 4,
+                "Stat": ["avg", "min", "avg", "min"],
+                "Value": [10.0, 8.0, 12.0, 9.0],
+            }
+        )
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="uniform_run",
+                run_path=tmp_path / "uniform_run",
+                model="Test",
+                concurrency=1,
+            ),
+            requests=per_request_data,
+            aggregated={},
+            timeslices=timeslice_data,
+            slice_duration=10.0,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is True
+        assert warning is None
+
+        generated_files = single_run_exporter.export(run_data, sample_available_metrics)
+        throughput_plot = [
+            f for f in generated_files if "timeslices_throughput" in f.name
+        ]
+        assert len(throughput_plot) == 1
+
+        fig = single_run_exporter.plot_generator.create_time_series_histogram(
+            df=timeslice_data[timeslice_data["Stat"] == "avg"][
+                ["Timeslice", "Value"]
+            ].rename(columns={"Value": "avg"}),
+            x_col="Timeslice",
+            y_col="avg",
+            title="Request Throughput Across Time Slices",
+            x_label="Time (s)",
+            y_label="Request Throughput (req/s)",
+            slice_duration=10.0,
+            warning_text=warning,
+        )
+
+        if hasattr(fig.layout, "annotations") and fig.layout.annotations:
+            for ann in fig.layout.annotations:
+                assert "varying ISL/OSL" not in ann.text
+
+    def test_non_uniform_isl_shows_warning(
+        self,
+        single_run_exporter,
+        tmp_path,
+        sample_available_metrics,
+    ):
+        """Test that non-uniform ISL (varying input lengths) shows warning."""
+        per_request_data = pd.DataFrame(
+            {
+                "request_end_ns": [1000000000000 + i * 500000000 for i in range(10)],
+                "time_to_first_token": [45.0 + i * 2 for i in range(10)],
+                "inter_token_latency": [18.0 + i * 0.5 for i in range(10)],
+                "request_latency": [900.0 + i * 10 for i in range(10)],
+                "input_sequence_length": [
+                    100,
+                    200,
+                    100,
+                    300,
+                    100,
+                    200,
+                    100,
+                    300,
+                    100,
+                    200,
+                ],
+                "output_sequence_length": [200] * 10,
+            }
+        )
+
+        timeslice_data = pd.DataFrame(
+            {
+                "Timeslice": [0, 0, 1, 1],
+                "Metric": ["Request Throughput", "Request Throughput"] * 2,
+                "Unit": ["req/s"] * 4,
+                "Stat": ["avg", "min", "avg", "min"],
+                "Value": [10.0, 8.0, 12.0, 9.0],
+            }
+        )
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="non_uniform_isl_run",
+                run_path=tmp_path / "non_uniform_isl_run",
+                model="Test",
+                concurrency=1,
+            ),
+            requests=per_request_data,
+            aggregated={},
+            timeslices=timeslice_data,
+            slice_duration=10.0,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is False
+        assert warning is not None
+        assert "varying ISL/OSL" in warning
+        assert (
+            "Req/sec throughput may not accurately represent workload capacity"
+            in warning
+        )
+
+        fig = single_run_exporter.plot_generator.create_time_series_histogram(
+            df=timeslice_data[timeslice_data["Stat"] == "avg"][
+                ["Timeslice", "Value"]
+            ].rename(columns={"Value": "avg"}),
+            x_col="Timeslice",
+            y_col="avg",
+            title="Request Throughput Across Time Slices",
+            x_label="Time (s)",
+            y_label="Request Throughput (req/s)",
+            slice_duration=10.0,
+            warning_text=warning,
+        )
+
+        assert hasattr(fig.layout, "annotations")
+        assert len(fig.layout.annotations) > 0
+
+        warning_annotations = [
+            ann for ann in fig.layout.annotations if "varying ISL/OSL" in ann.text
+        ]
+        assert len(warning_annotations) == 1
+
+        warning_ann = warning_annotations[0]
+        assert warning_ann.xref == "paper"
+        assert warning_ann.yref == "paper"
+        assert warning_ann.x == 0.5
+        assert (
+            warning_ann.y < 0
+        )  # Warning is below x-axis (negative y in paper coordinates)
+        assert warning_ann.y > -0.3  # But not too far below
+        assert warning_ann.xanchor == "center"
+        assert warning_ann.yanchor == "top"  # Top edge anchored to y position
+
+    def test_non_uniform_osl_shows_warning(
+        self,
+        single_run_exporter,
+        tmp_path,
+        sample_available_metrics,
+    ):
+        """Test that non-uniform OSL (varying output lengths) shows warning."""
+        per_request_data = pd.DataFrame(
+            {
+                "request_end_ns": [1000000000000 + i * 500000000 for i in range(10)],
+                "time_to_first_token": [45.0 + i * 2 for i in range(10)],
+                "inter_token_latency": [18.0 + i * 0.5 for i in range(10)],
+                "request_latency": [900.0 + i * 10 for i in range(10)],
+                "input_sequence_length": [100] * 10,
+                "output_sequence_length": [
+                    200,
+                    300,
+                    200,
+                    400,
+                    200,
+                    300,
+                    200,
+                    400,
+                    200,
+                    300,
+                ],
+            }
+        )
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="non_uniform_osl_run",
+                run_path=tmp_path / "non_uniform_osl_run",
+                model="Test",
+                concurrency=1,
+            ),
+            requests=per_request_data,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is False
+        assert warning is not None
+        assert "varying ISL/OSL" in warning
+
+    def test_warning_only_on_throughput_plot(
+        self,
+        single_run_exporter,
+        tmp_path,
+        sample_available_metrics,
+    ):
+        """Test that warning appears only on throughput plot, not other metrics."""
+        per_request_data = pd.DataFrame(
+            {
+                "request_end_ns": [1000000000000 + i * 500000000 for i in range(10)],
+                "time_to_first_token": [45.0 + i * 2 for i in range(10)],
+                "inter_token_latency": [18.0 + i * 0.5 for i in range(10)],
+                "request_latency": [900.0 + i * 10 for i in range(10)],
+                "input_sequence_length": [
+                    100,
+                    200,
+                    100,
+                    200,
+                    100,
+                    200,
+                    100,
+                    200,
+                    100,
+                    200,
+                ],
+                "output_sequence_length": [200] * 10,
+            }
+        )
+
+        timeslice_data = pd.DataFrame(
+            {
+                "Timeslice": [0, 0, 1, 1] * 4,
+                "Metric": (
+                    ["Time to First Token"] * 2
+                    + ["Inter Token Latency"] * 2
+                    + ["Request Throughput"] * 2
+                    + ["Request Latency"] * 2
+                )
+                * 2,
+                "Unit": ["ms"] * 4 + ["req/s"] * 4 + ["ms"] * 8,
+                "Stat": ["avg", "min"] * 8,
+                "Value": [45.0, 40.0, 18.0, 15.0, 10.0, 8.0, 900.0, 850.0] * 2,
+            }
+        )
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="multi_metric_run",
+                run_path=tmp_path / "multi_metric_run",
+                model="Test",
+                concurrency=1,
+            ),
+            requests=per_request_data,
+            aggregated={},
+            timeslices=timeslice_data,
+            slice_duration=10.0,
+        )
+
+        generated_files = single_run_exporter.export(run_data, sample_available_metrics)
+
+        assert len(generated_files) > 0
+
+    def test_on_demand_loading_non_uniform_requests(
+        self,
+        single_run_exporter,
+        tmp_path,
+    ):
+        """Test that warning works when loading ISL/OSL from disk (requests=None)."""
+        import json
+
+        run_path = tmp_path / "on_demand_test_run"
+        run_path.mkdir()
+
+        profile_data = []
+        for i in range(10):
+            profile_data.append(
+                {
+                    "metrics": {
+                        "input_sequence_length": {"value": 100, "unit": "tokens"},
+                        "output_sequence_length": {
+                            "value": 200 + i * 50,
+                            "unit": "tokens",
+                        },
+                    }
+                }
+            )
+
+        with open(run_path / "profile_export.jsonl", "w") as f:
+            for record in profile_data:
+                f.write(json.dumps(record) + "\n")
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="on_demand_test_run",
+                run_path=run_path,
+                model="Test",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is False
+        assert warning is not None
+        assert "varying ISL/OSL" in warning
+
+    def test_on_demand_loading_uniform_requests(
+        self,
+        single_run_exporter,
+        tmp_path,
+    ):
+        """Test that no warning appears when on-demand loading finds uniform requests."""
+        import json
+
+        run_path = tmp_path / "on_demand_uniform_run"
+        run_path.mkdir()
+
+        profile_data = []
+        for _ in range(10):
+            profile_data.append(
+                {
+                    "metrics": {
+                        "input_sequence_length": {"value": 100, "unit": "tokens"},
+                        "output_sequence_length": {"value": 200, "unit": "tokens"},
+                    }
+                }
+            )
+
+        with open(run_path / "profile_export.jsonl", "w") as f:
+            for record in profile_data:
+                f.write(json.dumps(record) + "\n")
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="on_demand_uniform_run",
+                run_path=run_path,
+                model="Test",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is True
+        assert warning is None
+
+    def test_on_demand_loading_missing_file(
+        self,
+        single_run_exporter,
+        tmp_path,
+    ):
+        """Test that missing profile_export.jsonl returns uniform (no warning)."""
+        run_path = tmp_path / "missing_file_run"
+        run_path.mkdir()
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="missing_file_run",
+                run_path=run_path,
+                model="Test",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+        )
+
+        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        assert is_uniform is True
+        assert warning is None
+
 
 class TestSharedExporterFunctionality:
     """Tests for shared functionality across both exporters."""
@@ -436,6 +959,8 @@ class TestSharedExporterFunctionality:
                     "request_latency": {"p50": 100.0, "unit": "ms"},
                     # Missing other metrics
                 },
+                timeslices=None,
+                slice_duration=None,
             )
         ]
 

@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from aiperf.common.mixins.aiperf_logger_mixin import AIPerfLoggerMixin
+from aiperf.plot.constants import PlotTheme
 from aiperf.plot.core.plot_generator import PlotGenerator
 
 
@@ -23,16 +24,18 @@ class BaseExporter(AIPerfLoggerMixin, ABC):
     Subclasses implement format-specific export logic.
     """
 
-    def __init__(self, output_dir: Path):
+    def __init__(self, output_dir: Path, theme: PlotTheme = PlotTheme.LIGHT):
         """
         Initialize the base exporter.
 
         Args:
             output_dir: Directory where exported files will be saved
+            theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
         """
         super().__init__()
         self.output_dir = Path(output_dir)
-        self.plot_generator = PlotGenerator()
+        self.theme = theme
+        self.plot_generator = PlotGenerator(theme=theme)
 
     @abstractmethod
     def export(self, *args, **kwargs):

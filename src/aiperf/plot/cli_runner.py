@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from aiperf.plot.constants import PlotMode
+from aiperf.plot.constants import PlotMode, PlotTheme
 from aiperf.plot.plot_controller import PlotController
 
 
@@ -12,6 +12,7 @@ def run_plot_controller(
     paths: list[str] | None = None,
     output: str | None = None,
     mode: PlotMode | str = PlotMode.PNG,
+    theme: PlotTheme | str = PlotTheme.LIGHT,
 ) -> None:
     """Generate plots from AIPerf profiling data.
 
@@ -19,6 +20,7 @@ def run_plot_controller(
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
         output: Directory to save generated plots. Defaults to <first_path>/plot_export if not specified.
         mode: Output mode for plots (PNG, HTML, or SERVER). Defaults to PNG.
+        theme: Plot theme to use (LIGHT or DARK). Defaults to LIGHT.
     """
     # Determine input paths
     input_paths = paths or ["./artifacts"]
@@ -27,11 +29,16 @@ def run_plot_controller(
     # Determine output directory
     output_dir = Path(output) if output else input_paths[0] / "plot_export"
 
+    # Convert theme string to enum if needed
+    if isinstance(theme, str):
+        theme = PlotTheme(theme.lower())
+
     # Create and run controller
     controller = PlotController(
         paths=input_paths,
         output_dir=output_dir,
         mode=mode,
+        theme=theme,
     )
 
     generated_files = controller.run()

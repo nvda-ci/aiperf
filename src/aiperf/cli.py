@@ -39,6 +39,7 @@ def profile(
 def plot(
     paths: list[str] | None = None,
     output: str | None = None,
+    theme: str = "light",
 ) -> None:
     """Generate PNG visualizations from AIPerf profiling data.
 
@@ -50,8 +51,9 @@ def plot(
     Args:
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
         output: Directory to save generated plots. Defaults to <first_path>/plot_export if not specified.
+        theme: Plot theme to use: 'light' (white background) or 'dark' (dark background). Defaults to 'light'.
     """
     with exit_on_error(title="Error Running Plot Command"):
         from aiperf.plot.cli_runner import run_plot_controller
 
-        run_plot_controller(paths, output)
+        run_plot_controller(paths, output, theme=theme)

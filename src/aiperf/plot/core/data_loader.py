@@ -21,7 +21,10 @@ from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models.record_models import MetricRecordInfo, MetricResult
 from aiperf.plot.constants import (
     PROFILE_EXPORT_AIPERF_JSON,
+    PROFILE_EXPORT_GPU_TELEMETRY_JSONL,
     PROFILE_EXPORT_JSONL,
+    PROFILE_EXPORT_TIMESLICES_CSV,
+    PROFILE_EXPORT_TIMESLICES_JSON,
 )
 from aiperf.plot.exceptions import DataLoadError
 
@@ -66,11 +69,18 @@ class RunData:
         requests: DataFrame containing per-request data, or None if not loaded.
         aggregated: Dictionary containing aggregated statistics. The "metrics" key
             contains a dict mapping metric tags to MetricResult objects.
+        timeslices: DataFrame containing timeslice data in tidy format with columns:
+            [Timeslice, Metric, Unit, Stat, Value], or None if not loaded.
+        slice_duration: Duration of each time slice in seconds, or None if not available.
+        gpu_telemetry: DataFrame containing GPU telemetry time series data, or None if not loaded.
     """
 
     metadata: RunMetadata
     requests: pd.DataFrame | None
     aggregated: dict[str, Any]
+    timeslices: pd.DataFrame | None = None
+    slice_duration: float | None = None
+    gpu_telemetry: pd.DataFrame | None = None
 
 
 class DataLoader(AIPerfLoggerMixin):
@@ -129,10 +139,73 @@ class DataLoader(AIPerfLoggerMixin):
         # Load aggregated JSON
         aggregated = self._load_aggregated_json(run_path / PROFILE_EXPORT_AIPERF_JSON)
 
+        # Load timeslices CSV and JSON (optional - may not exist for all runs)
+        timeslices_path = run_path / PROFILE_EXPORT_TIMESLICES_CSV
+        timeslices_json_path = run_path / PROFILE_EXPORT_TIMESLICES_JSON
+        timeslices_df = None
+        slice_duration = None
+
+        if timeslices_path.exists():
+            try:
+                timeslices_df = self._load_timeslices_csv(timeslices_path)
+            except DataLoadError as e:
+                self.warning(f"Failed to load timeslice CSV data: {e}")
+
+        # Load timeslice JSON to get slice_duration
+        if timeslices_json_path.exists():
+            try:
+                timeslice_json = self._load_timeslices_json(timeslices_json_path)
+                # Extract slice_duration from input_config.output.slice_duration
+                if "input_config" in timeslice_json:
+                    input_config = timeslice_json["input_config"]
+                    if (
+                        "output" in input_config
+                        and "slice_duration" in input_config["output"]
+                    ):
+                        slice_duration = input_config["output"]["slice_duration"]
+                        self.info(f"Extracted slice_duration: {slice_duration}s")
+            except DataLoadError as e:
+                self.warning(f"Failed to load timeslice JSON data: {e}")
+
         # Extract metadata
         metadata = self._extract_metadata(run_path, requests_df, aggregated)
 
-        return RunData(metadata=metadata, requests=requests_df, aggregated=aggregated)
+        # Load GPU telemetry data (optional - may not exist for all runs)
+        gpu_telemetry_path = run_path / PROFILE_EXPORT_GPU_TELEMETRY_JSONL
+        gpu_telemetry_df = None
+
+        # Calculate run start time for relative timestamps
+        run_start_time_ns = None
+        if (
+            requests_df is not None
+            and not requests_df.empty
+            and "request_start_ns" in requests_df.columns
+        ):
+            start_times = requests_df["request_start_ns"].dropna()
+            if not start_times.empty:
+                # Convert datetime to int nanoseconds if needed
+                first_start = start_times.min()
+                if isinstance(first_start, pd.Timestamp):
+                    run_start_time_ns = int(first_start.value)
+                else:
+                    run_start_time_ns = int(first_start)
+
+        if gpu_telemetry_path.exists():
+            try:
+                gpu_telemetry_df = self._load_gpu_telemetry_jsonl(
+                    gpu_telemetry_path, run_start_time_ns
+                )
+            except DataLoadError as e:
+                self.warning(f"Failed to load GPU telemetry data: {e}")
+
+        return RunData(
+            metadata=metadata,
+            requests=requests_df,
+            aggregated=aggregated,
+            timeslices=timeslices_df,
+            slice_duration=slice_duration,
+            gpu_telemetry=gpu_telemetry_df,
+        )
 
     def load_multiple_runs(self, run_paths: list[Path]) -> list[RunData]:
         """
@@ -587,6 +660,160 @@ class DataLoader(AIPerfLoggerMixin):
         except OSError as e:
             raise DataLoadError(
                 f"Failed to read JSON file: {e}", path=str(json_path)
+            ) from e
+
+    def _load_timeslices_csv(self, csv_path: Path) -> pd.DataFrame:
+        """
+        Load timeslice data from CSV file.
+
+        Args:
+            csv_path: Path to the profile_export_aiperf_timeslices.csv file.
+
+        Returns:
+            DataFrame containing timeslice data in tidy/long format with columns:
+            [Timeslice, Metric, Unit, Stat, Value]
+
+        Raises:
+            DataLoadError: If file cannot be read or parsed.
+        """
+        if not csv_path.exists():
+            raise DataLoadError("Timeslices CSV file not found", path=str(csv_path))
+
+        try:
+            df = pd.read_csv(csv_path)
+
+            expected_columns = ["Timeslice", "Metric", "Unit", "Stat", "Value"]
+            if not all(col in df.columns for col in expected_columns):
+                raise DataLoadError(
+                    f"CSV file missing expected columns. Expected: {expected_columns}, "
+                    f"Found: {list(df.columns)}",
+                    path=str(csv_path),
+                )
+
+            self.info(
+                f"Loaded timeslice data from {csv_path} ({len(df)} rows, "
+                f"{df['Timeslice'].nunique()} timeslices)"
+            )
+            return df
+        except pd.errors.ParserError as e:
+            raise DataLoadError(
+                f"Failed to parse CSV file: {e}", path=str(csv_path)
+            ) from e
+        except OSError as e:
+            raise DataLoadError(
+                f"Failed to read CSV file: {e}", path=str(csv_path)
+            ) from e
+
+    def _load_timeslices_json(self, json_path: Path) -> dict[str, Any]:
+        """
+        Load timeslice data from JSON file to extract configuration.
+
+        Args:
+            json_path: Path to the profile_export_aiperf_timeslices.json file.
+
+        Returns:
+            Dictionary containing timeslice data and input config.
+
+        Raises:
+            DataLoadError: If file cannot be read or parsed.
+        """
+        if not json_path.exists():
+            raise DataLoadError("Timeslices JSON file not found", path=str(json_path))
+
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.info(f"Loaded timeslice JSON from {json_path}")
+            return data
+        except json.JSONDecodeError as e:
+            raise DataLoadError(
+                f"Failed to parse JSON file: {e}", path=str(json_path)
+            ) from e
+        except OSError as e:
+            raise DataLoadError(
+                f"Failed to read JSON file: {e}", path=str(json_path)
+            ) from e
+
+    def _load_gpu_telemetry_jsonl(
+        self, jsonl_path: Path, run_start_time_ns: int | None = None
+    ) -> pd.DataFrame | None:
+        """
+        Load GPU telemetry time series data from JSONL file.
+
+        Args:
+            jsonl_path: Path to the gpu_telemetry_export.jsonl file.
+            run_start_time_ns: Optional run start time in nanoseconds for relative timestamps.
+                If not provided, timestamps will be kept as absolute values.
+
+        Returns:
+            DataFrame containing GPU telemetry data with flattened metrics,
+            or None if the file doesn't exist.
+
+        Raises:
+            DataLoadError: If file exists but cannot be read or parsed.
+        """
+        if not jsonl_path.exists():
+            self.debug(f"GPU telemetry file not found: {jsonl_path}")
+            return None
+
+        records = []
+        corrupted_lines = 0
+
+        try:
+            with open(jsonl_path, encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    try:
+                        data = json.loads(line)
+
+                        # Flatten the telemetry_data dict into the main record
+                        telemetry_data = data.pop("telemetry_data", {})
+                        flat_record = {**data, **telemetry_data}
+
+                        # Convert timestamp to seconds relative to run start if available
+                        if "timestamp_ns" in flat_record:
+                            timestamp_ns = flat_record["timestamp_ns"]
+                            if run_start_time_ns:
+                                flat_record["timestamp_s"] = (
+                                    timestamp_ns - run_start_time_ns
+                                ) / 1e9
+                            else:
+                                # Keep absolute timestamp in seconds
+                                flat_record["timestamp_s"] = timestamp_ns / 1e9
+
+                        records.append(flat_record)
+                    except (json.JSONDecodeError, Exception) as e:
+                        corrupted_lines += 1
+                        self.warning(
+                            f"Skipping invalid line {line_num} in {jsonl_path}: {e}"
+                        )
+                        continue
+
+            if corrupted_lines > 0:
+                self.warning(
+                    f"Skipped {corrupted_lines} corrupted lines in {jsonl_path}"
+                )
+
+            if not records:
+                self.warning(
+                    f"No valid records found in GPU telemetry file: {jsonl_path}"
+                )
+                return None
+
+            df = pd.DataFrame(records)
+            self.info(
+                f"Loaded {len(df)} GPU telemetry records from {jsonl_path} "
+                f"({df['gpu_index'].nunique() if 'gpu_index' in df.columns else 0} GPUs)"
+            )
+            return df
+
+        except OSError as e:
+            raise DataLoadError(
+                f"Failed to read GPU telemetry file: {e}", path=str(jsonl_path)
             ) from e
 
     def _load_input_config(self, inputs_path: Path) -> dict[str, Any]:

@@ -15,6 +15,9 @@ from pathlib import Path
 PROFILE_EXPORT_JSONL = "profile_export.jsonl"
 PROFILE_EXPORT_AIPERF_JSON = "profile_export_aiperf.json"
 PROFILE_EXPORT_AIPERF_CSV = "profile_export_aiperf.csv"
+PROFILE_EXPORT_TIMESLICES_CSV = "profile_export_aiperf_timeslices.csv"
+PROFILE_EXPORT_TIMESLICES_JSON = "profile_export_aiperf_timeslices.json"
+PROFILE_EXPORT_GPU_TELEMETRY_JSONL = "gpu_telemetry_export.jsonl"
 INPUTS_JSON = "inputs.json"
 
 # Default output directory and filenames
@@ -31,6 +34,13 @@ class PlotMode(str, Enum):
     PNG = "png"
     HTML = "html"
     SERVER = "server"
+
+
+class PlotTheme(str, Enum):
+    """Available themes for plot styling."""
+
+    LIGHT = "light"
+    DARK = "dark"
 
 
 # Plot settings
@@ -50,9 +60,29 @@ NVIDIA_BORDER = "#333333"  # Dark border
 NVIDIA_TEXT_LIGHT = "#E0E0E0"  # Light text for dark backgrounds
 NVIDIA_CARD_BG = "#252525"  # Card backgrounds
 
-# Roboto Mono is NVIDIA preferred, but monospace is fallback for all as a generic CSS keyword for each OS to use its preferred monospace font.
-# TODO [AIP-546]: Add font loading for HTML plots if needed.
-PLOT_FONT_FAMILY = "'Roboto Mono', monospace"
+# System font stack matching dashboard design
+PLOT_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif"
+
+# Theme-specific color schemes
+DARK_THEME_COLORS = {
+    "primary": NVIDIA_GREEN,
+    "secondary": NVIDIA_GOLD,
+    "background": NVIDIA_DARK_BG,
+    "paper": NVIDIA_CARD_BG,
+    "text": NVIDIA_TEXT_LIGHT,
+    "grid": NVIDIA_BORDER,
+    "border": NVIDIA_BORDER,
+}
+
+LIGHT_THEME_COLORS = {
+    "primary": NVIDIA_GREEN,
+    "secondary": NVIDIA_GRAY,
+    "background": NVIDIA_WHITE,
+    "paper": NVIDIA_WHITE,
+    "text": NVIDIA_DARK,
+    "grid": "#E0E0E0",
+    "border": "#CCCCCC",
+}
 
 
 # Percentiles for statistical analysis

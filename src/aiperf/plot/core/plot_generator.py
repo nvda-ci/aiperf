@@ -14,30 +14,35 @@ import plotly.graph_objects as go
 import seaborn as sns
 
 from aiperf.plot.constants import (
+    DARK_THEME_COLORS,
+    LIGHT_THEME_COLORS,
     NVIDIA_BORDER,
-    NVIDIA_DARK_BG,
     NVIDIA_GOLD,
-    NVIDIA_GRAY,
     NVIDIA_GREEN,
     NVIDIA_TEXT_LIGHT,
     PLOT_FONT_FAMILY,
+    PlotTheme,
 )
 
 
-def get_nvidia_color_scheme(n_colors: int) -> list[str]:
+def get_nvidia_color_scheme(
+    n_colors: int, secondary_color: str = NVIDIA_GOLD
+) -> list[str]:
     """
     Generate color scheme with NVIDIA brand colors first, then seaborn for extras.
 
-    Uses NVIDIA green and gold for the first two colors, then dynamically generates
-    additional colors using seaborn's "bright" palette for any remaining colors needed.
+    Uses NVIDIA green and a secondary color (gold for dark theme, grey for light theme)
+    for the first two colors, then dynamically generates additional colors using
+    seaborn's "bright" palette for any remaining colors needed.
 
     Args:
         n_colors: Number of colors needed
+        secondary_color: Secondary color to use (NVIDIA_GOLD or NVIDIA_GRAY)
 
     Returns:
         List of hex color strings
     """
-    custom_colors = [NVIDIA_GREEN, NVIDIA_GOLD]
+    custom_colors = [NVIDIA_GREEN, secondary_color]
 
     if n_colors <= len(custom_colors):
         return custom_colors[:n_colors]
@@ -57,9 +62,23 @@ class PlotGenerator:
     """Generate Plotly figures for AIPerf profiling data with NVIDIA branding.
 
     This class provides generic, reusable plot functions that can visualize any
-    metric combination. All plots use NVIDIA brand colors and dark mode styling
-    for professional presentations.
+    metric combination. Plots can use either light mode (default) or dark mode
+    styling for professional presentations.
+
+    Args:
+        theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
     """
+
+    def __init__(self, theme: PlotTheme = PlotTheme.LIGHT):
+        """Initialize PlotGenerator with specified theme.
+
+        Args:
+            theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
+        """
+        self.theme = theme
+        self.colors = (
+            LIGHT_THEME_COLORS if theme == PlotTheme.LIGHT else DARK_THEME_COLORS
+        )
 
     def _assign_model_colors(self, models: list[str]) -> dict[str, str]:
         """Dynamically assign colors to models from NVIDIA palette.
@@ -74,7 +93,9 @@ class PlotGenerator:
             Dictionary mapping model name to color hex code
         """
         sorted_models = sorted(models)  # Sort for consistency
-        color_scheme = get_nvidia_color_scheme(len(sorted_models))
+        color_scheme = get_nvidia_color_scheme(
+            len(sorted_models), self.colors["secondary"]
+        )
 
         color_map = {}
         for i, model in enumerate(sorted_models):
@@ -105,44 +126,50 @@ class PlotGenerator:
         Returns:
             Dictionary of layout configuration ready for fig.update_layout()
         """
+        template = "plotly_dark" if self.theme == PlotTheme.DARK else "plotly_white"
+
         layout = {
             "title": {
                 "text": title,
                 "font": {
-                    "size": 13,
+                    "size": 18,
                     "family": PLOT_FONT_FAMILY,
                     "weight": "bold",
-                    "color": NVIDIA_TEXT_LIGHT,
+                    "color": self.colors["text"],
                 },
             },
             "xaxis_title": x_label,
             "yaxis_title": y_label,
-            "template": "plotly_dark",
-            "font": {"size": 10, "family": PLOT_FONT_FAMILY, "color": NVIDIA_GRAY},
+            "template": template,
+            "font": {
+                "size": 10,
+                "family": PLOT_FONT_FAMILY,
+                "color": self.colors["text"],
+            },
             "height": 600,
-            "margin": {"l": 50, "r": 10, "t": 40, "b": 40},
-            "plot_bgcolor": NVIDIA_DARK_BG,
-            "paper_bgcolor": NVIDIA_DARK_BG,
+            "margin": {"l": 50, "r": 10, "t": 60, "b": 40},
+            "plot_bgcolor": self.colors["background"],
+            "paper_bgcolor": self.colors["paper"],
             "xaxis": {
-                "gridcolor": "#2a2a2a",
+                "gridcolor": self.colors["grid"],
                 "showline": True,
-                "linecolor": NVIDIA_BORDER,
-                "color": NVIDIA_TEXT_LIGHT,
+                "linecolor": self.colors["border"],
+                "color": self.colors["text"],
             },
             "yaxis": {
-                "gridcolor": "#2a2a2a",
+                "gridcolor": self.colors["grid"],
                 "showline": True,
-                "linecolor": NVIDIA_BORDER,
-                "color": NVIDIA_TEXT_LIGHT,
+                "linecolor": self.colors["border"],
+                "color": self.colors["text"],
             },
             "legend": {
                 "font": {
                     "size": 11,
                     "family": PLOT_FONT_FAMILY,
-                    "color": NVIDIA_TEXT_LIGHT,
+                    "color": self.colors["text"],
                 },
-                "bgcolor": "rgba(37, 37, 37, 0.8)",
-                "bordercolor": NVIDIA_BORDER,
+                "bgcolor": f"rgba({int(self.colors['paper'][1:3], 16)}, {int(self.colors['paper'][3:5], 16)}, {int(self.colors['paper'][5:7], 16)}, 0.8)",
+                "bordercolor": self.colors["border"],
                 "borderwidth": 1,
                 "x": 0.98,
                 "y": 0.02,
@@ -310,7 +337,7 @@ class PlotGenerator:
                     textposition="top center",
                     textfont=dict(
                         size=10,
-                        color=NVIDIA_TEXT_LIGHT,
+                        color=self.colors["text"],
                         family=PLOT_FONT_FAMILY,
                         weight="bold",
                     ),
@@ -415,7 +442,7 @@ class PlotGenerator:
                     text=labels,
                     textposition="top center",
                     textfont=dict(
-                        size=9, color=NVIDIA_TEXT_LIGHT, family=PLOT_FONT_FAMILY
+                        size=9, color=self.colors["text"], family=PLOT_FONT_FAMILY
                     ),
                     hovertemplate=f"<b>{group_name} - %{{text}}</b><br>{x_label}: %{{x:.1f}}<br>{y_label}: %{{y:.1f}}<extra></extra>",
                     name=group_name,
@@ -468,7 +495,7 @@ class PlotGenerator:
                 x=df[x_col],
                 y=df[y_metric],
                 mode="markers",
-                marker=dict(size=8, opacity=0.95, color=NVIDIA_GOLD),
+                marker=dict(size=8, opacity=0.95, color=self.colors["secondary"]),
                 showlegend=False,
                 hovertemplate=f"{x_label} %{{x}}<br>{y_label}: %{{y:.1f}}<extra></extra>",
             )
@@ -528,6 +555,426 @@ class PlotGenerator:
 
         # Apply NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y_label)
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_time_series_band_plot(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        y_avg_col: str,
+        y_min_col: str,
+        y_max_col: str,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+    ) -> go.Figure:
+        """Create a time series plot with average line and min/max shaded band.
+
+        Args:
+            df: DataFrame containing the time series data
+            x_col: Column name for x-axis (e.g., "timeslice")
+            y_avg_col: Column name for average values
+            y_min_col: Column name for minimum values
+            y_max_col: Column name for maximum values
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y_label: Y-axis label (auto-generated if None)
+
+        Returns:
+            Plotly Figure object with average line and shaded band
+        """
+        fig = go.Figure()
+
+        # Auto-generate labels if not provided
+        if title is None:
+            title = f"{y_avg_col.replace('_', ' ').title()} Over Time"
+        if x_label is None:
+            x_label = x_col.replace("_", " ").title()
+        if y_label is None:
+            y_label = y_avg_col.replace("_", " ").title()
+
+        # Upper boundary (max) - invisible line
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y_max_col],
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+                name="max",
+            )
+        )
+
+        # Lower boundary (min) - filled to previous trace (max)
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y_min_col],
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(118, 185, 0, 0.15)",
+                showlegend=False,
+                hoverinfo="skip",
+                name="min",
+            )
+        )
+
+        # Average line
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y_avg_col],
+                mode="lines+markers",
+                line=dict(width=3, color=NVIDIA_GREEN),
+                marker=dict(size=8, color=NVIDIA_GREEN),
+                name="Average",
+                showlegend=True,
+                hovertemplate=f"{x_label}: %{{x}}<br>{y_label}: %{{y:.2f}}<extra></extra>",
+            )
+        )
+
+        # Apply NVIDIA branding layout
+        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_time_series_histogram(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        y_col: str,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        slice_duration: float | None = None,
+        warning_text: str | None = None,
+    ) -> go.Figure:
+        """Create a time series histogram/bar chart.
+
+        Args:
+            df: DataFrame containing the time series data
+            x_col: Column name for x-axis (e.g., "Timeslice")
+            y_col: Column name for y-axis values (e.g., "avg", "p50", "p90")
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y_label: Y-axis label (auto-generated if None)
+            slice_duration: Duration of each slice in seconds (for time-based x-axis)
+            warning_text: Optional warning text to display at bottom of plot
+
+        Returns:
+            Plotly Figure object with bar chart
+        """
+        fig = go.Figure()
+
+        # Auto-generate labels if not provided
+        if title is None:
+            title = f"{y_col.replace('_', ' ').title()} Over Time"
+        if x_label is None:
+            x_label = "Time (s)" if slice_duration else x_col.replace("_", " ").title()
+        if y_label is None:
+            y_label = y_col.replace("_", " ").title()
+
+        # Prepare x-axis values and bar configuration
+        if slice_duration is not None:
+            # Use continuous time scale
+            slice_indices = df[x_col].values
+            # X-values are the center of each slice (bars are centered on x-value in plotly)
+            x_values = slice_indices * slice_duration + slice_duration / 2
+            # Bar width equals slice duration for continuous coverage
+            bar_width = slice_duration
+
+            # Prepare hover data with time ranges and slice indices
+            slice_start_times = slice_indices * slice_duration
+            time_ranges = [
+                f"{int(start)}s-{int(start + slice_duration)}s"
+                for start in slice_start_times
+            ]
+            hover_template = (
+                f"Time: %{{customdata[0]}}<br>"
+                f"Slice: %{{customdata[1]}}<br>"
+                f"{y_label}: %{{y:.2f}}<extra></extra>"
+            )
+            customdata = list(zip(time_ranges, slice_indices.astype(int), strict=False))
+
+            # Transparent bars with borders
+            marker_config = dict(
+                color="rgba(118, 185, 0, 0.7)",  # 70% opacity
+                line=dict(color=NVIDIA_GREEN, width=2),
+            )
+        else:
+            # Fallback for non-time-based data
+            x_values = df[x_col]
+            bar_width = None
+            hover_template = (
+                f"{x_label}: %{{x}}<br>{y_label}: %{{y:.2f}}<extra></extra>"
+            )
+            customdata = None
+            marker_config = dict(
+                color=NVIDIA_GREEN,
+                line=dict(color=NVIDIA_GREEN, width=0),
+            )
+
+        # Create bar chart
+        fig.add_trace(
+            go.Bar(
+                x=x_values,
+                y=df[y_col],
+                width=bar_width,
+                marker=marker_config,
+                showlegend=False,
+                hovertemplate=hover_template,
+                customdata=customdata,
+            )
+        )
+
+        # Apply NVIDIA branding layout
+        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
+
+        # Configure x-axis for continuous time
+        layout["bargap"] = 0
+        layout["bargroupgap"] = 0
+        if slice_duration is not None:
+            # Primary x-axis: Time values at boundaries
+            slice_indices = df[x_col].values
+            max_slice = slice_indices.max()
+            layout["xaxis"]["dtick"] = slice_duration
+            layout["xaxis"]["tick0"] = 0
+            layout["xaxis"]["range"] = [0, (max_slice + 1) * slice_duration]
+
+            # Add slice index labels as annotations at the top of each bar
+            slice_centers = slice_indices * slice_duration + slice_duration / 2
+            bar_heights = df[y_col].values
+            annotations = []
+            for idx, center, height in zip(
+                slice_indices, slice_centers, bar_heights, strict=False
+            ):
+                annotations.append(
+                    dict(
+                        x=center,
+                        y=height,
+                        yshift=5,
+                        xref="x",
+                        yref="y",
+                        text=str(int(idx)),
+                        showarrow=False,
+                        font=dict(
+                            size=12,
+                            family=PLOT_FONT_FAMILY,
+                            color=self.colors["text"],
+                            weight="bold",
+                        ),
+                        xanchor="center",
+                        yanchor="bottom",
+                    )
+                )
+            layout["annotations"] = annotations
+
+            # Add legend entry explaining slice numbers
+            fig.add_trace(
+                go.Scatter(
+                    x=[None],
+                    y=[None],
+                    mode="none",
+                    showlegend=True,
+                    name="Bar numbers indicate time slice index",
+                    hoverinfo="skip",
+                )
+            )
+            layout["showlegend"] = True
+
+        if warning_text:
+            if "annotations" not in layout:
+                layout["annotations"] = []
+
+            layout["margin"]["b"] = 140
+
+            warning_annotation = dict(
+                x=0.5,
+                y=-0.10,
+                xref="paper",
+                yref="paper",
+                text=warning_text,
+                showarrow=False,
+                font=dict(
+                    size=11, family=PLOT_FONT_FAMILY, color=self.colors["secondary"]
+                ),
+                bgcolor=f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.1)",
+                bordercolor=self.colors["secondary"],
+                borderwidth=2,
+                borderpad=8,
+                xanchor="center",
+                yanchor="top",
+            )
+            layout["annotations"] = list(layout.get("annotations", [])) + [
+                warning_annotation
+            ]
+
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_gpu_dual_axis_plot(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        y1_metric: str,
+        y2_metric: str,
+        title: str | None = None,
+        x_label: str | None = None,
+        y1_label: str | None = None,
+        y2_label: str | None = None,
+    ) -> go.Figure:
+        """
+        Create a dual Y-axis plot for GPU metrics with overlay.
+
+        Args:
+            df: DataFrame containing the time series data
+            x_col: Column name for x-axis (e.g., "timestamp_s")
+            y1_metric: Column name for primary y-axis (left, e.g., "gpu_utilization")
+            y2_metric: Column name for secondary y-axis (right, e.g., "throughput")
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y1_label: Primary Y-axis label (auto-generated if None)
+            y2_label: Secondary Y-axis label (auto-generated if None)
+
+        Returns:
+            Plotly Figure object with dual Y-axes
+        """
+        fig = go.Figure()
+
+        # Auto-generate labels if not provided
+        if title is None:
+            title = f"{y1_metric.replace('_', ' ').title()} with {y2_metric.replace('_', ' ').title()}"
+        if x_label is None:
+            x_label = "Time (s)"
+        if y1_label is None:
+            y1_label = y1_metric.replace("_", " ").title()
+        if y2_label is None:
+            y2_label = y2_metric.replace("_", " ").title()
+
+        # Primary metric (left Y-axis) - filled area
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y1_metric],
+                mode="lines",
+                line=dict(width=2, color=NVIDIA_GREEN),
+                fill="tozeroy",
+                fillcolor="rgba(118, 185, 0, 0.3)",
+                name=y1_label,
+                yaxis="y",
+                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{y1_label}: %{{y:.1f}}<extra></extra>",
+            )
+        )
+
+        # Secondary metric (right Y-axis) - line with markers
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y2_metric],
+                mode="lines+markers",
+                line=dict(width=2, color=self.colors["secondary"]),
+                marker=dict(size=6, color=self.colors["secondary"]),
+                name=y2_label,
+                yaxis="y2",
+                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
+            )
+        )
+
+        # Apply base NVIDIA branding layout
+        layout = self._get_base_layout(title, x_label, y1_label, hovermode="x unified")
+
+        # Add secondary y-axis
+        layout["yaxis2"] = {
+            "title": y2_label,
+            "overlaying": "y",
+            "side": "right",
+            "gridcolor": "rgba(42, 42, 42, 0.3)",
+            "showline": True,
+            "linecolor": NVIDIA_BORDER,
+            "color": NVIDIA_TEXT_LIGHT,
+        }
+
+        # Update legend position to avoid overlap with secondary axis
+        layout["legend"]["x"] = 0.02
+        layout["legend"]["xanchor"] = "left"
+
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_gpu_memory_stacked_area(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        used_col: str,
+        free_col: str,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+    ) -> go.Figure:
+        """
+        Create a stacked area plot showing GPU memory breakdown.
+
+        Args:
+            df: DataFrame containing the time series data
+            x_col: Column name for x-axis (e.g., "timestamp_s")
+            used_col: Column name for used memory
+            free_col: Column name for free memory
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y_label: Y-axis label (auto-generated if None)
+
+        Returns:
+            Plotly Figure object with stacked area plot
+        """
+        fig = go.Figure()
+
+        # Auto-generate labels if not provided
+        if title is None:
+            title = "GPU Memory Usage Over Time"
+        if x_label is None:
+            x_label = "Time (s)"
+        if y_label is None:
+            y_label = "Memory (GB)"
+
+        # Used memory (bottom layer)
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[used_col],
+                mode="lines",
+                line=dict(width=0),
+                fill="tozeroy",
+                fillcolor="rgba(118, 185, 0, 0.6)",
+                name="Used",
+                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>Used: %{{y:.2f}} GB<extra></extra>",
+                stackgroup="one",
+            )
+        )
+
+        # Free memory (top layer)
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[free_col],
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(153, 153, 153, 0.3)",
+                name="Free",
+                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>Free: %{{y:.2f}} GB<extra></extra>",
+                stackgroup="one",
+            )
+        )
+
+        # Apply NVIDIA branding layout
+        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
         fig.update_layout(layout)
 
         return fig

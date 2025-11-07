@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from aiperf.plot.constants import PlotMode
+from aiperf.plot.constants import PlotMode, PlotTheme
 from aiperf.plot.core.data_loader import DataLoader
 from aiperf.plot.core.mode_detector import ModeDetector, VisualizationMode
 from aiperf.plot.exporters import MultiRunPNGExporter, SingleRunPNGExporter
@@ -21,6 +21,7 @@ class PlotController:
         paths: List of paths to profiling run directories
         output_dir: Directory to save generated plots
         mode: Output mode (PNG, HTML, or SERVER - currently only PNG supported)
+        theme: Plot theme (LIGHT or DARK). Defaults to LIGHT.
     """
 
     def __init__(
@@ -28,10 +29,12 @@ class PlotController:
         paths: list[Path],
         output_dir: Path,
         mode: PlotMode = PlotMode.PNG,
+        theme: PlotTheme = PlotTheme.LIGHT,
     ):
         self.paths = paths
         self.output_dir = output_dir
         self.mode = mode
+        self.theme = theme
         self.loader = DataLoader()
         self.mode_detector = ModeDetector()
 
@@ -113,7 +116,7 @@ class PlotController:
             raise ValueError("Failed to load any valid profiling runs")
 
         available = self.loader.get_available_metrics(runs[0])
-        exporter = MultiRunPNGExporter(self.output_dir)
+        exporter = MultiRunPNGExporter(self.output_dir, theme=self.theme)
         return exporter.export(runs, available)
 
     def _export_single_run_plots(self, run_dir: Path) -> list[Path]:
@@ -127,5 +130,5 @@ class PlotController:
         """
         run_data = self.loader.load_run(run_dir, load_per_request_data=True)
         available = self.loader.get_available_metrics(run_data)
-        exporter = SingleRunPNGExporter(self.output_dir)
+        exporter = SingleRunPNGExporter(self.output_dir, theme=self.theme)
         return exporter.export(run_data, available)

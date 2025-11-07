@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from aiperf.plot.constants import NVIDIA_DARK_BG, NVIDIA_GREEN, NVIDIA_TEXT_LIGHT
+from aiperf.plot.constants import NVIDIA_GREEN, NVIDIA_WHITE
 from aiperf.plot.core.plot_generator import PlotGenerator
 
 
@@ -75,9 +75,9 @@ class TestPlotGenerator:
         # Verify figure has traces (data points + lines + shadows)
         assert len(fig.data) > 0
 
-        # Verify layout properties (colors, not template object)
-        assert fig.layout.plot_bgcolor == NVIDIA_DARK_BG
-        assert fig.layout.paper_bgcolor == NVIDIA_DARK_BG
+        # Verify layout properties (colors for light mode)
+        assert fig.layout.plot_bgcolor == NVIDIA_WHITE
+        assert fig.layout.paper_bgcolor == NVIDIA_WHITE
 
     def test_create_pareto_plot_custom_labels(self, plot_generator, multi_run_df):
         """Test Pareto plot with custom labels."""
@@ -139,8 +139,8 @@ class TestPlotGenerator:
         # Verify figure has traces
         assert len(fig.data) > 0
 
-        # Verify styling (colors, not template object)
-        assert fig.layout.plot_bgcolor == NVIDIA_DARK_BG
+        # Verify styling (colors for light mode)
+        assert fig.layout.plot_bgcolor == NVIDIA_WHITE
 
     def test_create_scatter_line_plot_auto_labels(self, plot_generator, multi_run_df):
         """Test scatter line plot with auto-generated labels."""
@@ -172,7 +172,7 @@ class TestPlotGenerator:
         assert fig.data[0].mode == "markers"
 
         # Verify styling
-        assert fig.layout.plot_bgcolor == NVIDIA_DARK_BG
+        assert fig.layout.plot_bgcolor == NVIDIA_WHITE
         assert fig.layout.hovermode == "x unified"
 
     def test_create_time_series_scatter_custom_labels(
@@ -250,10 +250,9 @@ class TestPlotGenerator:
             y_metric="request_throughput",
         )
 
-        # Check layout colors
-        assert fig.layout.plot_bgcolor == NVIDIA_DARK_BG
-        assert fig.layout.paper_bgcolor == NVIDIA_DARK_BG
-        assert fig.layout.title.font.color == NVIDIA_TEXT_LIGHT
+        # Check layout colors (light mode by default)
+        assert fig.layout.plot_bgcolor == NVIDIA_WHITE
+        assert fig.layout.paper_bgcolor == NVIDIA_WHITE
 
     def test_empty_dataframe_handling(self, plot_generator):
         """Test that generator handles empty DataFrames gracefully."""
