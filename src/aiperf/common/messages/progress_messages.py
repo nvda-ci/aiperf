@@ -6,8 +6,11 @@ from pydantic import Field
 from aiperf.common.enums import MessageType
 from aiperf.common.messages.base_messages import RequiresRequestNSMixin
 from aiperf.common.messages.service_messages import BaseServiceMessage
-from aiperf.common.models import ProcessingStats
-from aiperf.common.models.record_models import ProcessRecordsResult, ProfileResults
+from aiperf.common.models import (
+    ProcessingStats,
+    ProcessRecordsResult,
+    ProfileResultSummary,
+)
 from aiperf.common.types import MessageTypeT
 
 
@@ -77,7 +80,9 @@ class ProfileResultsMessage(BaseServiceMessage):
 
     message_type: MessageTypeT = MessageType.PROFILE_RESULTS
 
-    profile_results: ProfileResults = Field(..., description="The profile results")
+    profile_results: ProfileResultSummary = Field(
+        ..., description="The profile results"
+    )
 
 
 class AllRecordsReceivedMessage(BaseServiceMessage, RequiresRequestNSMixin):
