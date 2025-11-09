@@ -10,6 +10,7 @@ from aiperf.common.models import (
     MetricResult,
     TelemetryRecord,
 )
+from aiperf.common.models.telemetry_models import ProcessTelemetryResult
 from aiperf.common.types import MessageTypeT
 
 
@@ -39,6 +40,16 @@ class TelemetryRecordsMessage(BaseServiceMessage):
         """Whether the telemetry collection was valid."""
 
         return self.error is None and len(self.records) > 0
+
+
+class ProcessTelemetryResultMessage(BaseServiceMessage):
+    """Message containing processed telemetry results."""
+
+    message_type: MessageTypeT = MessageType.PROCESS_TELEMETRY_RESULT
+
+    telemetry_result: ProcessTelemetryResult = Field(
+        description="The processed telemetry results"
+    )
 
 
 class TelemetryStatusMessage(BaseServiceMessage):

@@ -14,6 +14,7 @@ class CommandType(CaseInsensitiveStrEnum):
     SHUTDOWN = "shutdown"
     SHUTDOWN_WORKERS = "shutdown_workers"
     SPAWN_WORKERS = "spawn_workers"
+    START_REALTIME_SERVER_METRICS = "start_realtime_server_metrics"
     START_REALTIME_TELEMETRY = "start_realtime_telemetry"
 
 

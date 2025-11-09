@@ -48,6 +48,9 @@ from aiperf.common.mixins.pull_client_mixin import (
 from aiperf.common.mixins.realtime_metrics_mixin import (
     RealtimeMetricsMixin,
 )
+from aiperf.common.mixins.realtime_server_metrics_mixin import (
+    RealtimeServerMetricsMixin,
+)
 from aiperf.common.mixins.realtime_telemetry_metrics_mixin import (
     RealtimeTelemetryMetricsMixin,
 )
@@ -75,6 +78,7 @@ __all__ = [
     "ProgressTrackerMixin",
     "PullClientMixin",
     "RealtimeMetricsMixin",
+    "RealtimeServerMetricsMixin",
     "RealtimeTelemetryMetricsMixin",
     "ReplyClientMixin",
     "TRecord",

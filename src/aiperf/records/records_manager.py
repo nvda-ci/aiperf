@@ -33,8 +33,10 @@ from aiperf.common.messages import (
     ProcessRecordsResultMessage,
     ProfileCancelCommand,
     RealtimeMetricsMessage,
+    RealtimeServerMetricsMessage,
     RealtimeTelemetryMetricsMessage,
     RecordsProcessingStatsMessage,
+    StartRealtimeServerMetricsCommand,
     StartRealtimeTelemetryCommand,
     TelemetryRecordsMessage,
 )
@@ -54,6 +56,7 @@ from aiperf.common.models import (
 from aiperf.common.models.processor_summary_results import (
     MetricSummaryResult,
     ProcessorSummaryResult,
+    ServerMetricsSummaryResult,
     TelemetrySummaryResult,
     TimesliceSummaryResult,
 )
@@ -99,8 +102,24 @@ class TelemetryTrackingState(ErrorTrackingState):
     last_metric_values: dict[str, float | None] | None = None
 
 
-# Type aliases for clarity - these use the base ErrorTrackingState
-ServerMetricsTrackingState = ErrorTrackingState
+@dataclass
+class ServerMetricsTrackingState(ErrorTrackingState):
+    """
+    Tracks server metrics-related state and performance metrics.
+
+    Consolidates error tracking, warnings, endpoint status, and performance
+    statistics for server metrics collection and processing.
+    """
+
+    task_runs: int = 0
+    total_gen_time_ms: float = 0.0
+    total_pub_time_ms: float = 0.0
+    total_metrics_generated: int = 0
+    mode_enabled_time: float | None = None
+    last_metric_values: dict[str, float | None] | None = None
+
+
+# Type alias for clarity - uses the base ErrorTrackingState
 MetricTrackingState = ErrorTrackingState
 
 
@@ -157,6 +176,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._server_metrics_state = ServerMetricsTrackingState()
         self._metric_state = MetricTrackingState()
         self._telemetry_enable_event = asyncio.Event()
+        self._server_metrics_enable_event = asyncio.Event()
 
         self._metric_results_processors: list[ResultsProcessorProtocol] = []
         self._telemetry_results_processors: list[TelemetryResultsProcessorProtocol] = []
@@ -595,12 +615,60 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
             await asyncio.sleep(Environment.UI.REALTIME_METRICS_INTERVAL)
 
+    @background_task(interval=None, immediate=True)
+    async def _report_realtime_server_metrics_task(self) -> None:
+        """Report server metrics - sleeps when disabled, resumes on command."""
+        if self.service_config.ui_type != AIPerfUIType.DASHBOARD:
+            return
+
+        while not self.stop_requested:
+            # Check if server metrics are enabled (endpoints configured)
+            if not self.user_config.server_metrics_urls:
+                # Disabled - sleep until command wakes us
+                await self._server_metrics_enable_event.wait()
+                self._server_metrics_enable_event.clear()
+
+            server_metrics = await self._generate_realtime_server_metrics()
+            self._server_metrics_state.total_metrics_generated += len(server_metrics)
+
+            if server_metrics:
+                # Only publish if values have changed - extract once for efficiency
+                new_values = {m.tag: m.current for m in server_metrics}
+                if (
+                    self._server_metrics_state.last_metric_values is None
+                    or new_values != self._server_metrics_state.last_metric_values
+                ):
+                    await self.publish(
+                        RealtimeServerMetricsMessage(
+                            service_id=self.service_id,
+                            metrics=server_metrics,
+                        )
+                    )
+                    self._server_metrics_state.last_metric_values = new_values
+
+            await asyncio.sleep(Environment.UI.REALTIME_METRICS_INTERVAL)
+
     @on_command(CommandType.REALTIME_METRICS)
     async def _on_realtime_metrics_command(
         self, message: RealtimeMetricsCommand
     ) -> None:
         """Handle a real-time metrics command."""
         await self._report_realtime_metrics()
+
+    @on_command(CommandType.START_REALTIME_SERVER_METRICS)
+    async def _on_start_realtime_server_metrics_command(
+        self, message: StartRealtimeServerMetricsCommand
+    ) -> None:
+        """Handle command to start the realtime server metrics background task.
+
+        This is called when the user dynamically enables the server metrics dashboard
+        by pressing the server metrics option in the UI without having passed the 'dashboard' parameter
+        at startup.
+        """
+        self.info("Received START_REALTIME_SERVER_METRICS command")
+
+        # Wake up the sleeping server metrics task
+        self._server_metrics_enable_event.set()
 
     @on_command(CommandType.START_REALTIME_TELEMETRY)
     async def _on_start_realtime_telemetry_command(
@@ -666,7 +734,15 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         return metric_results
 
     async def _generate_realtime_telemetry_metrics(self) -> list[MetricResult]:
-        """Generate the real-time GPU telemetry metrics."""
+        """Generate real-time GPU telemetry metrics on-demand from hierarchies.
+
+        This generates MetricResult objects from the telemetry hierarchies only when
+        needed for realtime dashboard display. This is the correct architectural
+        pattern - generate display formats (MetricResults) only when actually needed.
+        """
+        from aiperf.exporters.display_units_utils import normalize_endpoint_display
+        from aiperf.gpu_telemetry.constants import get_gpu_telemetry_metrics_config
+
         telemetry_results = await asyncio.gather(
             *[
                 results_processor.summarize()
@@ -675,16 +751,202 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             return_exceptions=True,
         )
 
-        # Extract results from TelemetrySummaryResult objects
+        # Generate MetricResults on-demand from hierarchies for display
         telemetry_metrics = []
         for result in telemetry_results:
             if isinstance(result, TelemetrySummaryResult):
-                telemetry_metrics.extend(result.results)
+                # Iterate through hierarchy and generate MetricResults on-demand
+                for dcgm_url, gpu_data in result.telemetry_data.dcgm_endpoints.items():
+                    endpoint_display = normalize_endpoint_display(dcgm_url)
+
+                    for gpu_uuid, telemetry_data in gpu_data.items():
+                        gpu_index = telemetry_data.metadata.gpu_index
+                        model_name = telemetry_data.metadata.model_name
+
+                        for (
+                            metric_display,
+                            metric_name,
+                            unit_enum,
+                        ) in get_gpu_telemetry_metrics_config():
+                            try:
+                                dcgm_tag = (
+                                    dcgm_url.replace(":", "_")
+                                    .replace("/", "_")
+                                    .replace(".", "_")
+                                )
+                                tag = f"{metric_name}_dcgm_{dcgm_tag}_gpu{gpu_index}_{gpu_uuid[:12]}"
+                                header = f"{metric_display} | {endpoint_display} | GPU {gpu_index} | {model_name}"
+                                unit = unit_enum.value
+
+                                metric_result = telemetry_data.get_metric_result(
+                                    metric_name, tag, header, unit
+                                )
+                                telemetry_metrics.append(metric_result)
+                            except Exception:
+                                # Skip metrics with no data
+                                continue
             elif isinstance(result, BaseException):
                 # Skip exceptions
                 continue
 
         return telemetry_metrics
+
+    async def _generate_realtime_server_metrics(self) -> list[MetricResult]:
+        """Generate real-time server metrics on-demand from hierarchies.
+
+        This generates MetricResult objects from the server metrics hierarchies only when
+        needed for realtime dashboard display. This follows the same architectural
+        pattern as telemetry - generate display formats (MetricResults) only when needed.
+        """
+
+        server_metrics_results = await asyncio.gather(
+            *[
+                results_processor.summarize()
+                for results_processor in self._server_metrics_results_processors
+            ],
+            return_exceptions=True,
+        )
+
+        # Generate MetricResults on-demand from hierarchies for display
+        server_metrics = []
+        for result in server_metrics_results:
+            if isinstance(result, ServerMetricsSummaryResult):
+                # Iterate through hierarchy and generate MetricResults on-demand
+                for (
+                    _endpoint_url,
+                    endpoint_data,
+                ) in result.server_metrics_data.endpoints.items():
+                    if not endpoint_data.time_series.snapshots:
+                        continue
+
+                    endpoint_display = endpoint_data.metadata.endpoint_display
+
+                    # Discover metrics from the first snapshot
+                    discovered_metrics = self._discover_server_metrics_from_endpoint(
+                        endpoint_data
+                    )
+
+                    for (
+                        metric_name,
+                        _metric_type,
+                        labels,
+                        _help_text,
+                    ) in discovered_metrics:
+                        try:
+                            # Infer unit from metric name
+                            unit = self._infer_server_metric_unit(metric_name)
+
+                            # Create tag and header
+                            labels_str = (
+                                "_"
+                                + "_".join(
+                                    f"{k}_{v}" for k, v in sorted(labels.items())
+                                )
+                                if labels
+                                else ""
+                            )
+                            tag = f"server_metrics.{endpoint_display}.{metric_name}{labels_str}"
+                            header = f"{metric_name} ({endpoint_display})"
+
+                            # Generate MetricResult on-demand from hierarchy
+                            metric_result = endpoint_data.get_metric_result(
+                                metric_name=metric_name,
+                                labels=labels,
+                                tag=tag,
+                                header=header,
+                                unit=unit,
+                            )
+                            server_metrics.append(metric_result)
+                        except Exception:
+                            # Skip metrics with no data
+                            continue
+            elif isinstance(result, BaseException):
+                # Skip exceptions
+                continue
+
+        return server_metrics
+
+    def _discover_server_metrics_from_endpoint(
+        self, endpoint_data
+    ) -> list[tuple[str, str, dict[str, str], str]]:
+        """Discover metrics from the first snapshot of an endpoint.
+
+        Args:
+            endpoint_data: ServerMetricsData containing snapshots
+
+        Returns:
+            List of tuples: (metric_name, metric_type, labels, help_text)
+        """
+        from aiperf.common.enums import PrometheusMetricType
+
+        discovered = []
+
+        if not endpoint_data.time_series.snapshots:
+            return discovered
+
+        # Use first snapshot to discover metrics
+        _, first_metrics = endpoint_data.time_series.snapshots[0]
+
+        for metric_name, metric_family in first_metrics.items():
+            # Only include counters, gauges, histograms, and summaries
+            if metric_family.type not in (
+                PrometheusMetricType.COUNTER,
+                PrometheusMetricType.GAUGE,
+                PrometheusMetricType.HISTOGRAM,
+                PrometheusMetricType.SUMMARY,
+            ):
+                continue
+
+            help_text = metric_family.help or ""
+
+            for sample in metric_family.samples:
+                # Check if sample has data
+                has_data = (
+                    sample.value is not None
+                    or (
+                        metric_family.type == PrometheusMetricType.HISTOGRAM
+                        and sample.histogram is not None
+                    )
+                    or (
+                        metric_family.type == PrometheusMetricType.SUMMARY
+                        and sample.summary is not None
+                    )
+                )
+                if has_data:
+                    discovered.append(
+                        (metric_name, metric_family.type, sample.labels, help_text)
+                    )
+
+        return discovered
+
+    @staticmethod
+    def _infer_server_metric_unit(metric_name: str) -> str:
+        """Infer unit from server metric name based on common naming conventions.
+
+        Args:
+            metric_name: Name of the metric
+
+        Returns:
+            Inferred unit string
+        """
+        name_lower = metric_name.lower()
+
+        if any(x in name_lower for x in ["_seconds", "_duration_s"]):
+            return "s"
+        if any(x in name_lower for x in ["_milliseconds", "_duration_ms", "_ms"]):
+            return "ms"
+        if any(x in name_lower for x in ["_microseconds", "_duration_us", "_us"]):
+            return "us"
+        if any(x in name_lower for x in ["_bytes", "_size"]):
+            return "bytes"
+        if any(x in name_lower for x in ["_percent", "_perc", "_usage"]):
+            return "%"
+        if any(x in name_lower for x in ["_rate", "_per_s", "_toks_per_s"]):
+            return "/s"
+        if any(x in name_lower for x in ["_count", "_total", "_requests"]):
+            return "count"
+
+        return ""
 
     async def _process_results(self, cancelled: bool) -> ProcessRecordsResult:
         """Process the results by aggregating all processor summary results."""

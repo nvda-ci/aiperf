@@ -133,6 +133,37 @@ class MetricRecordMetadata(AIPerfBaseModel):
     )
 
 
+class ProfileResults(AIPerfBaseModel):
+    """Legacy model for profile results - used by tests.
+
+    This model maintains backward compatibility for existing tests.
+    New code should use ProcessRecordsResult instead.
+    """
+
+    records: list[MetricResult] = Field(..., description="The list of metric results")
+    timeslice_metric_results: dict[int, list[MetricResult]] | None = Field(
+        default=None,
+        description="Optional timeslice metric results grouped by timeslice index",
+    )
+    completed: int = Field(
+        ..., description="The number of inference requests completed"
+    )
+    start_ns: int = Field(
+        ..., description="The start time of the profile run in nanoseconds"
+    )
+    end_ns: int = Field(
+        ..., description="The end time of the profile run in nanoseconds"
+    )
+    was_cancelled: bool = Field(
+        default=False,
+        description="Whether the profile run was cancelled early",
+    )
+    error_summary: list[ErrorDetailsCount] = Field(
+        default_factory=list,
+        description="A list of the unique error details and their counts",
+    )
+
+
 class ProfileResultSummary(AIPerfBaseModel):
     """The summary of the profile run."""
 

@@ -31,6 +31,7 @@ from aiperf.common.messages.command_messages import (
     ShutdownCommand,
     ShutdownWorkersCommand,
     SpawnWorkersCommand,
+    StartRealtimeServerMetricsCommand,
     StartRealtimeTelemetryCommand,
     TargetedServiceMessage,
 )
@@ -81,6 +82,7 @@ from aiperf.common.messages.service_messages import (
     StatusMessage,
 )
 from aiperf.common.messages.telemetry_messages import (
+    ProcessTelemetryResultMessage,
     RealtimeTelemetryMetricsMessage,
     TelemetryRecordsMessage,
     TelemetryStatusMessage,
@@ -126,6 +128,7 @@ __all__ = [
     "ProcessRecordsResponse",
     "ProcessRecordsResultMessage",
     "ProcessServerMetricsResultMessage",
+    "ProcessTelemetryResultMessage",
     "ProcessingStatsMessage",
     "ProfileCancelCommand",
     "ProfileConfigureCommand",
@@ -145,6 +148,7 @@ __all__ = [
     "ShutdownCommand",
     "ShutdownWorkersCommand",
     "SpawnWorkersCommand",
+    "StartRealtimeServerMetricsCommand",
     "StartRealtimeTelemetryCommand",
     "StatusMessage",
     "TargetedServiceMessage",

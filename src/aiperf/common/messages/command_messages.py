@@ -179,6 +179,16 @@ class RealtimeMetricsCommand(CommandMessage):
     command: CommandTypeT = CommandType.REALTIME_METRICS
 
 
+class StartRealtimeServerMetricsCommand(CommandMessage):
+    """Command to start the realtime server metrics background task in RecordsManager.
+
+    This command is sent when the user dynamically enables the server metrics dashboard
+    by pressing the server metrics option in the UI.
+    """
+
+    command: CommandTypeT = CommandType.START_REALTIME_SERVER_METRICS
+
+
 class StartRealtimeTelemetryCommand(CommandMessage):
     """Command to start the realtime telemetry background task in RecordsManager.
 

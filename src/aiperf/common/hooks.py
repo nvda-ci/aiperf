@@ -44,6 +44,7 @@ class AIPerfHook(CaseInsensitiveStrEnum):
     ON_INIT = "@on_init"
     ON_MESSAGE = "@on_message"
     ON_REALTIME_METRICS = "@on_realtime_metrics"
+    ON_REALTIME_SERVER_METRICS = "@on_realtime_server_metrics"
     ON_REALTIME_TELEMETRY_METRICS = "@on_realtime_telemetry_metrics"
     ON_PROFILING_PROGRESS = "@on_profiling_progress"
     ON_PULL_MESSAGE = "@on_pull_message"
