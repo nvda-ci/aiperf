@@ -6,7 +6,6 @@ from typing import Any
 from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import PrometheusMetricType, ResultsProcessorType
-from aiperf.common.exceptions import NoMetricValue
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.models.processor_summary_results import ServerMetricsSummaryResult
 from aiperf.common.models.server_metrics_models import (
@@ -86,33 +85,35 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
         min_timestamp_ns: int | None = None,
         max_timestamp_ns: int | None = None,
     ) -> ServerMetricsSummaryResult:
-        """Generate MetricResult list with aggregated statistics for auto-discovered metrics.
+        """Generate summary with server metrics hierarchy.
 
-        This method aggregates all metrics discovered from Prometheus endpoints across
-        the entire benchmark run, computing statistics (min, max, avg, percentiles) for
-        each metric. Optionally filters server metrics to align with the actual inference
-        time window.
+        This method is called by RecordsManager after profiling completes.
+        The server metrics hierarchy contains all Prometheus data in its native
+        structured format. MetricResult objects can be generated on-demand from
+        the hierarchy when needed for display or export.
 
         Args:
             min_timestamp_ns: Optional start of inference time window (min request start)
             max_timestamp_ns: Optional end of inference time window (max response end)
 
         Returns:
-            ServerMetricsSummaryResult containing MetricResult objects and server metrics hierarchy.
-        """
-        results = []
+            ServerMetricsSummaryResult containing the server metrics hierarchy.
 
+        Note:
+            The time window parameters are stored for use by consumers that need
+            to filter server metrics to align with the inference benchmark window.
+        """
         # Log time window if provided
         if min_timestamp_ns:
             if max_timestamp_ns:
                 duration_sec = (max_timestamp_ns - min_timestamp_ns) / 1e9
                 self.info(
-                    f"Aggregating server metrics with time window filter: "
+                    f"Server metrics time window: "
                     f"{duration_sec:.3f}s ({min_timestamp_ns} to {max_timestamp_ns})"
                 )
             else:
                 self.info(
-                    f"Aggregating server metrics with time window filter: "
+                    f"Server metrics time window: "
                     f"[{min_timestamp_ns}, end of collection]"
                 )
 
@@ -127,73 +128,10 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
                 data=endpoint_data: f"  Endpoint {url}: {len(data.time_series.snapshots)} snapshots total"
             )
 
-        for (
-            endpoint_url,
-            endpoint_data,
-        ) in self._server_metrics_hierarchy.endpoints.items():
-            if not endpoint_data.time_series.snapshots:
-                self.debug(f"Skipping endpoint {endpoint_url}: no snapshots")
-                continue
-
-            endpoint_display = endpoint_data.metadata.endpoint_display
-
-            # Get help text from first snapshot
-            help_text_map = self._extract_help_text_from_endpoint(endpoint_data)
-
-            # Process auto-discovered metrics
-            self.debug(
-                lambda url=endpoint_url,
-                metrics=self._discovered_metrics: f"Processing {len(metrics)} auto-discovered metrics for {url}"
-            )
-
-            for (
-                metric_name,
-                metric_type,
-                labels_frozen,
-            ) in self._discovered_metrics:
-                labels = dict(labels_frozen)
-                try:
-                    # Create tag and header from metric name and labels
-                    labels_str = (
-                        "_" + "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
-                        if labels
-                        else ""
-                    )
-                    tag = f"server_metrics.{endpoint_display}.{metric_name}{labels_str}"
-                    header = f"{metric_name} ({endpoint_display})"
-
-                    # Determine unit based on metric name conventions
-                    unit = self._infer_unit_from_metric_name(metric_name)
-
-                    metric_result = endpoint_data.get_metric_result(
-                        metric_name=metric_name,
-                        labels=labels,
-                        tag=tag,
-                        header=header,
-                        unit=unit,
-                        min_timestamp_ns=min_timestamp_ns,
-                        max_timestamp_ns=max_timestamp_ns,
-                    )
-                    # Add server metrics metadata
-                    metric_result.metric_name = metric_name
-                    metric_result.metric_type = metric_type
-                    metric_result.metric_labels = labels
-                    metric_result.metric_help = help_text_map.get(metric_name, "")
-                    results.append(metric_result)
-                except NoMetricValue:
-                    continue
-                except Exception as e:
-                    self.warning(
-                        f"Error aggregating discovered metric '{metric_name}': {e!r}"
-                    )
-
-        self.info(f"Generated {len(results)} aggregated metric results")
-
         # Get endpoints tested and successful from hierarchy
         endpoints = list(self._server_metrics_hierarchy.endpoints.keys())
 
         return ServerMetricsSummaryResult(
-            results=results,
             server_metrics_data=self._server_metrics_hierarchy,
             endpoints_tested=endpoints,
             endpoints_successful=endpoints,

@@ -146,5 +146,5 @@ class MetricsBaseExporter(AIPerfLoggerMixin, ABC):
                 await f.write(content)
 
         except Exception as e:
-            self.error(lambda: f"Failed to export to {self._file_path}: {e}")
+            self.error(f"Failed to export to {self._file_path}: {e!r}")
             raise

@@ -80,7 +80,7 @@ class ServerMetricsConsoleExporter(AIPerfLoggerMixin):
         """Create Rich tables showing server metrics with endpoint status.
 
         Args:
-            server_metrics_results: ServerMetricsSummaryResult containing metrics and endpoint status
+            server_metrics_results: ServerMetricsSummaryResult containing hierarchy and endpoint status
 
         Generates formatted output with:
         - Summary header showing endpoint reachability status
@@ -88,29 +88,27 @@ class ServerMetricsConsoleExporter(AIPerfLoggerMixin):
         - Statistical summaries (avg, min, max, p99, p90, p50, std) for each metric
         - Error summary if no data was collected
 
+        MetricResults are generated on-demand from the hierarchy for display.
+
         Returns:
             RenderableType: Rich Group containing multiple Tables, or Text message if no data
         """
         renderables = []
         first_table = True
+        server_metrics_data = server_metrics_results.server_metrics_data
 
-        # Group metrics by endpoint
-        metrics_by_endpoint = {}
-        for metric_result in server_metrics_results.results:
-            # Extract endpoint from tag (format: server_metrics.{endpoint}.{metric_name})
-            if hasattr(metric_result, "tag"):
-                parts = metric_result.tag.split(".", 2)
-                if len(parts) >= 3 and parts[0] == "server_metrics":
-                    endpoint = parts[1]
-                    if endpoint not in metrics_by_endpoint:
-                        metrics_by_endpoint[endpoint] = []
-                    metrics_by_endpoint[endpoint].append(metric_result)
-
-        for endpoint, metrics in metrics_by_endpoint.items():
-            if not metrics:
+        for _endpoint_url, endpoint_data in server_metrics_data.endpoints.items():
+            if not endpoint_data.time_series.snapshots:
                 continue
 
-            # Group metrics by type (counter, gauge, histogram, summary)
+            endpoint_display = endpoint_data.metadata.endpoint_display
+
+            # Discover metrics from the first snapshot
+            discovered_metrics = self._discover_metrics_from_endpoint(endpoint_data)
+            if not discovered_metrics:
+                continue
+
+            # Generate MetricResults on-demand and group by type
             metrics_by_type = {
                 PrometheusMetricType.COUNTER: [],
                 PrometheusMetricType.GAUGE: [],
@@ -118,13 +116,43 @@ class ServerMetricsConsoleExporter(AIPerfLoggerMixin):
                 PrometheusMetricType.SUMMARY: [],
             }
 
-            for metric in metrics:
-                if hasattr(metric, "metric_type"):
-                    metric_type = metric.metric_type
-                    if metric_type in metrics_by_type:
-                        metrics_by_type[metric_type].append(metric)
+            for metric_name, metric_type, labels, help_text in discovered_metrics:
+                try:
+                    # Generate tag and header
+                    labels_str = (
+                        "_" + "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
+                        if labels
+                        else ""
+                    )
+                    tag = f"server_metrics.{endpoint_display}.{metric_name}{labels_str}"
+                    header = f"{metric_name} ({endpoint_display})"
 
-            table_title_base = f"Server Metrics | {endpoint}"
+                    # Infer unit from metric name
+                    unit = self._infer_unit_from_metric_name(metric_name)
+
+                    # Generate MetricResult on-demand
+                    metric_result = endpoint_data.get_metric_result(
+                        metric_name=metric_name,
+                        labels=labels,
+                        tag=tag,
+                        header=header,
+                        unit=unit,
+                    )
+
+                    # Add metadata for display
+                    metric_result.metric_name = metric_name
+                    metric_result.metric_type = metric_type
+                    metric_result.metric_labels = labels
+                    metric_result.metric_help = help_text
+
+                    metrics_by_type[metric_type].append(metric_result)
+                except Exception as e:
+                    self.debug(
+                        f"Failed to generate metric result for {metric_name}: {e}"
+                    )
+                    continue
+
+            table_title_base = f"Server Metrics | {endpoint_display}"
 
             if first_table:
                 first_table = False
@@ -275,6 +303,86 @@ class ServerMetricsConsoleExporter(AIPerfLoggerMixin):
             metrics_table.add_row(*row)
 
         return metrics_table
+
+    def _discover_metrics_from_endpoint(
+        self, endpoint_data
+    ) -> list[tuple[str, str, dict[str, str], str]]:
+        """Discover metrics from the first snapshot of an endpoint.
+
+        Args:
+            endpoint_data: ServerMetricsData containing snapshots
+
+        Returns:
+            List of tuples: (metric_name, metric_type, labels, help_text)
+        """
+        discovered = []
+
+        if not endpoint_data.time_series.snapshots:
+            return discovered
+
+        # Use first snapshot to discover metrics
+        _, first_metrics = endpoint_data.time_series.snapshots[0]
+
+        for metric_name, metric_family in first_metrics.items():
+            # Only include counters, gauges, histograms, and summaries
+            if metric_family.type not in (
+                PrometheusMetricType.COUNTER,
+                PrometheusMetricType.GAUGE,
+                PrometheusMetricType.HISTOGRAM,
+                PrometheusMetricType.SUMMARY,
+            ):
+                continue
+
+            help_text = metric_family.help or ""
+
+            for sample in metric_family.samples:
+                # Check if sample has data
+                has_data = (
+                    sample.value is not None
+                    or (
+                        metric_family.type == PrometheusMetricType.HISTOGRAM
+                        and sample.histogram is not None
+                    )
+                    or (
+                        metric_family.type == PrometheusMetricType.SUMMARY
+                        and sample.summary is not None
+                    )
+                )
+                if has_data:
+                    discovered.append(
+                        (metric_name, metric_family.type, sample.labels, help_text)
+                    )
+
+        return discovered
+
+    @staticmethod
+    def _infer_unit_from_metric_name(metric_name: str) -> str:
+        """Infer unit from metric name based on common naming conventions.
+
+        Args:
+            metric_name: Name of the metric
+
+        Returns:
+            Inferred unit string
+        """
+        name_lower = metric_name.lower()
+
+        if any(x in name_lower for x in ["_seconds", "_duration_s"]):
+            return "s"
+        if any(x in name_lower for x in ["_milliseconds", "_duration_ms", "_ms"]):
+            return "ms"
+        if any(x in name_lower for x in ["_microseconds", "_duration_us", "_us"]):
+            return "us"
+        if any(x in name_lower for x in ["_bytes", "_size"]):
+            return "bytes"
+        if any(x in name_lower for x in ["_percent", "_perc", "_usage"]):
+            return "%"
+        if any(x in name_lower for x in ["_rate", "_per_s", "_toks_per_s"]):
+            return "/s"
+        if any(x in name_lower for x in ["_count", "_total", "_requests"]):
+            return "count"
+
+        return ""
 
     def _create_no_data_message(
         self, server_metrics_results: ServerMetricsSummaryResult

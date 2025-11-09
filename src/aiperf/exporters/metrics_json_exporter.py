@@ -215,66 +215,72 @@ class MetricsJsonExporter(MetricsBaseExporter):
         - Metrics grouped by metric_name (preserving Prometheus naming)
         - Samples contain labels and aggregated statistics (avg, min, max, percentiles)
 
+        Generates MetricResults on-demand from the hierarchy for each metric/label combination.
+
         Returns:
             dict: Nested structure endpoints -> metrics -> samples with labels and statistics.
                 Empty dict if no server metrics data available.
         """
-        from collections import defaultdict
+        from aiperf.common.enums import PrometheusMetricType
 
         summary = {}
 
         if not server_metrics_results or not server_metrics_results.server_metrics_data:
             return summary
 
-        # Create a mapping of endpoint display name to endpoint URL
-        endpoint_metadata = {}
         for (
             endpoint_url,
             endpoint_data,
         ) in server_metrics_results.server_metrics_data.endpoints.items():
+            if not endpoint_data.time_series.snapshots:
+                continue
+
             endpoint_display = endpoint_data.metadata.endpoint_display
-            endpoint_metadata[endpoint_display] = endpoint_url
 
-        # Group metrics by endpoint -> metric_name -> labels
-        # Structure: endpoint_display -> metric_name -> list of (labels, metric_result)
-        endpoint_metrics: dict[str, dict[str, list[tuple[dict, MetricResult]]]] = (
-            defaultdict(lambda: defaultdict(list))
-        )
-
-        for metric in server_metrics_results.results:
-            # Skip if missing required metadata
-            if not metric.metric_name or metric.metric_labels is None:
-                continue
-
-            # Extract endpoint from header: "metric_name (endpoint_display)"
-            if "(" in metric.header and ")" in metric.header:
-                endpoint_display = metric.header.split("(")[-1].rstrip(")")
-                endpoint_metrics[endpoint_display][metric.metric_name].append(
-                    (metric.metric_labels, metric)
-                )
-
-        # Build ServerMetricsEndpointData for each endpoint
-        for endpoint_display in sorted(endpoint_metrics.keys()):
-            if endpoint_display not in endpoint_metadata:
-                continue
-
-            endpoint_url = endpoint_metadata[endpoint_display]
-            metrics_by_name = endpoint_metrics[endpoint_display]
+            # Discover metrics from the first snapshot
+            discovered_metrics = self._discover_metrics_from_endpoint_data(
+                endpoint_data
+            )
 
             # Build AggregatedMetricFamily for each metric
             aggregated_families = {}
-            for metric_name, samples_list in metrics_by_name.items():
-                # All samples of the same metric should have same type and help
-                first_metric = samples_list[0][1]
-                metric_type = first_metric.metric_type or ""
-                metric_help = first_metric.metric_help or ""
-                metric_unit = first_metric.unit
+            for metric_name, metric_type, labels, help_text in discovered_metrics:
+                # Generate MetricResult on-demand
+                try:
+                    # Infer unit from metric name
+                    unit = self._infer_unit_from_metric_name(metric_name)
 
-                # Create AggregatedMetricSample for each label combination
-                aggregated_samples = []
-                for labels, metric_result in samples_list:
-                    # Build sample based on metric type
-                    if metric_type == "histogram" and metric_result.raw_histogram_delta:
+                    # Create tag and header (consistent with console exporter)
+                    labels_str = (
+                        "_" + "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
+                        if labels
+                        else ""
+                    )
+                    tag = f"server_metrics.{endpoint_display}.{metric_name}{labels_str}"
+                    header = f"{metric_name} ({endpoint_display})"
+
+                    # Generate MetricResult on-demand from hierarchy
+                    metric_result = endpoint_data.get_metric_result(
+                        metric_name=metric_name,
+                        labels=labels,
+                        tag=tag,
+                        header=header,
+                        unit=unit,
+                    )
+
+                    # Initialize metric family if not exists
+                    if metric_name not in aggregated_families:
+                        aggregated_families[metric_name] = {
+                            "type": metric_type,
+                            "help": help_text,
+                            "unit": unit,
+                            "samples": [],
+                        }
+
+                    # Create AggregatedMetricSample based on metric type
+                    if metric_type == PrometheusMetricType.HISTOGRAM and hasattr(
+                        metric_result, "raw_histogram_delta"
+                    ):
                         # For histograms: use raw bucket deltas
                         buckets_delta, sum_delta, count_delta = (
                             metric_result.raw_histogram_delta
@@ -290,7 +296,9 @@ class MetricsJsonExporter(MetricsBaseExporter):
                         sample = AggregatedMetricSample(
                             labels=labels, histogram=histogram_data
                         )
-                    elif metric_type == "summary" and metric_result.raw_summary_delta:
+                    elif metric_type == PrometheusMetricType.SUMMARY and hasattr(
+                        metric_result, "raw_summary_delta"
+                    ):
                         # For summaries: use quantiles and deltas
                         quantiles, sum_delta, count_delta = (
                             metric_result.raw_summary_delta
@@ -306,9 +314,8 @@ class MetricsJsonExporter(MetricsBaseExporter):
                         sample = AggregatedMetricSample(
                             labels=labels, summary=summary_data
                         )
-                    elif (
-                        metric_type == "counter"
-                        and metric_result.raw_counter_delta is not None
+                    elif metric_type == PrometheusMetricType.COUNTER and hasattr(
+                        metric_result, "raw_counter_delta"
                     ):
                         # For counters: use raw delta value
                         sample = AggregatedMetricSample(
@@ -319,21 +326,114 @@ class MetricsJsonExporter(MetricsBaseExporter):
                         sample = AggregatedMetricSample(
                             labels=labels, statistics=metric_result.to_json_result()
                         )
-                    aggregated_samples.append(sample)
 
+                    aggregated_families[metric_name]["samples"].append(sample)
+
+                except Exception as e:
+                    self.debug(
+                        lambda err=e,
+                        name=metric_name: f"Failed to generate metric result for {name}: {err}"
+                    )
+                    continue
+
+            # Convert dict format to AggregatedMetricFamily objects
+            final_families = {}
+            for metric_name, family_data in aggregated_families.items():
                 family = AggregatedMetricFamily(
-                    type=metric_type,
-                    help=metric_help,
-                    unit=metric_unit,
-                    samples=aggregated_samples,
+                    type=family_data["type"],
+                    help=family_data["help"],
+                    unit=family_data["unit"],
+                    samples=family_data["samples"],
                 )
-                aggregated_families[metric_name] = family
+                final_families[metric_name] = family
 
             server_endpoint_data = ServerMetricsEndpointData(
                 endpoint_url=endpoint_url,
                 endpoint_display=endpoint_display,
-                metrics=aggregated_families,
+                metrics=final_families,
             )
             summary[endpoint_display] = server_endpoint_data
 
         return summary
+
+    def _discover_metrics_from_endpoint_data(
+        self, endpoint_data
+    ) -> list[tuple[str, str, dict[str, str], str]]:
+        """Discover metrics from the first snapshot of an endpoint.
+
+        Args:
+            endpoint_data: ServerMetricsData containing snapshots
+
+        Returns:
+            List of tuples: (metric_name, metric_type, labels, help_text)
+        """
+        from aiperf.common.enums import PrometheusMetricType
+
+        discovered = []
+
+        if not endpoint_data.time_series.snapshots:
+            return discovered
+
+        # Use first snapshot to discover metrics
+        _, first_metrics = endpoint_data.time_series.snapshots[0]
+
+        for metric_name, metric_family in first_metrics.items():
+            # Only include counters, gauges, histograms, and summaries
+            if metric_family.type not in (
+                PrometheusMetricType.COUNTER,
+                PrometheusMetricType.GAUGE,
+                PrometheusMetricType.HISTOGRAM,
+                PrometheusMetricType.SUMMARY,
+            ):
+                continue
+
+            help_text = metric_family.help or ""
+
+            for sample in metric_family.samples:
+                # Check if sample has data
+                has_data = (
+                    sample.value is not None
+                    or (
+                        metric_family.type == PrometheusMetricType.HISTOGRAM
+                        and sample.histogram is not None
+                    )
+                    or (
+                        metric_family.type == PrometheusMetricType.SUMMARY
+                        and sample.summary is not None
+                    )
+                )
+                if has_data:
+                    discovered.append(
+                        (metric_name, metric_family.type, sample.labels, help_text)
+                    )
+
+        return discovered
+
+    @staticmethod
+    def _infer_unit_from_metric_name(metric_name: str) -> str:
+        """Infer unit from metric name based on common naming conventions.
+
+        Args:
+            metric_name: Name of the metric
+
+        Returns:
+            Inferred unit string
+        """
+        name_lower = metric_name.lower()
+
+        if any(x in name_lower for x in ["_seconds", "_duration_s"]):
+            return "s"
+        if any(x in name_lower for x in ["_milliseconds", "_duration_ms", "_ms"]):
+            return "ms"
+        if any(x in name_lower for x in ["_microseconds", "_duration_us", "_us"]):
+            return "us"
+        if any(x in name_lower for x in ["_bytes", "_size"]):
+            return "bytes"
+        if any(x in name_lower for x in ["_percent", "_perc", "_usage"]):
+            return "%"
+        if any(x in name_lower for x in ["_rate", "_per_s", "_toks_per_s"]):
+            return "/s"
+        if any(x in name_lower for x in ["_count", "_total", "_requests"]):
+            return "count"
+
+        return ""

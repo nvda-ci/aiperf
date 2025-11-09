@@ -274,7 +274,7 @@ class MetricsCsvExporter(MetricsBaseExporter):
             gpu_data.get_metric_result(metric_key, metric_key, "test", "test")
             return True
         except Exception as e:
-            self.debug(lambda: f"GPU metric {metric_key} not available: {e}")
+            self.debug(lambda err=e: f"GPU metric {metric_key} not available: {err}")
             return False
 
     def _write_server_metrics_section(
@@ -286,20 +286,63 @@ class MetricsCsvExporter(MetricsBaseExporter):
             writer: CSV writer object
             server_metrics_results: ServerMetricsSummaryResult containing server metrics data
 
-        Exports only non-histogram metrics. Histogram metrics are skipped for CSV export.
+        Generates MetricResults on-demand from the hierarchy and exports only non-histogram
+        metrics. Histogram metrics are skipped for CSV export.
         """
+        from aiperf.common.enums import PrometheusMetricType
 
         writer.writerow([])
         writer.writerow([])
 
-        # Filter out histogram metrics (only export non-histogram metrics to CSV)
-        non_histogram_metrics = [
-            metric
-            for metric in server_metrics_results.results
-            if not (
-                hasattr(metric, "raw_histogram_delta") and metric.raw_histogram_delta
-            )
-        ]
+        # Generate MetricResults on-demand, filtering out histograms
+        non_histogram_metrics = []
+
+        for (
+            _endpoint_url,
+            endpoint_data,
+        ) in server_metrics_results.server_metrics_data.endpoints.items():
+            if not endpoint_data.time_series.snapshots:
+                continue
+
+            endpoint_display = endpoint_data.metadata.endpoint_display
+
+            # Discover metrics from the first snapshot
+            discovered_metrics = self._discover_metrics_from_endpoint(endpoint_data)
+
+            for metric_name, metric_type, labels, _help_text in discovered_metrics:
+                # Skip histograms for CSV export
+                if metric_type == PrometheusMetricType.HISTOGRAM:
+                    continue
+
+                try:
+                    # Infer unit from metric name
+                    unit = self._infer_unit_from_metric_name(metric_name)
+
+                    # Create tag and header
+                    labels_str = (
+                        "_" + "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
+                        if labels
+                        else ""
+                    )
+                    tag = f"server_metrics.{endpoint_display}.{metric_name}{labels_str}"
+                    header = f"{metric_name} ({endpoint_display})"
+
+                    # Generate MetricResult on-demand
+                    metric_result = endpoint_data.get_metric_result(
+                        metric_name=metric_name,
+                        labels=labels,
+                        tag=tag,
+                        header=header,
+                        unit=unit,
+                    )
+
+                    non_histogram_metrics.append(metric_result)
+                except Exception as e:
+                    self.debug(
+                        lambda err=e,
+                        name=metric_name: f"Failed to generate metric result for {name}: {err}"
+                    )
+                    continue
 
         if not non_histogram_metrics:
             return
@@ -322,3 +365,85 @@ class MetricsCsvExporter(MetricsBaseExporter):
                 writer.writerow(row)
             except Exception as e:
                 self.warning(f"Failed to write metric row for metric {metric.tag}: {e}")
+
+    def _discover_metrics_from_endpoint(
+        self, endpoint_data
+    ) -> list[tuple[str, str, dict[str, str], str]]:
+        """Discover metrics from the first snapshot of an endpoint.
+
+        Args:
+            endpoint_data: ServerMetricsData containing snapshots
+
+        Returns:
+            List of tuples: (metric_name, metric_type, labels, help_text)
+        """
+        from aiperf.common.enums import PrometheusMetricType
+
+        discovered = []
+
+        if not endpoint_data.time_series.snapshots:
+            return discovered
+
+        # Use first snapshot to discover metrics
+        _, first_metrics = endpoint_data.time_series.snapshots[0]
+
+        for metric_name, metric_family in first_metrics.items():
+            # Only include counters, gauges, histograms, and summaries
+            if metric_family.type not in (
+                PrometheusMetricType.COUNTER,
+                PrometheusMetricType.GAUGE,
+                PrometheusMetricType.HISTOGRAM,
+                PrometheusMetricType.SUMMARY,
+            ):
+                continue
+
+            help_text = metric_family.help or ""
+
+            for sample in metric_family.samples:
+                # Check if sample has data
+                has_data = (
+                    sample.value is not None
+                    or (
+                        metric_family.type == PrometheusMetricType.HISTOGRAM
+                        and sample.histogram is not None
+                    )
+                    or (
+                        metric_family.type == PrometheusMetricType.SUMMARY
+                        and sample.summary is not None
+                    )
+                )
+                if has_data:
+                    discovered.append(
+                        (metric_name, metric_family.type, sample.labels, help_text)
+                    )
+
+        return discovered
+
+    @staticmethod
+    def _infer_unit_from_metric_name(metric_name: str) -> str:
+        """Infer unit from metric name based on common naming conventions.
+
+        Args:
+            metric_name: Name of the metric
+
+        Returns:
+            Inferred unit string
+        """
+        name_lower = metric_name.lower()
+
+        if any(x in name_lower for x in ["_seconds", "_duration_s"]):
+            return "s"
+        if any(x in name_lower for x in ["_milliseconds", "_duration_ms", "_ms"]):
+            return "ms"
+        if any(x in name_lower for x in ["_microseconds", "_duration_us", "_us"]):
+            return "us"
+        if any(x in name_lower for x in ["_bytes", "_size"]):
+            return "bytes"
+        if any(x in name_lower for x in ["_percent", "_perc", "_usage"]):
+            return "%"
+        if any(x in name_lower for x in ["_rate", "_per_s", "_toks_per_s"]):
+            return "/s"
+        if any(x in name_lower for x in ["_count", "_total", "_requests"]):
+            return "count"
+
+        return ""

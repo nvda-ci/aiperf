@@ -101,18 +101,17 @@ class TimesliceSummaryResult(ProcessorSummaryResult):
 
 
 class TelemetrySummaryResult(ProcessorSummaryResult):
-    """Summary result containing GPU telemetry metrics and hierarchy.
+    """Summary result containing GPU telemetry hierarchy.
 
     This result type is used by processors that aggregate GPU telemetry data
-    from DCGM endpoints and produce per-GPU metrics for each telemetry field.
+    from DCGM endpoints. The telemetry hierarchy provides the native, structured
+    format for all GPU data organized by endpoint and GPU UUID.
 
-    With the unified pipeline architecture, this now includes both:
-    - Summarized per-GPU metrics (for display/dashboard)
-    - Complete telemetry hierarchy (for export/analysis)
+    MetricResult summaries can be generated on-demand via the hierarchy's
+    get_metric_result() methods when needed for display or export.
 
     Attributes:
         processor_type: Type of processor (TELEMETRY_RESULTS)
-        results: List of GPU telemetry metric results (one per GPU per metric type)
         telemetry_data: Complete telemetry hierarchy with all GPU data
         endpoints_tested: List of DCGM endpoints tested
         endpoints_successful: List of DCGM endpoints that succeeded
@@ -120,10 +119,6 @@ class TelemetrySummaryResult(ProcessorSummaryResult):
     """
 
     processor_type: ResultsProcessorType = ResultsProcessorType.TELEMETRY_RESULTS
-    results: list["MetricResult"] = Field(
-        ...,
-        description="List of GPU telemetry metric results (one per GPU per metric type)",
-    )
     telemetry_data: TelemetryHierarchy = Field(
         ...,
         description="Complete telemetry hierarchy with all GPU data organized by endpoint and GPU",
@@ -140,17 +135,24 @@ class TelemetrySummaryResult(ProcessorSummaryResult):
 
 
 class ServerMetricsSummaryResult(ProcessorSummaryResult):
-    """Summary result containing aggregated server metrics from a results processor.
+    """Summary result containing server metrics hierarchy.
 
     This result type is used by processors that aggregate server metrics data
-    from Prometheus endpoints and produce per-endpoint metrics for each server metric.
+    from Prometheus endpoints. The server metrics hierarchy provides the native,
+    structured format for all Prometheus data organized by endpoint.
+
+    MetricResult summaries can be generated on-demand via the hierarchy's
+    get_metric_result() methods when needed for display or export.
+
+    Attributes:
+        processor_type: Type of processor (SERVER_METRICS_RESULTS)
+        server_metrics_data: Complete server metrics hierarchy with all endpoint data
+        endpoints_tested: List of Prometheus endpoints tested
+        endpoints_successful: List of Prometheus endpoints that succeeded
+        error_summary: Errors encountered during collection
     """
 
     processor_type: ResultsProcessorType = ResultsProcessorType.SERVER_METRICS_RESULTS
-    results: list["MetricResult"] = Field(
-        ...,
-        description="List of server metrics metric results (one per endpoint per metric type)",
-    )
     server_metrics_data: ServerMetricsHierarchy = Field(
         ..., description="Complete server metrics hierarchy with all endpoint data"
     )
