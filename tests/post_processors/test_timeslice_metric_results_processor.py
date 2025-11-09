@@ -10,6 +10,7 @@ from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.enums import MetricType
 from aiperf.common.exceptions import NoMetricValue, PostProcessorDisabled
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
 from aiperf.metrics.metric_dicts import MetricArray, MetricResultsDict
 from aiperf.metrics.types.request_count_metric import RequestCountMetric
 from aiperf.metrics.types.request_latency_metric import RequestLatencyMetric
@@ -272,7 +273,7 @@ class TestTimesliceMetricResultsProcessor:
     async def test_summarize_returns_dict_of_timeslices(
         self, mock_metric_registry: Mock, mock_user_config: UserConfig
     ) -> None:
-        """Test summarize returns dict mapping timeslice indices to metric results."""
+        """Test summarize returns TimesliceSummaryResult with dict mapping timeslice indices to metric results."""
         mock_user_config.output = OutputConfig(slice_duration=1.0)
         processor = TimesliceMetricResultsProcessor(mock_user_config)
         processor._tags_to_types = {RequestLatencyMetric.tag: MetricType.RECORD}
@@ -288,23 +289,24 @@ class TestTimesliceMetricResultsProcessor:
         # The parent class _create_metric_result uses self._instances_map
         processor._instances_map = {RequestLatencyMetric.tag: RequestLatencyMetric()}
 
-        results = await processor.summarize()
+        result = await processor.summarize()
 
-        # Verify structure: dict of timeslice_index -> list[MetricResult]
-        assert isinstance(results, dict)
-        assert 0 in results
-        assert 1 in results
-        assert isinstance(results[0], list)
-        assert isinstance(results[1], list)
-        assert len(results[0]) == 1
-        assert len(results[1]) == 1
-        assert isinstance(results[0][0], MetricResult)
-        assert isinstance(results[1][0], MetricResult)
-        assert results[0][0].tag == RequestLatencyMetric.tag
-        assert results[1][0].tag == RequestLatencyMetric.tag
+        # Verify structure: TimesliceSummaryResult with dict of timeslice_index -> list[MetricResult]
+        assert isinstance(result, TimesliceSummaryResult)
+        assert isinstance(result.timeslice_results, dict)
+        assert 0 in result.timeslice_results
+        assert 1 in result.timeslice_results
+        assert isinstance(result.timeslice_results[0], list)
+        assert isinstance(result.timeslice_results[1], list)
+        assert len(result.timeslice_results[0]) == 1
+        assert len(result.timeslice_results[1]) == 1
+        assert isinstance(result.timeslice_results[0][0], MetricResult)
+        assert isinstance(result.timeslice_results[1][0], MetricResult)
+        assert result.timeslice_results[0][0].tag == RequestLatencyMetric.tag
+        assert result.timeslice_results[1][0].tag == RequestLatencyMetric.tag
         # Verify the actual values
-        assert results[0][0].avg == 42.0
-        assert results[1][0].avg == 84.0
+        assert result.timeslice_results[0][0].avg == 42.0
+        assert result.timeslice_results[1][0].avg == 84.0
 
     @pytest.mark.asyncio
     async def test_summarize_with_empty_timeslices(
@@ -315,11 +317,12 @@ class TestTimesliceMetricResultsProcessor:
         processor = TimesliceMetricResultsProcessor(mock_user_config)
 
         # No data processed
-        results = await processor.summarize()
+        result = await processor.summarize()
 
-        # Should return empty dict
-        assert isinstance(results, dict)
-        assert len(results) == 0
+        # Should return TimesliceSummaryResult with empty dict
+        assert isinstance(result, TimesliceSummaryResult)
+        assert isinstance(result.timeslice_results, dict)
+        assert len(result.timeslice_results) == 0
 
     @pytest.mark.asyncio
     async def test_multiple_timeslices_with_different_slice_duration(

@@ -17,7 +17,7 @@ from typing_extensions import Self
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.constants import NANOS_PER_SECOND, STAT_KEYS
-from aiperf.common.enums import CreditPhase, SSEFieldType
+from aiperf.common.enums import CreditPhase, ResultsProcessorType, SSEFieldType
 from aiperf.common.enums.metric_enums import MetricValueTypeT
 from aiperf.common.exceptions import InvalidInferenceResultError
 from aiperf.common.models.base_models import AIPerfBaseModel
@@ -25,8 +25,9 @@ from aiperf.common.models.dataset_models import Turn
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
 from aiperf.common.models.export_models import JsonMetricResult
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
+from aiperf.common.models.processor_summary_results import ProcessorSummaryResult
 from aiperf.common.models.usage_models import Usage
-from aiperf.common.types import JsonObject, MetricTagT, TimeSliceT
+from aiperf.common.types import JsonObject, MetricTagT
 from aiperf.common.utils import load_json_str
 
 _logger = AIPerfLogger(__name__)
@@ -132,14 +133,9 @@ class MetricRecordMetadata(AIPerfBaseModel):
     )
 
 
-class ProfileResults(AIPerfBaseModel):
-    records: list[MetricResult] | None = Field(
-        ..., description="The records of the profile results"
-    )
-    timeslice_metric_results: dict[TimeSliceT, list[MetricResult]] | None = Field(
-        default=None,
-        description="The timeslice metric results of the profile (if using timeslice mode)",
-    )
+class ProfileResultSummary(AIPerfBaseModel):
+    """The summary of the profile run."""
+
     total_expected: int | None = Field(
         default=None,
         description="The total number of inference requests expected to be made (if known)",
@@ -162,26 +158,21 @@ class ProfileResults(AIPerfBaseModel):
         description="A list of the unique error details and their counts",
     )
 
-    def get(self, tag: MetricTagT) -> MetricResult | None:
-        """Get a metric result by tag, if it exists."""
-        for record in self.records or []:
-            if record.tag == tag:
-                return record
-        return None
-
 
 class ProcessRecordsResult(AIPerfBaseModel):
     """Result of the process records command."""
 
-    results: ProfileResults = Field(..., description="The profile results")
+    summary_results: dict[ResultsProcessorType, ProcessorSummaryResult] = Field(
+        default_factory=dict,
+        description="The summary results from the results processors, keyed by processor type",
+    )
+    profile_summary: ProfileResultSummary = Field(
+        ..., description="The profile result summary"
+    )
     errors: list[ErrorDetails] = Field(
         default_factory=list,
         description="Any error that occurred while processing the profile results",
     )
-
-    def get(self, tag: MetricTagT) -> MetricResult | None:
-        """Get a metric result by tag, if it exists."""
-        return self.results.get(tag)
 
 
 ################################################################################

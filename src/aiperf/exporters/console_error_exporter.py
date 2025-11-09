@@ -18,10 +18,12 @@ class ConsoleErrorExporter:
     """A class that exports error data to the console"""
 
     def __init__(self, exporter_config: ExporterConfig, **kwargs):
-        self._results = exporter_config.results
+        self._process_records_result = exporter_config.process_records_result
 
     async def export(self, console: Console) -> None:
-        if not self._results.error_summary:
+        # Extract error_summary from profile_summary
+        error_summary = self._process_records_result.profile_summary.error_summary
+        if not error_summary:
             return
 
         table = Table(title=self._get_title())
@@ -29,7 +31,7 @@ class ConsoleErrorExporter:
         table.add_column("Type", justify="right", style="yellow")
         table.add_column("Message", justify="left", style="yellow")
         table.add_column("Count", justify="right", style="yellow")
-        self._construct_table(table, self._results.error_summary)
+        self._construct_table(table, error_summary)
 
         console.print("\n")
         console.print(table)

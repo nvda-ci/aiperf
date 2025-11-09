@@ -8,7 +8,7 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.exceptions import NoMetricValue
 from aiperf.common.factories import ResultsProcessorFactory
-from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import TelemetrySummaryResult
 from aiperf.common.models.telemetry_models import TelemetryHierarchy, TelemetryRecord
 from aiperf.common.protocols import (
     TelemetryResultsProcessorProtocol,
@@ -40,7 +40,7 @@ class TelemetryResultsProcessor(BaseMetricsProcessor):
         """
         self._telemetry_hierarchy.add_record(record)
 
-    async def summarize(self) -> list[MetricResult]:
+    async def summarize(self) -> TelemetrySummaryResult:
         """Generate MetricResult list for real-time display and final export.
 
         This method is called by RecordsManager for:
@@ -48,7 +48,7 @@ class TelemetryResultsProcessor(BaseMetricsProcessor):
         2. Real-time dashboard updates when --gpu-telemetry dashboard is enabled
 
         Returns:
-            List of MetricResult objects, one per GPU per metric type.
+            TelemetrySummaryResult containing MetricResult objects and telemetry hierarchy.
             Tags follow hierarchical naming pattern for dashboard filtering.
         """
         results = []
@@ -92,4 +92,13 @@ class TelemetryResultsProcessor(BaseMetricsProcessor):
                         )
                         continue
 
-        return results
+        # Get endpoints tested and successful from hierarchy
+        endpoints = list(self._telemetry_hierarchy.dcgm_endpoints.keys())
+
+        return TelemetrySummaryResult(
+            results=results,
+            telemetry_data=self._telemetry_hierarchy,
+            endpoints_tested=endpoints,
+            endpoints_successful=endpoints,
+            error_summary=[],
+        )

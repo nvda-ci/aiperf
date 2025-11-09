@@ -9,7 +9,8 @@ from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.messages.inference_messages import MetricRecordsData
 from aiperf.common.mixins import BufferedJSONLWriterMixin
-from aiperf.common.models.record_models import MetricRecordInfo, MetricResult
+from aiperf.common.models.processor_summary_results import RecordExportSummaryResult
+from aiperf.common.models.record_models import MetricRecordInfo
 from aiperf.common.protocols import ResultsProcessorProtocol
 from aiperf.metrics.metric_dicts import MetricRecordDict
 from aiperf.metrics.metric_registry import MetricRegistry
@@ -77,6 +78,9 @@ class RecordExportResultsProcessor(
         except Exception as e:
             self.error(f"Failed to write record metrics: {e}")
 
-    async def summarize(self) -> list[MetricResult]:
-        """Summarize the results. For this processor, we don't need to summarize anything."""
-        return []
+    async def summarize(self) -> RecordExportSummaryResult:
+        """Summarize the results. For this processor, we return export metadata."""
+        return RecordExportSummaryResult(
+            file_path=self.output_file,
+            record_count=self.lines_written,
+        )

@@ -6,9 +6,11 @@ from rich.table import Table
 from rich.text import Text
 
 from aiperf.common.decorators import implements_protocol
+from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
 from aiperf.common.factories import ConsoleExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
+from aiperf.common.models.processor_summary_results import TelemetrySummaryResult
 from aiperf.common.protocols import ConsoleExporterProtocol
 from aiperf.exporters.display_units_utils import normalize_endpoint_display
 from aiperf.exporters.exporter_config import ExporterConfig
@@ -28,11 +30,10 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
 
     def __init__(self, exporter_config: ExporterConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._results = exporter_config.results
+        self._process_records_result = exporter_config.process_records_result
         self._user_config = exporter_config.user_config
         self._service_config = exporter_config.service_config
         self._exporter_config = exporter_config
-        self._telemetry_results = exporter_config.telemetry_results
 
     async def export(self, console: Console) -> None:
         """Export telemetry data to console if --gpu-telemetry flag is present.
@@ -47,10 +48,21 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
         if self._user_config.gpu_telemetry is None:
             return
 
-        if not self._telemetry_results:
+        # Extract telemetry results from summary_results
+        telemetry_results = self._extract_telemetry_results()
+        if not telemetry_results:
             return
 
-        self._print_renderable(console, self.get_renderable())
+        self._print_renderable(console, self.get_renderable(telemetry_results))
+
+    def _extract_telemetry_results(self) -> TelemetrySummaryResult | None:
+        """Extract telemetry results from summary_results dictionary."""
+        summary_results = self._process_records_result.summary_results
+        if ResultsProcessorType.TELEMETRY_RESULTS in summary_results:
+            telemetry_summary = summary_results[ResultsProcessorType.TELEMETRY_RESULTS]
+            if isinstance(telemetry_summary, TelemetrySummaryResult):
+                return telemetry_summary
+        return None
 
     def _print_renderable(self, console: Console, renderable: RenderableType) -> None:
         """Print the renderable to the console with formatting.
@@ -65,8 +77,13 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
         console.print(renderable)
         console.file.flush()
 
-    def get_renderable(self) -> RenderableType:
+    def get_renderable(
+        self, telemetry_results: TelemetrySummaryResult
+    ) -> RenderableType:
         """Create Rich tables showing GPU telemetry metrics with consolidated single-table format.
+
+        Args:
+            telemetry_results: TelemetrySummaryResult containing telemetry data and endpoint status
 
         Generates formatted output with:
         - Summary header showing endpoint reachability status
@@ -78,7 +95,7 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
             RenderableType: Rich Group containing multiple Tables, or Text message if no data
         """
         renderables = []
-        telemetry_data = self._telemetry_results.telemetry_data
+        telemetry_data = telemetry_results.telemetry_data
         first_table = True
 
         for dcgm_url, gpus_data in telemetry_data.dcgm_endpoints.items():
@@ -94,7 +111,9 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
 
                 if first_table:
                     first_table = False
-                    table_title = self._create_summary_header(table_title_base)
+                    table_title = self._create_summary_header(
+                        table_title_base, telemetry_results
+                    )
                 else:
                     renderables.append(Text(""))
                     table_title = table_title_base
@@ -105,24 +124,27 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
                 renderables.append(metrics_table)
 
         if not renderables:
-            return self._create_no_data_message()
+            return self._create_no_data_message(telemetry_results)
 
         return Group(*renderables)
 
-    def _create_summary_header(self, table_title_base: str) -> str:
+    def _create_summary_header(
+        self, table_title_base: str, telemetry_results: TelemetrySummaryResult
+    ) -> str:
         """Create the summary header with endpoint reachability status.
 
         Args:
             table_title_base: Base title for the first table
+            telemetry_results: TelemetrySummaryResult containing endpoint status
 
         Returns:
             Formatted title string with endpoint status
         """
         title_lines = ["NVIDIA AIPerf | GPU Telemetry Summary"]
 
-        endpoints_configured = self._telemetry_results.endpoints_configured
-        endpoints_successful = self._telemetry_results.endpoints_successful
-        total_count = len(endpoints_configured)
+        endpoints_tested = telemetry_results.endpoints_tested
+        endpoints_successful = telemetry_results.endpoints_successful
+        total_count = len(endpoints_tested)
         successful_count = len(endpoints_successful)
         failed_count = total_count - successful_count
 
@@ -139,7 +161,7 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
                 f"[bold yellow]{successful_count}/{total_count} DCGM endpoints reachable[/bold yellow]"
             )
 
-        for endpoint in endpoints_configured:
+        for endpoint in endpoints_tested:
             clean_endpoint = normalize_endpoint_display(endpoint)
             if endpoint in endpoints_successful:
                 title_lines.append(f"[green]• {clean_endpoint} \u2714 [/green]")
@@ -212,18 +234,23 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
 
         return metrics_table
 
-    def _create_no_data_message(self) -> Text:
+    def _create_no_data_message(
+        self, telemetry_results: TelemetrySummaryResult
+    ) -> Text:
         """Create error message when no GPU telemetry data is available.
+
+        Args:
+            telemetry_results: TelemetrySummaryResult containing endpoint status and errors
 
         Returns:
             Rich Text with error message and endpoint status
         """
         message_parts = ["No GPU telemetry data collected during the benchmarking run."]
 
-        endpoints_configured = self._telemetry_results.endpoints_configured
-        endpoints_successful = self._telemetry_results.endpoints_successful
+        endpoints_tested = telemetry_results.endpoints_tested
+        endpoints_successful = telemetry_results.endpoints_successful
         failed_endpoints = [
-            ep for ep in endpoints_configured if ep not in endpoints_successful
+            ep for ep in endpoints_tested if ep not in endpoints_successful
         ]
 
         if failed_endpoints:
@@ -232,9 +259,9 @@ class GPUTelemetryConsoleExporter(AIPerfLoggerMixin):
                 clean_endpoint = normalize_endpoint_display(endpoint)
                 message_parts.append(f"  • {clean_endpoint}")
 
-        if self._telemetry_results.error_summary:
+        if telemetry_results.error_summary:
             message_parts.append("\n\nErrors encountered:")
-            for error_count in self._telemetry_results.error_summary:
+            for error_count in telemetry_results.error_summary:
                 error = error_count.error_details
                 count = error_count.count
                 if count > 1:

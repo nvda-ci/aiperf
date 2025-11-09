@@ -31,7 +31,6 @@ from aiperf.common.messages import (
     MetricRecordsMessage,
     ProcessRecordsCommand,
     ProcessRecordsResultMessage,
-    ProcessTelemetryResultMessage,
     ProfileCancelCommand,
     RealtimeMetricsMessage,
     RealtimeTelemetryMetricsMessage,
@@ -42,6 +41,7 @@ from aiperf.common.messages import (
 from aiperf.common.messages.command_messages import RealtimeMetricsCommand
 from aiperf.common.messages.credit_messages import CreditPhaseSendingCompleteMessage
 from aiperf.common.messages.inference_messages import MetricRecordsData
+from aiperf.common.messages.server_metrics_messages import ServerMetricsRecordsMessage
 from aiperf.common.mixins import PullClientMixin
 from aiperf.common.models import (
     ErrorDetails,
@@ -49,16 +49,19 @@ from aiperf.common.models import (
     ProcessingStats,
     ProcessRecordsResult,
     ProfileResults,
+    ServerMetricsRecord,
+)
+from aiperf.common.models.processor_summary_results import (
+    MetricSummaryResult,
+    ProcessorSummaryResult,
+    TelemetrySummaryResult,
+    TimesliceSummaryResult,
 )
 from aiperf.common.models.record_models import MetricResult
-from aiperf.common.models.telemetry_models import (
-    ProcessTelemetryResult,
-    TelemetryHierarchy,
-    TelemetryRecord,
-    TelemetryResults,
-)
+from aiperf.common.models.telemetry_models import TelemetryRecord
 from aiperf.common.protocols import (
     ResultsProcessorProtocol,
+    ServerMetricsResultsProcessorProtocol,
     ServiceProtocol,
     TelemetryResultsProcessorProtocol,
 )
@@ -66,12 +69,11 @@ from aiperf.records.phase_completion import PhaseCompletionChecker
 
 
 @dataclass
-class TelemetryTrackingState:
-    """
-    Tracks telemetry-related state and performance metrics.
+class ErrorTrackingState:
+    """Base class for tracking errors with counts and thread-safe access.
 
-    Consolidates error tracking, warnings, endpoint status, and performance
-    statistics for GPU telemetry collection and processing.
+    Provides common error tracking functionality for all metrics subsystems
+    (telemetry, server metrics, regular metrics).
     """
 
     error_counts: dict[ErrorDetails, int] = field(
@@ -79,12 +81,27 @@ class TelemetryTrackingState:
     )
     error_counts_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
+
+@dataclass
+class TelemetryTrackingState(ErrorTrackingState):
+    """
+    Tracks telemetry-related state and performance metrics.
+
+    Consolidates error tracking, warnings, endpoint status, and performance
+    statistics for GPU telemetry collection and processing.
+    """
+
     task_runs: int = 0
     total_gen_time_ms: float = 0.0
     total_pub_time_ms: float = 0.0
     total_metrics_generated: int = 0
     mode_enabled_time: float | None = None
     last_metric_values: dict[str, float | None] | None = None
+
+
+# Type aliases for clarity - these use the base ErrorTrackingState
+ServerMetricsTrackingState = ErrorTrackingState
+MetricTrackingState = ErrorTrackingState
 
 
 @implements_protocol(ServiceProtocol)
@@ -121,6 +138,9 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self.profile_cancelled: bool = False
         self.timeout_triggered: bool = False
         self.expected_duration_sec: float | None = None
+        # Time window tracking for server metrics alignment
+        self.min_request_timestamp_ns: int | None = None
+        self.max_response_timestamp_ns: int | None = None
         #########################################################
 
         self._completion_checker = PhaseCompletionChecker()
@@ -134,10 +154,15 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._previous_realtime_records: int | None = None
 
         self._telemetry_state = TelemetryTrackingState()
+        self._server_metrics_state = ServerMetricsTrackingState()
+        self._metric_state = MetricTrackingState()
         self._telemetry_enable_event = asyncio.Event()
 
         self._metric_results_processors: list[ResultsProcessorProtocol] = []
         self._telemetry_results_processors: list[TelemetryResultsProcessorProtocol] = []
+        self._server_metrics_results_processors: list[
+            ServerMetricsResultsProcessorProtocol
+        ] = []
         self._telemetry_accumulator: TelemetryResultsProcessorProtocol | None = None
 
         for results_processor_type in ResultsProcessorFactory.get_all_class_types():
@@ -156,6 +181,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                     # Store the accumulating processor separately for hierarchy access
                     if results_processor_type == ResultsProcessorType.TELEMETRY_RESULTS:
                         self._telemetry_accumulator = results_processor
+                elif isinstance(
+                    results_processor, ServerMetricsResultsProcessorProtocol
+                ):
+                    self._server_metrics_results_processors.append(results_processor)
                 else:
                     self._metric_results_processors.append(results_processor)
 
@@ -183,6 +212,33 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         record_data = message.to_data()
 
         should_include_request = self._should_include_request_by_duration(record_data)
+
+        # Update time window tracking for server metrics alignment
+        if record_data.valid and should_include_request:
+            async with self.processing_status_lock:
+                # Track min request timestamp
+                if record_data.metadata.request_start_ns is not None:
+                    if self.min_request_timestamp_ns is None:
+                        self.min_request_timestamp_ns = (
+                            record_data.metadata.request_start_ns
+                        )
+                    else:
+                        self.min_request_timestamp_ns = min(
+                            self.min_request_timestamp_ns,
+                            record_data.metadata.request_start_ns,
+                        )
+
+                # Track max response timestamp
+                if record_data.metadata.request_end_ns is not None:
+                    if self.max_response_timestamp_ns is None:
+                        self.max_response_timestamp_ns = (
+                            record_data.metadata.request_end_ns
+                        )
+                    else:
+                        self.max_response_timestamp_ns = max(
+                            self.max_response_timestamp_ns,
+                            record_data.metadata.request_end_ns,
+                        )
 
         if should_include_request:
             await self._send_results_to_results_processors(record_data)
@@ -230,19 +286,29 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             message: Batch of telemetry records from a DCGM collector
         """
         if message.valid:
-            try:
-                await self._send_telemetry_to_results_processors(message.records)
-            except Exception as e:
-                error_details = ErrorDetails(
-                    message=f"Telemetry processor error: {str(e)}"
-                )
-                async with self._telemetry_state.error_counts_lock:
-                    self._telemetry_state.error_counts[error_details] += 1
-                self.debug(f"Failed to process telemetry batch: {e}")
+            await self._send_telemetry_to_results_processors(message.records)
         else:
             if message.error:
                 async with self._telemetry_state.error_counts_lock:
                     self._telemetry_state.error_counts[message.error] += 1
+
+    @on_pull_message(MessageType.SERVER_METRICS_RECORDS)
+    async def _on_server_metrics_records(
+        self, message: ServerMetricsRecordsMessage
+    ) -> None:
+        """Handle server metrics records message from Server Metrics Manager.
+        The RecordsManager acts as the central hub for all record processing,
+        including server metrics from Prometheus endpoints.
+
+        Args:
+            message: Batch of server metrics records from a Prometheus collector
+        """
+        if message.valid:
+            await self._send_server_metrics_to_results_processors(message.record)
+        else:
+            if message.error:
+                async with self._server_metrics_state.error_counts_lock:
+                    self._server_metrics_state.error_counts[message.error] += 1
 
     def _should_include_request_by_duration(
         self, record_data: MetricRecordsData
@@ -310,7 +376,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
             async with self.processing_status_lock:
                 cancelled = self.profile_cancelled
-                proc_stats = copy.deepcopy(self.processing_stats)
+                proc_stats = self.processing_stats.model_copy()
 
             # Send a message to the event bus to signal that we received all the records
             await self.publish(
@@ -328,12 +394,20 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self, record_data: MetricRecordsData
     ) -> None:
         """Send the results to each of the metric results processors."""
-        await asyncio.gather(
+        errors = await asyncio.gather(
             *[
                 results_processor.process_result(record_data)
                 for results_processor in self._metric_results_processors
-            ]
+            ],
+            return_exceptions=True,
         )
+        for error in errors:
+            if isinstance(error, BaseException):
+                self.exception(f"Failed to process metric record: {error!r}")
+                async with self._metric_state.error_counts_lock:
+                    self._metric_state.error_counts[
+                        ErrorDetails.from_exception(error)
+                    ] += 1
 
     async def _send_telemetry_to_results_processors(
         self, telemetry_records: list[TelemetryRecord]
@@ -343,13 +417,44 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         Args:
             telemetry_records: Batch of records from single collection cycle
         """
-        await asyncio.gather(
+        errors = await asyncio.gather(
             *[
                 processor.process_telemetry_record(record)
                 for processor in self._telemetry_results_processors
-                for record in telemetry_records  # Process each record individually
-            ]
+                for record in telemetry_records
+            ],
+            return_exceptions=True,
         )
+        for error in errors:
+            if isinstance(error, BaseException):
+                self.exception(f"Failed to process telemetry record: {error!r}")
+                async with self._telemetry_state.error_counts_lock:
+                    self._telemetry_state.error_counts[
+                        ErrorDetails.from_exception(error)
+                    ] += 1
+
+    async def _send_server_metrics_to_results_processors(
+        self, record: ServerMetricsRecord
+    ) -> None:
+        """Send individual server metrics records to server metrics results processors only.
+
+        Args:
+            record: ServerMetricsRecord from single collection cycle
+        """
+        errors = await asyncio.gather(
+            *[
+                processor.process_server_metrics_record(record)
+                for processor in self._server_metrics_results_processors
+            ],
+            return_exceptions=True,
+        )
+        for error in errors:
+            if isinstance(error, BaseException):
+                self.exception(f"Failed to process server metrics record: {error!r}")
+                async with self._server_metrics_state.error_counts_lock:
+                    self._server_metrics_state.error_counts[
+                        ErrorDetails.from_exception(error)
+                    ] += 1
 
     @on_message(MessageType.CREDIT_PHASE_START)
     async def _on_credit_phase_start(
@@ -544,15 +649,18 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             return_exceptions=True,
         )
 
-        # Flatten results: each processor returns list[MetricResult], so we have
-        # list[list[MetricResult] | Exception]. Flatten to single list[MetricResult].
-        metric_results = [
-            res
-            for result in results
-            if isinstance(result, list)
-            for res in result
-            if isinstance(res, MetricResult)
-        ]
+        # Extract results from ProcessorSummaryResult objects
+        metric_results = []
+        for result in results:
+            if isinstance(result, MetricSummaryResult):
+                metric_results.extend(result.results)
+            elif isinstance(result, TimesliceSummaryResult):
+                # For timeslice results, flatten all timeslice metric results
+                for timeslice_metrics in result.timeslice_results.values():
+                    metric_results.extend(timeslice_metrics)
+            elif isinstance(result, BaseException):
+                # Skip exceptions
+                continue
 
         return metric_results
 
@@ -566,54 +674,78 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             return_exceptions=True,
         )
 
-        # Flatten results: each processor returns list[MetricResult], so we have
-        # list[list[MetricResult] | Exception]. Flatten to single list[MetricResult].
-        telemetry_metrics = [
-            res
-            for result in telemetry_results
-            if isinstance(result, list)
-            for res in result
-            if isinstance(res, MetricResult)
-        ]
+        # Extract results from TelemetrySummaryResult objects
+        telemetry_metrics = []
+        for result in telemetry_results:
+            if isinstance(result, TelemetrySummaryResult):
+                telemetry_metrics.extend(result.results)
+            elif isinstance(result, BaseException):
+                # Skip exceptions
+                continue
+
         return telemetry_metrics
 
     async def _process_results(self, cancelled: bool) -> ProcessRecordsResult:
-        """Process the results."""
+        """Process the results by aggregating all processor summary results."""
         self.debug(lambda: f"Processing records (cancelled: {cancelled})")
 
         self.info("Processing records results...")
-        # Process the records through the metric results processors only.
+        # Call summarize on ALL processors (metric, telemetry, server_metrics, export processors)
+        all_processors = (
+            self._metric_results_processors
+            + self._telemetry_results_processors
+            + self._server_metrics_results_processors
+        )
+
         results = await asyncio.gather(
-            *[
-                results_processor.summarize()
-                for results_processor in self._metric_results_processors
-            ],
+            *[processor.summarize() for processor in all_processors],
             return_exceptions=True,
         )
 
-        records_results, timeslice_metric_results, error_results = [], {}, []
-        for result in results:
-            if isinstance(result, list):
-                records_results.extend(result)
-            elif isinstance(result, dict):
-                timeslice_metric_results = result
-            elif isinstance(result, ErrorDetails):
-                error_results.append(result)
-            elif isinstance(result, BaseException):
-                error_results.append(ErrorDetails.from_exception(result))
+        # Aggregate results by processor type and collect errors
+        summary_results: dict[ResultsProcessorType, ProcessorSummaryResult] = {}
+        errors: list[ErrorDetails] = []
 
-        result = ProcessRecordsResult(
-            results=ProfileResults(
-                records=records_results,
-                timeslice_metric_results=timeslice_metric_results,
-                completed=len(records_results),
+        for result in results:
+            if isinstance(result, ProcessorSummaryResult):
+                summary_results[result.processor_type] = result
+            elif isinstance(result, BaseException):
+                errors.append(ErrorDetails.from_exception(result))
+            else:
+                errors.append(
+                    ErrorDetails(message=f"Unknown result type: {type(result)}")
+                )
+
+        # Extract metric results count for ProfileResultSummary
+        completed = 0
+        if ResultsProcessorType.METRIC_RESULTS in summary_results:
+            metric_summary = summary_results[ResultsProcessorType.METRIC_RESULTS]
+            if isinstance(metric_summary, MetricSummaryResult):
+                completed = len(metric_summary.results)
+        elif ResultsProcessorType.TIMESLICE in summary_results:
+            timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
+            if isinstance(timeslice_summary, TimesliceSummaryResult):
+                # Count total metrics across all timeslices
+                completed = sum(
+                    len(metrics)
+                    for metrics in timeslice_summary.timeslice_results.values()
+                )
+
+        async with self.processing_status_lock:
+            profile_summary = ProfileResults(
+                completed=completed,
                 start_ns=self.start_time_ns or time.time_ns(),
                 end_ns=self.end_time_ns or time.time_ns(),
-                error_summary=await self.get_error_summary(),
                 was_cancelled=cancelled,
-            ),
-            errors=error_results,
+                error_summary=await self.get_error_summary(),
+            )
+
+        result = ProcessRecordsResult(
+            summary_results=summary_results,
+            profile_summary=profile_summary,
+            errors=errors,
         )
+
         self.debug(lambda: f"Process records result: {result}")
         await self.publish(
             ProcessRecordsResultMessage(
@@ -622,99 +754,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             )
         )
 
-        await self._publish_telemetry_results()
-
         return result
-
-    async def export_telemetry_independently(self) -> TelemetryResults | None:
-        """Export telemetry data independently from inference results.
-
-        This method provides a separate export path for telemetry data that doesn't
-        interfere with the inference results pipeline.
-
-        Retrieves the accumulated telemetry hierarchy from the TelemetryResultsProcessor,
-        which serves as the single source of truth for all telemetry data.
-
-        Returns:
-            TelemetryResults if telemetry data was collected, None otherwise
-        """
-        if not self._telemetry_accumulator:
-            return None
-
-        # Get hierarchy from the accumulating processor
-        telemetry_hierarchy = self._telemetry_accumulator.get_telemetry_hierarchy()
-
-        if not telemetry_hierarchy.dcgm_endpoints:
-            return None
-
-        telemetry_results = TelemetryResults(
-            telemetry_data=telemetry_hierarchy,
-            start_ns=self.start_time_ns or time.time_ns(),
-            end_ns=self.end_time_ns or time.time_ns(),
-            endpoints_tested=list(telemetry_hierarchy.dcgm_endpoints.keys()),
-            endpoints_successful=list(telemetry_hierarchy.dcgm_endpoints.keys()),
-            error_summary=await self.get_telemetry_error_summary(),
-        )
-
-        return telemetry_results
-
-    async def _process_telemetry_results(self) -> ProcessTelemetryResult:
-        """Process telemetry results by calling summarize on all telemetry processors.
-
-        Collects summarized results from all telemetry processors and exports the full
-        telemetry hierarchy. Combines processor errors with collection errors to provide
-        complete error reporting.
-
-        Returns:
-            ProcessTelemetryResult: Contains TelemetryResults with GPU telemetry data hierarchy
-                and any errors encountered during collection or processing
-        """
-        self.debug("Processing telemetry results...")
-        results = await asyncio.gather(
-            *[
-                results_processor.summarize()
-                for results_processor in self._telemetry_results_processors
-            ],
-            return_exceptions=True,
-        )
-
-        error_results = []
-        for result in results:
-            if isinstance(result, ErrorDetails):
-                error_results.append(result)
-            elif isinstance(result, BaseException):
-                error_results.append(ErrorDetails.from_exception(result))
-
-        telemetry_results = await self.export_telemetry_independently()
-        if not telemetry_results:
-            telemetry_results = TelemetryResults(
-                telemetry_data=TelemetryHierarchy(),
-                start_ns=self.start_time_ns or time.time_ns(),
-                end_ns=self.end_time_ns or time.time_ns(),
-            )
-
-        async with self._telemetry_state.error_counts_lock:
-            unique_errors = list(self._telemetry_state.error_counts.keys())
-
-        return ProcessTelemetryResult(
-            results=telemetry_results,
-            errors=error_results + unique_errors,
-        )
-
-    async def _publish_telemetry_results(self) -> None:
-        """Publish telemetry results independently from inference results.
-
-        Processes and publishes telemetry data via ProcessTelemetryResultMessage.
-        Called at the end of _process_results to keep telemetry separate from
-        inference metrics in the results pipeline.
-        """
-        telemetry_result = await self._process_telemetry_results()
-        await self.publish(
-            ProcessTelemetryResultMessage(
-                service_id=self.service_id,
-                telemetry_result=telemetry_result,
-            )
-        )
 
     async def get_error_summary(self) -> list[ErrorDetailsCount]:
         """Generate a summary of the error records."""

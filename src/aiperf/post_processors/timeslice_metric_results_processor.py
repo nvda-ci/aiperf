@@ -9,7 +9,7 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.exceptions import NoMetricValue, PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory
-from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
 from aiperf.common.protocols import ResultsProcessorProtocol
 from aiperf.common.types import MetricTagT, TimeSliceT
 from aiperf.metrics.base_metric import BaseMetric
@@ -95,7 +95,7 @@ class TimesliceMetricResultsProcessor(MetricResultsProcessor):
                 except Exception as e:
                     self.warning(f"Error deriving metric '{tag}': {e!r}")
 
-    async def summarize(self) -> dict[TimeSliceT, list[MetricResult]]:
+    async def summarize(self) -> TimesliceSummaryResult:
         """Summarize the results.
 
         This will compute the values for the derived metrics, and then create the MetricResult objects for each metric.
@@ -115,4 +115,4 @@ class TimesliceMetricResultsProcessor(MetricResultsProcessor):
             ]
             timeslice_metric_results[counter] = metric_results
 
-        return timeslice_metric_results
+        return TimesliceSummaryResult(timeslice_results=timeslice_metric_results)

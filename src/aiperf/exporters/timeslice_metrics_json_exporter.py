@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DataExporterType
+from aiperf.common.enums import DataExporterType, ResultsProcessorType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.models.export_models import (
     TimesliceCollectionExportData,
     TimesliceData,
 )
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_json_exporter import MetricsJsonExporter
@@ -35,7 +36,11 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
             lambda: f"Initializing TimesliceMetricsJsonExporter with config: {exporter_config}"
         )
 
-        if not self._results.timeslice_metric_results:
+        # Check if timeslice results exist in summary_results
+        summary_results = self._process_records_result.summary_results
+        if ResultsProcessorType.TIMESLICE not in summary_results or not isinstance(
+            summary_results[ResultsProcessorType.TIMESLICE], TimesliceSummaryResult
+        ):
             raise DataExporterDisabled(
                 "TimesliceMetricsJsonExporter disabled: no timeslice metric results found"
             )
@@ -58,15 +63,25 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
     def _generate_content(self) -> str:
         """Generate single JSON with all timeslices in an array.
 
-        Uses instance data member self._results.timeslice_metric_results.
+        Extracts timeslice results from summary_results dictionary.
 
         Returns:
             str: JSON content with all timeslices
         """
         timeslices_list = []
 
-        for timeslice_index in sorted(self._results.timeslice_metric_results.keys()):
-            metric_results = self._results.timeslice_metric_results[timeslice_index]
+        # Extract timeslice results from summary_results
+        summary_results = self._process_records_result.summary_results
+        timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
+
+        if not isinstance(timeslice_summary, TimesliceSummaryResult):
+            return TimesliceCollectionExportData(
+                timeslices=[],
+                input_config=self._user_config,
+            ).model_dump_json(indent=2, exclude_unset=True)
+
+        for timeslice_index in sorted(timeslice_summary.timeslice_results.keys()):
+            metric_results = timeslice_summary.timeslice_results[timeslice_index]
 
             # Reuse base class helper to prepare metrics
             prepared_json_metrics = self._prepare_metrics_for_json(metric_results)

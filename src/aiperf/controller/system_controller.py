@@ -46,6 +46,10 @@ from aiperf.common.messages import (
     StatusMessage,
     TelemetryStatusMessage,
 )
+from aiperf.common.messages.server_metrics_messages import (
+    ProcessServerMetricsResultMessage,
+    ServerMetricsStatusMessage,
+)
 from aiperf.common.models import (
     ErrorDetails,
     ProcessRecordsResult,
@@ -53,6 +57,7 @@ from aiperf.common.models import (
     TelemetryResults,
 )
 from aiperf.common.models.error_models import ExitErrorInfo
+from aiperf.common.models.server_metrics_models import ServerMetricsResults
 from aiperf.common.protocols import AIPerfUIProtocol, ServiceManagerProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.controller_utils import print_exit_errors
@@ -126,13 +131,17 @@ class SystemController(SignalHandlerMixin, BaseService):
         self._profile_results: ProcessRecordsResult | None = None
         self._exit_errors: list[ExitErrorInfo] = []
         self._telemetry_results: TelemetryResults | None = None
+        self._server_metrics_results: ServerMetricsResults | None = None
         self._profile_results_received = False
         self._should_wait_for_telemetry = False
+        self._should_wait_for_server_metrics = False
 
         self._shutdown_triggered = False
         self._shutdown_lock = asyncio.Lock()
         self._endpoints_configured: list[str] = []
         self._endpoints_reachable: list[str] = []
+        self._server_metrics_endpoints_configured: list[str] = []
+        self._server_metrics_endpoints_reachable: list[str] = []
         self.debug("System Controller created")
 
     async def request_realtime_metrics(self) -> None:
@@ -183,6 +192,9 @@ class SystemController(SignalHandlerMixin, BaseService):
         # Start optional services before waiting for registration so they can participate in configuration
         self.debug("Starting optional TelemetryManager service")
         await self.service_manager.run_service(ServiceType.TELEMETRY_MANAGER, 1)
+
+        self.debug("Starting optional ServerMetricsManager service")
+        await self.service_manager.run_service(ServiceType.SERVER_METRICS_MANAGER, 1)
 
         async with self.try_operation_or_stop("Register Services"):
             await self.service_manager.wait_for_all_services_registration(
@@ -381,6 +393,27 @@ class SystemController(SignalHandlerMixin, BaseService):
                 f"GPU telemetry enabled - {len(message.endpoints_reachable)}/{len(message.endpoints_configured)} endpoint(s) reachable"
             )
 
+    @on_message(MessageType.SERVER_METRICS_STATUS)
+    async def _on_server_metrics_status_message(
+        self, message: ServerMetricsStatusMessage
+    ) -> None:
+        """Handle server metrics status from ServerMetricsManager.
+
+        ServerMetricsStatusMessage informs SystemController if server metrics results will be available.
+        """
+
+        self._server_metrics_endpoints_configured = message.endpoints_configured
+        self._server_metrics_endpoints_reachable = message.endpoints_reachable
+        self._should_wait_for_server_metrics = message.enabled
+
+        if not message.enabled:
+            reason_msg = f" - {message.reason}" if message.reason else ""
+            self.info(f"Server metrics disabled{reason_msg}")
+        else:
+            self.info(
+                f"Server metrics enabled - {len(message.endpoints_reachable)}/{len(message.endpoints_configured)} endpoint(s) reachable"
+            )
+
     @on_message(MessageType.COMMAND_RESPONSE)
     async def _process_command_response_message(self, message: CommandResponse) -> None:
         """Process a command response message."""
@@ -436,13 +469,15 @@ class SystemController(SignalHandlerMixin, BaseService):
                 f"Received process records result message with errors: {message.results.errors}"
             )
 
-        self.debug(lambda: f"Error summary: {message.results.results.error_summary}")
+        self.debug(
+            lambda: f"Error summary: {message.results.profile_summary.error_summary}"
+        )
 
         self._profile_results = message.results
 
-        if not message.results.results:
+        if not message.results.profile_summary:
             self.error(
-                f"Received process records result message with no records: {message.results.results}"
+                f"Received process records result message with no records: {message.results.profile_summary}"
             )
 
         self._profile_results_received = True
@@ -480,18 +515,54 @@ class SystemController(SignalHandlerMixin, BaseService):
 
         await self._check_and_trigger_shutdown()
 
+    @on_message(MessageType.PROCESS_SERVER_METRICS_RESULT)
+    async def _on_process_server_metrics_result_message(
+        self, message: ProcessServerMetricsResultMessage
+    ) -> None:
+        """Handle a server metrics results message."""
+        self.debug(lambda: f"Received server metrics results message: {message}")
+
+        if message.server_metrics_result.errors:
+            self.warning(
+                f"Received process server metrics result message with errors: {message.server_metrics_result.errors}"
+            )
+
+        self.debug(
+            lambda: f"Error summary: {message.server_metrics_result.results.error_summary}"
+        )
+
+        server_metrics_results = message.server_metrics_result.results
+
+        if not message.server_metrics_result.results:
+            self.error(
+                f"Received process server metrics result message with no records: {server_metrics_results}"
+            )
+
+        if server_metrics_results:
+            server_metrics_results.endpoints_configured = (
+                self._server_metrics_endpoints_configured
+            )
+            server_metrics_results.endpoints_successful = (
+                self._server_metrics_endpoints_reachable
+            )
+
+        self._server_metrics_results = server_metrics_results
+
+        await self._check_and_trigger_shutdown()
+
     async def _check_and_trigger_shutdown(self) -> None:
         """Check if all required results are received and trigger unified export + shutdown.
 
         Coordination logic:
         1. Always wait for profile results (ProcessRecordsResultMessage)
-        2. If telemetry disabled OR telemetry results received → proceed with shutdown
-        3. Otherwise → wait (telemetry results arrive nearly simultaneously and will call this method again)
+        2. If telemetry disabled OR telemetry results received → proceed
+        3. If server metrics disabled OR server metrics results received → proceed
+        4. Otherwise → wait (results arrive nearly simultaneously and will call this method again)
 
         Thread safety:
-        Uses self._shutdown_lock to prevent race conditions when ProcessRecordsResultMessage
-        and ProcessTelemetryResultMessage arrive concurrently. The lock ensures atomic
-        check-and-set of _shutdown_triggered, preventing double-triggering of stop().
+        Uses self._shutdown_lock to prevent race conditions when multiple result messages
+        arrive concurrently. The lock ensures atomic check-and-set of _shutdown_triggered,
+        preventing double-triggering of stop().
         """
         async with self._shutdown_lock:
             if self._shutdown_triggered:
@@ -505,12 +576,22 @@ class SystemController(SignalHandlerMixin, BaseService):
                 or self._telemetry_results is not None
             )
 
-            if telemetry_ready_for_shutdown:
+            server_metrics_ready_for_shutdown = (
+                not self._should_wait_for_server_metrics
+                or self._server_metrics_results is not None
+            )
+
+            if telemetry_ready_for_shutdown and server_metrics_ready_for_shutdown:
                 self._shutdown_triggered = True
                 self.debug("All results received, initiating shutdown")
                 await asyncio.shield(self.stop())
             else:
-                self.debug("Waiting for telemetry results...")
+                pending = []
+                if not telemetry_ready_for_shutdown:
+                    pending.append("telemetry")
+                if not server_metrics_ready_for_shutdown:
+                    pending.append("server metrics")
+                self.debug(f"Waiting for {', '.join(pending)} results...")
 
     async def _handle_signal(self, sig: int) -> None:
         """Handle received signals by triggering graceful shutdown.
@@ -581,7 +662,7 @@ class SystemController(SignalHandlerMixin, BaseService):
 
     async def _print_post_benchmark_info_and_metrics(self) -> None:
         """Print post benchmark info and metrics to the console."""
-        if not self._profile_results or not self._profile_results.results.records:
+        if not self._profile_results:
             self.warning("No profile results to export")
             return
 
@@ -590,10 +671,9 @@ class SystemController(SignalHandlerMixin, BaseService):
             console.width = 100
 
         exporter_manager = ExporterManager(
-            results=self._profile_results.results,
+            process_records_result=self._profile_results,
             user_config=self.user_config,
             service_config=self.service_config,
-            telemetry_results=self._telemetry_results,
         )
 
         # Export data files (CSV, JSON) with complete dataset including telemetry
@@ -644,17 +724,31 @@ class SystemController(SignalHandlerMixin, BaseService):
 
     def _print_benchmark_duration(self, console: Console) -> None:
         """Print the duration of the benchmark."""
+        from aiperf.common.enums import ResultsProcessorType
+        from aiperf.common.models.processor_summary_results import MetricSummaryResult
         from aiperf.metrics.types.benchmark_duration_metric import (
             BenchmarkDurationMetric,
         )
 
-        duration = self._profile_results.get(BenchmarkDurationMetric.tag)
-        if duration:
-            duration = duration.to_display_unit()
-            duration_str = f"[bold green]{BenchmarkDurationMetric.header}[/bold green]: {duration.avg:.2f} {duration.unit}"
-            if self._was_cancelled:
-                duration_str += " [italic yellow](cancelled early)[/italic yellow]"
-            console.print(duration_str)
+        # Extract metrics from summary_results
+        metric_summary = self._profile_results.summary_results.get(
+            ResultsProcessorType.METRIC_RESULTS
+        )
+        if isinstance(metric_summary, MetricSummaryResult):
+            duration = next(
+                (
+                    r
+                    for r in metric_summary.results
+                    if r.tag == BenchmarkDurationMetric.tag
+                ),
+                None,
+            )
+            if duration:
+                duration = duration.to_display_unit()
+                duration_str = f"[bold green]{BenchmarkDurationMetric.header}[/bold green]: {duration.avg:.2f} {duration.unit}"
+                if self._was_cancelled:
+                    duration_str += " [italic yellow](cancelled early)[/italic yellow]"
+                console.print(duration_str)
 
     async def _kill(self):
         """Kill the system controller."""

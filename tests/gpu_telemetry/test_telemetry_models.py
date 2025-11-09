@@ -243,9 +243,7 @@ class TestGpuMetricTimeSeries:
         with pytest.raises(NoMetricValue) as exc_info:
             time_series.to_metric_result("nonexistent", "tag", "header", "unit")
 
-        assert "No telemetry data available for metric 'nonexistent'" in str(
-            exc_info.value
-        )
+        assert "No data available for metric 'nonexistent'" in str(exc_info.value)
 
 
 class TestGpuTelemetryData:

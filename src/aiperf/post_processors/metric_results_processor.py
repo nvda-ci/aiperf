@@ -11,6 +11,7 @@ from aiperf.common.exceptions import NoMetricValue
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.messages.inference_messages import MetricRecordsData
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import MetricSummaryResult
 from aiperf.common.protocols import ResultsProcessorProtocol
 from aiperf.common.types import MetricTagT
 from aiperf.metrics import BaseAggregateMetric
@@ -133,7 +134,7 @@ class MetricResultsProcessor(BaseMetricsProcessor):
             except Exception as e:
                 self.warning(f"Error deriving metric '{tag}': {e!r}")
 
-    async def summarize(self) -> list[MetricResult]:
+    async def summarize(self) -> MetricSummaryResult:
         """Summarize the results.
 
         This will compute the values for the derived metrics, and then create the MetricResult objects for each metric.
@@ -141,10 +142,12 @@ class MetricResultsProcessor(BaseMetricsProcessor):
         await self.update_derived_metrics()
 
         # Compute and return the metric results.
-        return [
+        results = [
             self._create_metric_result(tag, values)
             for tag, values in self._results.items()
         ]
+
+        return MetricSummaryResult(results=results)
 
     async def full_metrics(self) -> MetricResultsDict:
         """Returns the full metrics dict, including the derived metrics."""

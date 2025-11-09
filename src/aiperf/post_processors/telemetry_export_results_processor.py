@@ -9,7 +9,7 @@ from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.environment import Environment
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.mixins import BufferedJSONLWriterMixin
-from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import TelemetryExportSummaryResult
 from aiperf.common.models.telemetry_models import TelemetryRecord
 from aiperf.common.protocols import TelemetryResultsProcessorProtocol
 from aiperf.post_processors.base_metrics_processor import BaseMetricsProcessor
@@ -60,11 +60,11 @@ class TelemetryExportResultsProcessor(
         Args:
             record: TelemetryRecord containing GPU metrics and hierarchical metadata
         """
-        try:
-            await self.buffered_write(record)
-        except Exception as e:
-            self.error(f"Failed to write GPU telemetry record: {e}")
+        await self.buffered_write(record)
 
-    async def summarize(self) -> list[MetricResult]:
-        """Summarize the results. For this processor, we don't need to summarize anything."""
-        return []
+    async def summarize(self) -> TelemetryExportSummaryResult:
+        """Summarize the results. For this processor, we return export metadata."""
+        return TelemetryExportSummaryResult(
+            file_path=self.output_file,
+            record_count=self.lines_written,
+        )

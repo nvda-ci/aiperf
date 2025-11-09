@@ -8,9 +8,10 @@ from decimal import Decimal
 
 from aiperf.common.constants import STAT_KEYS
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DataExporterType
+from aiperf.common.enums import DataExporterType, ResultsProcessorType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
@@ -38,7 +39,11 @@ class TimesliceMetricsCsvExporter(MetricsBaseExporter):
             lambda: f"Initializing TimesliceMetricsCsvExporter with config: {exporter_config}"
         )
 
-        if not self._results.timeslice_metric_results:
+        # Check if timeslice results exist in summary_results
+        summary_results = self._process_records_result.summary_results
+        if ResultsProcessorType.TIMESLICE not in summary_results or not isinstance(
+            summary_results[ResultsProcessorType.TIMESLICE], TimesliceSummaryResult
+        ):
             raise DataExporterDisabled(
                 "TimesliceMetricsCsvExporter disabled: no timeslice metric results found"
             )
@@ -61,7 +66,7 @@ class TimesliceMetricsCsvExporter(MetricsBaseExporter):
     def _generate_content(self) -> str:
         """Generate tidy/long format CSV content from all timeslices.
 
-        Uses instance data member self._results.timeslice_metric_results.
+        Extracts timeslice results from summary_results dictionary.
 
         Returns:
             str: Complete CSV content in tidy format
@@ -72,11 +77,16 @@ class TimesliceMetricsCsvExporter(MetricsBaseExporter):
         # Write header with 5 columns
         writer.writerow(["Timeslice", "Metric", "Unit", "Stat", "Value"])
 
+        # Extract timeslice results from summary_results
+        summary_results = self._process_records_result.summary_results
+        timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
+
+        if not isinstance(timeslice_summary, TimesliceSummaryResult):
+            return buf.getvalue()
+
         # Process each timeslice in sorted order
-        for timeslice_index in sorted(self._results.timeslice_metric_results.keys()):
-            metric_results_list = self._results.timeslice_metric_results[
-                timeslice_index
-            ]
+        for timeslice_index in sorted(timeslice_summary.timeslice_results.keys()):
+            metric_results_list = timeslice_summary.timeslice_results[timeslice_index]
 
             # Convert to display units and filter exportable metrics
             prepared_metrics = self._prepare_metrics(metric_results_list)

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 import pytest
+from pytest import param
 
 from aiperf.common.config import (
     ConversationConfig,
@@ -559,3 +560,122 @@ def test_multi_turn_request_count_conflict():
                 request_count=100,
             ),
         )
+
+
+class TestServerMetricsConfig:
+    """Test suite for server metrics configuration parsing."""
+
+    def test_server_metrics_disabled_by_default(self):
+        """Test that server_metrics is None by default."""
+        config = UserConfig(
+            endpoint=EndpointConfig(
+                model_names=["test-model"],
+                type=EndpointType.CHAT,
+                custom_endpoint="test",
+            ),
+        )
+        assert config.server_metrics is None
+        assert config.server_metrics_urls == []
+
+    @pytest.mark.parametrize(
+        "server_metrics_input,expected_urls",  # fmt: skip
+        [
+            # Single URL with port
+            param(
+                ["localhost:8081"],
+                ["http://localhost:8081/metrics"],
+                id="single_url_with_port",
+            ),
+            # Multiple URLs
+            param(
+                ["localhost:8081", "node1:9090"],
+                ["http://localhost:8081/metrics", "http://node1:9090/metrics"],
+                id="multiple_urls",
+            ),
+            # Full URL with http
+            param(
+                ["http://localhost:8081"],
+                ["http://localhost:8081/metrics"],
+                id="full_http_url",
+            ),
+            # Full URL with https
+            param(
+                ["https://api.example.com:8081"],
+                ["https://api.example.com:8081/metrics"],
+                id="full_https_url",
+            ),
+            # URL already with /metrics
+            param(
+                ["http://localhost:8081/metrics"],
+                ["http://localhost:8081/metrics"],
+                id="url_with_metrics_endpoint",
+            ),
+            # Mixed formats
+            param(
+                ["localhost:8081", "http://node1:9090/metrics", "node2:6880"],
+                [
+                    "http://localhost:8081/metrics",
+                    "http://node1:9090/metrics",
+                    "http://node2:6880/metrics",
+                ],
+                id="mixed_formats",
+            ),
+            # IP addresses
+            param(
+                ["192.168.1.100:8081", "http://10.0.0.1:9090"],
+                ["http://192.168.1.100:8081/metrics", "http://10.0.0.1:9090/metrics"],
+                id="ip_addresses",
+            ),
+        ],
+    )
+    def test_server_metrics_url_parsing(self, server_metrics_input, expected_urls):
+        """Test parsing of server_metrics URLs from various formats."""
+        config = UserConfig(
+            endpoint=EndpointConfig(
+                model_names=["test-model"],
+                type=EndpointType.CHAT,
+                custom_endpoint="test",
+            ),
+            server_metrics=server_metrics_input,
+        )
+        assert config.server_metrics_urls == expected_urls
+
+    def test_server_metrics_single_string(self):
+        """Test server_metrics with single string (not list)."""
+        config = UserConfig(
+            endpoint=EndpointConfig(
+                model_names=["test-model"],
+                type=EndpointType.CHAT,
+                custom_endpoint="test",
+            ),
+            server_metrics="localhost:8081",
+        )
+        assert config.server_metrics_urls == ["http://localhost:8081/metrics"]
+
+    def test_server_metrics_normalization(self):
+        """Test that URLs are properly normalized with /metrics endpoint."""
+        config = UserConfig(
+            endpoint=EndpointConfig(
+                model_names=["test-model"],
+                type=EndpointType.CHAT,
+                custom_endpoint="test",
+            ),
+            server_metrics=["http://localhost:8081/", "localhost:9090"],
+        )
+        # Both should end with /metrics, no double slashes
+        assert config.server_metrics_urls == [
+            "http://localhost:8081/metrics",
+            "http://localhost:9090/metrics",
+        ]
+
+    def test_server_metrics_empty_list(self):
+        """Test that empty server_metrics list results in empty urls."""
+        config = UserConfig(
+            endpoint=EndpointConfig(
+                model_names=["test-model"],
+                type=EndpointType.CHAT,
+                custom_endpoint="test",
+            ),
+            server_metrics=[],
+        )
+        assert config.server_metrics_urls == []

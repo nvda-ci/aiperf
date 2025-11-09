@@ -9,6 +9,7 @@ from aiperf.common.config import UserConfig
 from aiperf.common.enums import MetricType
 from aiperf.common.exceptions import NoMetricValue
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import MetricSummaryResult
 from aiperf.metrics.metric_dicts import MetricArray, MetricResultsDict
 from aiperf.metrics.types.request_count_metric import RequestCountMetric
 from aiperf.metrics.types.request_latency_metric import RequestLatencyMetric
@@ -159,7 +160,7 @@ class TestMetricResultsProcessor:
     async def test_summarize(
         self, mock_metric_registry: Mock, mock_user_config: UserConfig
     ) -> None:
-        """Test summarize returns list of MetricResult objects."""
+        """Test summarize returns MetricSummaryResult with list of MetricResult objects."""
         processor = MetricResultsProcessor(mock_user_config)
         processor._tags_to_types = {RequestLatencyMetric.tag: MetricType.RECORD}
         processor._instances_map = {RequestLatencyMetric.tag: RequestLatencyMetric()}
@@ -167,11 +168,12 @@ class TestMetricResultsProcessor:
         processor._results[RequestLatencyMetric.tag] = MetricArray()
         processor._results[RequestLatencyMetric.tag].append(42.0)
 
-        results = await processor.summarize()
+        result = await processor.summarize()
 
-        assert len(results) == 1
-        assert isinstance(results[0], MetricResult)
-        assert results[0].tag == RequestLatencyMetric.tag
+        assert isinstance(result, MetricSummaryResult)
+        assert len(result.results) == 1
+        assert isinstance(result.results[0], MetricResult)
+        assert result.results[0].tag == RequestLatencyMetric.tag
 
     @pytest.mark.asyncio
     async def test_full_metrics(

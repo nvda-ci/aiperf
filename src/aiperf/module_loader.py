@@ -39,6 +39,11 @@ def _load_all_modules() -> None:
                 )
                 raise
 
+    # Rebuild models with forward references after all modules are loaded
+    from aiperf.common.models.export_models import _rebuild_models_with_forward_refs
+
+    _rebuild_models_with_forward_refs()
+
 
 _modules_loaded = False
 _modules_loaded_lock = threading.Lock()

@@ -43,5 +43,13 @@ class ResultsProcessorType(CaseInsensitiveStrEnum):
     """Processor that exports per-record GPU telemetry data to JSONL files.
     Writes each TelemetryRecord as it arrives from the TelemetryManager."""
 
+    SERVER_METRICS_RESULTS = "server_metrics_results"
+    """Processor that processes server metrics records from Prometheus endpoints and computes aggregated metrics.
+    This processes per-endpoint server metrics data and aggregates it using the ServerMetricsHierarchy class."""
+
+    SERVER_METRICS_EXPORT = "server_metrics_export"
+    """Processor that exports per-record server metrics data to JSONL files.
+    Writes each ServerMetricsRecord as it arrives from the ServerMetricsManager."""
+
     TIMESLICE = "timeslice"
     """Processor that processes metric results for each user-configurable time-slice."""

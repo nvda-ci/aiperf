@@ -46,7 +46,7 @@ class MetricsCsvExporter(MetricsBaseExporter):
     def _generate_content(self) -> str:
         """Generate CSV content string from inference and telemetry data.
 
-        Uses instance data members self._results.records and self._telemetry_results.
+        Uses instance data members from process_records_result.
 
         Returns:
             str: Complete CSV content with all sections formatted and ready to write
@@ -54,8 +54,9 @@ class MetricsCsvExporter(MetricsBaseExporter):
         buf = io.StringIO()
         writer = csv.writer(buf)
 
-        # Use base class method to prepare metrics
-        prepared_metrics = self._prepare_metrics(self._results.records)
+        # Extract metric results from summary_results
+        metric_results = self._get_metric_results()
+        prepared_metrics = self._prepare_metrics(metric_results)
 
         request_metrics, system_metrics = self._split_metrics(prepared_metrics)
 
@@ -68,8 +69,14 @@ class MetricsCsvExporter(MetricsBaseExporter):
             self._write_system_metrics(writer, system_metrics)
 
         # Add telemetry data section if available
-        if self._telemetry_results:
-            self._write_telemetry_section(writer)
+        telemetry_results = self._get_telemetry_results()
+        if telemetry_results:
+            self._write_telemetry_section(writer, telemetry_results)
+
+        # Add server metrics section if available
+        server_metrics_results = self._get_server_metrics_results()
+        if server_metrics_results:
+            self._write_server_metrics_section(writer, server_metrics_results)
 
         return buf.getvalue()
 
@@ -145,18 +152,17 @@ class MetricsCsvExporter(MetricsBaseExporter):
 
         return str(value)
 
-    def _write_telemetry_section(self, writer: csv.writer) -> None:
+    def _write_telemetry_section(self, writer: csv.writer, telemetry_results) -> None:
         """Write GPU telemetry data section to CSV in structured table format.
 
-        Uses self._telemetry_results instance data member.
+        Args:
+            writer: CSV writer object
+            telemetry_results: TelemetrySummaryResult containing telemetry data
 
         Creates a single flat table with all GPU telemetry metrics that's easy to
         parse programmatically for visualization platforms (pandas, Tableau, Excel, etc.).
 
         Each row represents one metric for one GPU with all statistics in columns.
-
-        Args:
-            writer: CSV writer object
         """
 
         writer.writerow([])
@@ -176,7 +182,7 @@ class MetricsCsvExporter(MetricsBaseExporter):
         for (
             dcgm_url,
             gpus_data,
-        ) in self._telemetry_results.telemetry_data.dcgm_endpoints.items():
+        ) in telemetry_results.telemetry_data.dcgm_endpoints.items():
             if not gpus_data:
                 continue
 
@@ -268,5 +274,51 @@ class MetricsCsvExporter(MetricsBaseExporter):
             gpu_data.get_metric_result(metric_key, metric_key, "test", "test")
             return True
         except Exception as e:
-            self.debug(f"GPU metric {metric_key} not available: {e}")
+            self.debug(lambda: f"GPU metric {metric_key} not available: {e}")
             return False
+
+    def _write_server_metrics_section(
+        self, writer: csv.writer, server_metrics_results
+    ) -> None:
+        """Write server metrics data section to CSV in structured table format.
+
+        Args:
+            writer: CSV writer object
+            server_metrics_results: ServerMetricsSummaryResult containing server metrics data
+
+        Exports only non-histogram metrics. Histogram metrics are skipped for CSV export.
+        """
+
+        writer.writerow([])
+        writer.writerow([])
+
+        # Filter out histogram metrics (only export non-histogram metrics to CSV)
+        non_histogram_metrics = [
+            metric
+            for metric in server_metrics_results.results
+            if not (
+                hasattr(metric, "raw_histogram_delta") and metric.raw_histogram_delta
+            )
+        ]
+
+        if not non_histogram_metrics:
+            return
+
+        # Write header row for server metrics table
+        header_row = ["Metric"]
+        header_row.extend(STAT_KEYS)
+        writer.writerow(header_row)
+
+        # Write rows for non-histogram metrics
+        for metric in non_histogram_metrics:
+            try:
+                metric_with_unit = self._format_metric_name(metric)
+                row = [metric_with_unit]
+
+                for stat in STAT_KEYS:
+                    value = getattr(metric, stat, None)
+                    row.append(self._format_number(value))
+
+                writer.writerow(row)
+            except Exception as e:
+                self.warning(f"Failed to write metric row for metric {metric.tag}: {e}")

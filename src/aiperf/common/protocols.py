@@ -17,6 +17,7 @@ from aiperf.common.models import (
     ServiceRunInfo,
     TelemetryRecord,
 )
+from aiperf.common.models.processor_summary_results import ProcessorSummaryResult
 from aiperf.common.types import (
     CommAddressType,
     JsonObject,
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
     from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
-    from aiperf.common.models.record_models import MetricResult
+    from aiperf.common.models.server_metrics_models import ServerMetricsRecord
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
     from aiperf.timing.config import TimingManagerConfig
@@ -499,7 +500,7 @@ class ResultsProcessorProtocol(AIPerfLifecycleProtocol, Protocol):
 
     async def process_result(self, record_data: "MetricRecordsData") -> None: ...
 
-    async def summarize(self) -> list["MetricResult"]: ...
+    async def summarize(self) -> ProcessorSummaryResult: ...
 
 
 @runtime_checkable
@@ -519,12 +520,39 @@ class TelemetryResultsProcessorProtocol(Protocol):
         """
         ...
 
-    async def summarize(self) -> list["MetricResult"]:
+    async def summarize(self) -> ProcessorSummaryResult:
         """Generate MetricResult list with hierarchical tags for telemetry data.
 
         Returns:
-            List of MetricResult objects with hierarchical tags that preserve
-            dcgm_url -> gpu_uuid grouping structure for dashboard filtering.
+            ProcessorSummaryResult containing the telemetry data and hierarchy.
+        """
+        ...
+
+
+@runtime_checkable
+class ServerMetricsResultsProcessorProtocol(Protocol):
+    """Protocol for server metrics results processors that handle ServerMetricsRecord objects.
+
+    This protocol is separate from ResultsProcessorProtocol because server metrics data
+    has fundamentally different structure (hierarchical Prometheus snapshots) compared
+    to inference metrics (flat key-value pairs).
+    """
+
+    async def process_server_metrics_record(
+        self, record: "ServerMetricsRecord"
+    ) -> None:
+        """Process individual server metrics record with complete Prometheus snapshot.
+
+        Args:
+            record: ServerMetricsRecord containing Prometheus metrics snapshot and metadata
+        """
+        ...
+
+    async def summarize(self) -> ProcessorSummaryResult:
+        """Generate ProcessorSummaryResult for server metrics data.
+
+        Returns:
+            ProcessorSummaryResult containing the server metrics data and hierarchy.
         """
         ...
 

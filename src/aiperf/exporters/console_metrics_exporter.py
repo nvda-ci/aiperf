@@ -8,11 +8,15 @@ from rich.console import Console, RenderableType
 from rich.table import Table
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import MetricFlags
+from aiperf.common.enums import MetricFlags, ResultsProcessorType
 from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
 from aiperf.common.factories import ConsoleExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import (
+    MetricSummaryResult,
+    TimesliceSummaryResult,
+)
 from aiperf.common.protocols import ConsoleExporterProtocol
 from aiperf.exporters.display_units_utils import to_display_unit
 from aiperf.exporters.exporter_config import ExporterConfig
@@ -28,17 +32,39 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
 
     def __init__(self, exporter_config: ExporterConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._results = exporter_config.results
+        self._process_records_result = exporter_config.process_records_result
         self._endpoint_type = exporter_config.user_config.endpoint.type
 
     async def export(self, console: Console) -> None:
-        if not self._results.records:
+        # Extract records from summary_results
+        records = self._extract_records()
+        if not records:
             self.debug("No records to export")
             return
 
-        self._print_renderable(
-            console, self.get_renderable(self._results.records, console)
-        )
+        self._print_renderable(console, self.get_renderable(records, console))
+
+    def _extract_records(self) -> list[MetricResult]:
+        """Extract metric records from summary_results dictionary."""
+        summary_results = self._process_records_result.summary_results
+
+        # Check for regular metric results
+        if ResultsProcessorType.METRIC_RESULTS in summary_results:
+            metric_summary = summary_results[ResultsProcessorType.METRIC_RESULTS]
+            if isinstance(metric_summary, MetricSummaryResult):
+                return metric_summary.results
+
+        # Check for timeslice results
+        if ResultsProcessorType.TIMESLICE in summary_results:
+            timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
+            if isinstance(timeslice_summary, TimesliceSummaryResult):
+                # Flatten all timeslice results into a single list
+                all_results = []
+                for timeslice_results in timeslice_summary.timeslice_results.values():
+                    all_results.extend(timeslice_results)
+                return all_results
+
+        return []
 
     def _print_renderable(self, console: Console, renderable: RenderableType) -> None:
         console.print("\n")

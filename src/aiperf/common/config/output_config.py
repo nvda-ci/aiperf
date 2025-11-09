@@ -72,8 +72,11 @@ class OutputConfig(BaseConfig):
     )
     _profile_export_jsonl_file: Path = OutputDefaults.PROFILE_EXPORT_JSONL_FILE
     _profile_export_raw_jsonl_file: Path = OutputDefaults.PROFILE_EXPORT_RAW_JSONL_FILE
-    _profile_export_gpu_telemetry_jsonl_file: Path = (
-        OutputDefaults.PROFILE_EXPORT_GPU_TELEMETRY_JSONL_FILE
+    _gpu_telemetry_export_jsonl_file: Path = (
+        OutputDefaults.GPU_TELEMETRY_EXPORT_JSONL_FILE
+    )
+    _server_metrics_export_jsonl_file: Path = (
+        OutputDefaults.SERVER_METRICS_EXPORT_JSONL_FILE
     )
 
     @model_validator(mode="after")
@@ -89,6 +92,7 @@ class OutputConfig(BaseConfig):
             "_timeslices.csv",
             "_timeslices.json",
             "_gpu_telemetry.jsonl",
+            "_server_metrics.jsonl",
             "_raw.jsonl",
             ".csv",
             ".json",
@@ -105,8 +109,9 @@ class OutputConfig(BaseConfig):
         self._profile_export_timeslices_json_file = Path(f"{base_str}_timeslices.json")
         self._profile_export_jsonl_file = Path(f"{base_str}.jsonl")
         self._profile_export_raw_jsonl_file = Path(f"{base_str}_raw.jsonl")
-        self._profile_export_gpu_telemetry_jsonl_file = Path(
-            f"{base_str}_gpu_telemetry.jsonl"
+        self._gpu_telemetry_export_jsonl_file = Path(f"{base_str}_gpu_telemetry.jsonl")
+        self._server_metrics_export_jsonl_file = Path(
+            f"{base_str}_server_metrics.jsonl"
         )
 
         return self
@@ -147,5 +152,9 @@ class OutputConfig(BaseConfig):
         return self.artifact_directory / self._profile_export_raw_jsonl_file
 
     @property
-    def profile_export_gpu_telemetry_jsonl_file(self) -> Path:
-        return self.artifact_directory / self._profile_export_gpu_telemetry_jsonl_file
+    def gpu_telemetry_export_jsonl_file(self) -> Path:
+        return self.artifact_directory / self._gpu_telemetry_export_jsonl_file
+
+    @property
+    def server_metrics_export_jsonl_file(self) -> Path:
+        return self.artifact_directory / self._server_metrics_export_jsonl_file

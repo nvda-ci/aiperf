@@ -7,13 +7,17 @@ send requests to an inference server, primarily around the model, endpoint, and
 additional request payload information.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
-from aiperf.common.config import EndpointDefaults, UserConfig
 from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
 from aiperf.common.models import AIPerfBaseModel
+
+if TYPE_CHECKING:
+    from aiperf.common.config import UserConfig
 
 
 class ModelInfo(AIPerfBaseModel):
@@ -44,7 +48,7 @@ class ModelListInfo(AIPerfBaseModel):
     )
 
     @classmethod
-    def from_user_config(cls, user_config: UserConfig) -> "ModelListInfo":
+    def from_user_config(cls, user_config: UserConfig) -> ModelListInfo:
         """Create a ModelListInfo from a UserConfig."""
         return cls(
             models=[
@@ -62,7 +66,7 @@ class EndpointInfo(AIPerfBaseModel):
         description="The type of request payload to use for the endpoint.",
     )
     base_url: str = Field(
-        default=EndpointDefaults.URL,
+        default="localhost:8000",
         description="URL of the endpoint.",
     )
     custom_endpoint: str | None = Field(
@@ -89,7 +93,7 @@ class EndpointInfo(AIPerfBaseModel):
         description="SSL options to use for the endpoint.",
     )
     timeout: float = Field(
-        default=EndpointDefaults.TIMEOUT,
+        default=600.0,
         description="The timeout in seconds for each request to the endpoint.",
     )
     extra: list[tuple[str, Any]] = Field(
@@ -100,7 +104,7 @@ class EndpointInfo(AIPerfBaseModel):
     )
 
     @classmethod
-    def from_user_config(cls, user_config: UserConfig) -> "EndpointInfo":
+    def from_user_config(cls, user_config: UserConfig) -> EndpointInfo:
         """Create an HttpEndpointInfo from a UserConfig."""
         return cls(
             type=user_config.endpoint.type,
@@ -131,7 +135,7 @@ class ModelEndpointInfo(AIPerfBaseModel):
     )
 
     @classmethod
-    def from_user_config(cls, user_config: UserConfig) -> "ModelEndpointInfo":
+    def from_user_config(cls, user_config: UserConfig) -> ModelEndpointInfo:
         """Create a ModelEndpointInfo from a UserConfig."""
         return cls(
             models=ModelListInfo.from_user_config(user_config),

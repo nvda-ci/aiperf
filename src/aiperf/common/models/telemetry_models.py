@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import numpy as np
 from pydantic import ConfigDict, Field
 
-from aiperf.common.exceptions import NoMetricValue
+from aiperf.common.metric_utils import compute_metric_statistics
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
 from aiperf.common.models.record_models import MetricResult
@@ -119,6 +118,9 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
 
     Uses grouped snapshots instead of individual metric time series to eliminate
     timestamp duplication and improve storage efficiency.
+
+    Uses the shared compute_metric_statistics() utility for consistent statistics
+    computation across GPU telemetry and server metrics.
     """
 
     snapshots: list[GpuTelemetrySnapshot] = Field(
@@ -158,6 +160,9 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
     ) -> MetricResult:
         """Convert metric time series to MetricResult with statistical summary.
 
+        This method now uses the shared compute_metric_statistics() utility function
+        for consistency across GPU telemetry and server metrics.
+
         Args:
             metric_name: Name of the metric to analyze
             tag: Unique identifier for this metric (used by dashboard, exports, API)
@@ -171,36 +176,12 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
             NoMetricValue: If no data points are available for the specified metric
         """
         data_points = self.get_metric_values(metric_name)
-
-        if not data_points:
-            raise NoMetricValue(
-                f"No telemetry data available for metric '{metric_name}'"
-            )
-
-        values = np.array([point[0] for point in data_points])
-        p1, p5, p10, p25, p50, p75, p90, p95, p99 = np.percentile(
-            values, [1, 5, 10, 25, 50, 75, 90, 95, 99]
-        )
-
-        return MetricResult(
+        return compute_metric_statistics(
+            data_points=data_points,
             tag=tag,
             header=header,
             unit=unit,
-            min=np.min(values),
-            max=np.max(values),
-            avg=float(np.mean(values)),
-            std=float(np.std(values)),
-            count=len(values),
-            current=float(data_points[-1][0]),
-            p1=p1,
-            p5=p5,
-            p10=p10,
-            p25=p25,
-            p50=p50,
-            p75=p75,
-            p90=p90,
-            p95=p95,
-            p99=p99,
+            metric_name=metric_name,
         )
 
 
