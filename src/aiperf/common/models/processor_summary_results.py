@@ -26,16 +26,18 @@ Example:
 """
 
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import Field
 
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetailsCount
-from aiperf.common.models.record_models import MetricResult
 from aiperf.common.models.server_metrics_models import ServerMetricsHierarchy
 from aiperf.common.models.telemetry_models import TelemetryHierarchy
+
+if TYPE_CHECKING:
+    from aiperf.common.models.record_models import MetricResult
 
 
 class ProcessorSummaryResult(AIPerfBaseModel):
@@ -72,9 +74,9 @@ class MetricSummaryResult(ProcessorSummaryResult):
         results: List of computed metric results with aggregated statistics
     """
 
-    processor_type = ResultsProcessorType.METRIC_RESULTS
+    processor_type: ResultsProcessorType = ResultsProcessorType.METRIC_RESULTS
 
-    results: list[MetricResult] = Field(
+    results: list["MetricResult"] = Field(
         ..., description="List of computed metric results with aggregated statistics"
     )
 
@@ -90,9 +92,9 @@ class TimesliceSummaryResult(ProcessorSummaryResult):
         timeslice_results: Metric results grouped by timeslice index (0-based sequential)
     """
 
-    processor_type = ResultsProcessorType.TIMESLICE
+    processor_type: ResultsProcessorType = ResultsProcessorType.TIMESLICE
 
-    timeslice_results: dict[int, list[MetricResult]] = Field(
+    timeslice_results: dict[int, list["MetricResult"]] = Field(
         ...,
         description="Metric results grouped by timeslice index (0-based sequential)",
     )
@@ -117,8 +119,8 @@ class TelemetrySummaryResult(ProcessorSummaryResult):
         error_summary: Errors encountered during collection
     """
 
-    processor_type = ResultsProcessorType.TELEMETRY_RESULTS
-    results: list[MetricResult] = Field(
+    processor_type: ResultsProcessorType = ResultsProcessorType.TELEMETRY_RESULTS
+    results: list["MetricResult"] = Field(
         ...,
         description="List of GPU telemetry metric results (one per GPU per metric type)",
     )
@@ -144,8 +146,8 @@ class ServerMetricsSummaryResult(ProcessorSummaryResult):
     from Prometheus endpoints and produce per-endpoint metrics for each server metric.
     """
 
-    processor_type = ResultsProcessorType.SERVER_METRICS_RESULTS
-    results: list[MetricResult] = Field(
+    processor_type: ResultsProcessorType = ResultsProcessorType.SERVER_METRICS_RESULTS
+    results: list["MetricResult"] = Field(
         ...,
         description="List of server metrics metric results (one per endpoint per metric type)",
     )
@@ -180,16 +182,16 @@ class BaseFileExportSummaryResult(ProcessorSummaryResult):
 class RecordExportSummaryResult(BaseFileExportSummaryResult):
     """Summary result for record export processor."""
 
-    processor_type = ResultsProcessorType.RECORD_EXPORT
+    processor_type: ResultsProcessorType = ResultsProcessorType.RECORD_EXPORT
 
 
 class TelemetryExportSummaryResult(BaseFileExportSummaryResult):
     """Summary result for telemetry export processor."""
 
-    processor_type = ResultsProcessorType.TELEMETRY_EXPORT
+    processor_type: ResultsProcessorType = ResultsProcessorType.TELEMETRY_EXPORT
 
 
 class ServerMetricsExportSummaryResult(BaseFileExportSummaryResult):
     """Summary result for server metrics export processor."""
 
-    processor_type = ResultsProcessorType.SERVER_METRICS_EXPORT
+    processor_type: ResultsProcessorType = ResultsProcessorType.SERVER_METRICS_EXPORT

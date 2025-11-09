@@ -1,12 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import TYPE_CHECKING
+
 from pydantic import ConfigDict, Field
 
 from aiperf.common.metric_utils import compute_metric_statistics
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
-from aiperf.common.models.record_models import MetricResult
+
+if TYPE_CHECKING:
+    from aiperf.common.models.record_models import MetricResult
 
 
 class TelemetryMetrics(AIPerfBaseModel):
@@ -157,7 +161,7 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
 
     def to_metric_result(
         self, metric_name: str, tag: str, header: str, unit: str
-    ) -> MetricResult:
+    ) -> "MetricResult":
         """Convert metric time series to MetricResult with statistical summary.
 
         This method now uses the shared compute_metric_statistics() utility function
@@ -213,7 +217,7 @@ class GpuTelemetryData(AIPerfBaseModel):
 
     def get_metric_result(
         self, metric_name: str, tag: str, header: str, unit: str
-    ) -> MetricResult:
+    ) -> "MetricResult":
         """Get MetricResult for a specific metric.
 
         Args:

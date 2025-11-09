@@ -304,7 +304,8 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             message: Batch of server metrics records from a Prometheus collector
         """
         if message.valid:
-            await self._send_server_metrics_to_results_processors(message.record)
+            for record in message.records:
+                await self._send_server_metrics_to_results_processors(record)
         else:
             if message.error:
                 async with self._server_metrics_state.error_counts_lock:
@@ -690,15 +691,26 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self.debug(lambda: f"Processing records (cancelled: {cancelled})")
 
         self.info("Processing records results...")
-        # Call summarize on ALL processors (metric, telemetry, server_metrics, export processors)
-        all_processors = (
-            self._metric_results_processors
-            + self._telemetry_results_processors
-            + self._server_metrics_results_processors
-        )
+
+        # Get time window boundaries for server metrics filtering
+        async with self.processing_status_lock:
+            min_ts = self.min_request_timestamp_ns
+            max_ts = self.max_response_timestamp_ns
+
+        # Call summarize on ALL processors
+        # Server metrics processors need time window for alignment with inference window
+        summarize_tasks = []
+        for processor in (
+            self._metric_results_processors + self._telemetry_results_processors
+        ):
+            summarize_tasks.append(processor.summarize())
+        for processor in self._server_metrics_results_processors:
+            summarize_tasks.append(
+                processor.summarize(min_timestamp_ns=min_ts, max_timestamp_ns=max_ts)
+            )
 
         results = await asyncio.gather(
-            *[processor.summarize() for processor in all_processors],
+            *summarize_tasks,
             return_exceptions=True,
         )
 

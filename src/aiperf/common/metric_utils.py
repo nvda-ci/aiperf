@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 import numpy as np
 
 from aiperf.common.exceptions import NoMetricValue
-from aiperf.common.models import MetricResult
 
 
 def compute_histogram_delta(
@@ -70,6 +69,7 @@ def compute_metric_statistics(
     Raises:
         NoMetricValue: If data_points list is empty
     """
+    from aiperf.common.models import MetricResult
 
     if not data_points:
         msg = "No data points available"
@@ -115,7 +115,7 @@ def compute_metric_statistics_from_histogram(
     header: str,
     unit: str,
     metric_name: str | None = None,
-) -> MetricResult:
+):
     """Create MetricResult from histogram data without estimating percentiles.
 
     For Prometheus histogram metrics, we store the raw bucket data and only
@@ -138,6 +138,8 @@ def compute_metric_statistics_from_histogram(
     Raises:
         NoMetricValue: If count is zero (no observations)
     """
+    from aiperf.common.models import MetricResult
+
     if count == 0:
         msg = "Histogram has zero observations"
         if metric_name:

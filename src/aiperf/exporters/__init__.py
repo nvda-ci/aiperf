@@ -47,6 +47,9 @@ from aiperf.exporters.metrics_csv_exporter import (
 from aiperf.exporters.metrics_json_exporter import (
     MetricsJsonExporter,
 )
+from aiperf.exporters.server_metrics_console_exporter import (
+    ServerMetricsConsoleExporter,
+)
 from aiperf.exporters.timeslice_metrics_csv_exporter import (
     TimesliceMetricsCsvExporter,
 )
@@ -67,6 +70,7 @@ __all__ = [
     "MetricsBaseExporter",
     "MetricsCsvExporter",
     "MetricsJsonExporter",
+    "ServerMetricsConsoleExporter",
     "TimesliceMetricsCsvExporter",
     "TimesliceMetricsJsonExporter",
     "convert_all_metrics_to_display_units",

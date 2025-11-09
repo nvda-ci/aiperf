@@ -45,7 +45,7 @@ class ExporterManager(AIPerfLoggerMixin):
     def _task_done_callback(self, task: asyncio.Task) -> None:
         self.debug(lambda: f"Task done: {task}")
         if task.exception():
-            self.error(lambda: f"Error exporting records: {task.exception()}")
+            self.error(f"Error exporting records: {task.exception()}")
         else:
             self.debug(lambda: f"Exported records: {task.result()}")
         self._tasks.discard(task)
@@ -61,14 +61,16 @@ class ExporterManager(AIPerfLoggerMixin):
             except FactoryCreationError as e:
                 if isinstance(e.__cause__, DataExporterDisabled):
                     self.debug(
-                        lambda: f"Data exporter {exporter_type} is disabled and will not be used"
+                        lambda exporter_type=exporter_type: f"Data exporter {exporter_type} is disabled and will not be used"
                     )
                     continue
                 else:
-                    self.exception("Error creating data exporter: {e!r}")
+                    self.exception(f"Error creating data exporter: {e!r}")
                     continue
 
-            self.debug(lambda: f"Creating task for exporter: {exporter_type}")
+            self.debug(
+                lambda exporter_type=exporter_type: f"Creating task for exporter: {exporter_type}"
+            )
             task = asyncio.create_task(exporter.export())
             self._tasks.add(task)
             task.add_done_callback(self._task_done_callback)
@@ -88,11 +90,11 @@ class ExporterManager(AIPerfLoggerMixin):
             except FactoryCreationError as e:
                 if isinstance(e.__cause__, DataExporterDisabled):
                     self.debug(
-                        lambda: f"Data exporter {exporter_type} is disabled and will not be used"
+                        lambda exporter_type=exporter_type: f"Data exporter {exporter_type} is disabled and will not be used"
                     )
                     continue
                 else:
-                    self.exception("Error creating data exporter: {e!r}")
+                    self.exception(f"Error creating data exporter: {e!r}")
                     continue
 
             file_infos.append(exporter.get_export_info())
@@ -111,11 +113,11 @@ class ExporterManager(AIPerfLoggerMixin):
             except FactoryCreationError as e:
                 if isinstance(e.__cause__, ConsoleExporterDisabled):
                     self.debug(
-                        lambda: f"Console exporter {exporter_type} is disabled and will not be used"
+                        lambda exporter_type=exporter_type: f"Console exporter {exporter_type} is disabled and will not be used"
                     )
                     continue
                 else:
-                    self.exception("Error creating console exporter: {e!r}")
+                    self.exception(f"Error creating console exporter: {e!r}")
                     continue
 
             self.debug(f"Creating task for exporter: {exporter_type}")

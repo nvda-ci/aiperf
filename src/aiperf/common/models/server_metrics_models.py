@@ -1,13 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import TYPE_CHECKING
+
 from pydantic import Field
 
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.metric_utils import compute_histogram_delta
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
-from aiperf.common.models.record_models import MetricResult
+
+if TYPE_CHECKING:
+    from aiperf.common.models.record_models import MetricResult
 
 
 class HistogramData(AIPerfBaseModel):
@@ -356,7 +360,7 @@ class ServerMetricsSnapshotTimeSeries(AIPerfBaseModel):
 
     def to_metric_result(
         self, metric_name: str, labels: dict[str, str], tag: str, header: str, unit: str
-    ) -> MetricResult:
+    ) -> "MetricResult":
         """Convert metric time series to MetricResult with statistical summary.
 
         This method intelligently handles different metric types:
@@ -383,6 +387,7 @@ class ServerMetricsSnapshotTimeSeries(AIPerfBaseModel):
             compute_metric_statistics,
             compute_metric_statistics_from_histogram,
         )
+        from aiperf.common.models.record_models import MetricResult
 
         if not self.snapshots:
             raise NoMetricValue(
@@ -523,7 +528,7 @@ class ServerMetricsData(AIPerfBaseModel):
         unit: str,
         min_timestamp_ns: int | None = None,
         max_timestamp_ns: int | None = None,
-    ) -> MetricResult:
+    ) -> "MetricResult":
         """Get MetricResult for a specific metric with specific labels.
 
         Optionally filters to a time window before computing statistics.
@@ -625,7 +630,7 @@ class ServerMetricsResults(AIPerfBaseModel):
         default_factory=list,
         description="A list of the unique error details and their counts",
     )
-    aggregated_metrics: list[MetricResult] = Field(
+    aggregated_metrics: list["MetricResult"] = Field(
         default_factory=list,
         description="Aggregated statistics for tracked metrics across the entire run",
     )
