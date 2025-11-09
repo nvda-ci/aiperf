@@ -19,6 +19,9 @@ class ConsoleErrorExporter:
 
     def __init__(self, exporter_config: ExporterConfig, **kwargs):
         self._process_records_result = exporter_config.process_records_result
+        assert self._process_records_result.profile_summary is not None, (
+            "ConsoleErrorExporter requires profile_summary"
+        )
 
     async def export(self, console: Console) -> None:
         # Extract error_summary from profile_summary

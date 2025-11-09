@@ -74,12 +74,6 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
         summary_results = self._process_records_result.summary_results
         timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
 
-        if not isinstance(timeslice_summary, TimesliceSummaryResult):
-            return TimesliceCollectionExportData(
-                timeslices=[],
-                input_config=self._user_config,
-            ).model_dump_json(indent=2, exclude_unset=True)
-
         for timeslice_index in sorted(timeslice_summary.timeslice_results.keys()):
             metric_results = timeslice_summary.timeslice_results[timeslice_index]
 

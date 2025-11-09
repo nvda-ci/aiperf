@@ -20,8 +20,10 @@ class HistogramData(AIPerfBaseModel):
     buckets: dict[str, float] = Field(
         description="Bucket upper bounds to counts {le: value}"
     )
-    sum: float = Field(description="Sum of all observed values")
-    count: float = Field(description="Total number of observations")
+    sum: float | None = Field(default=None, description="Sum of all observed values")
+    count: float | None = Field(
+        default=None, description="Total number of observations"
+    )
 
 
 class SummaryData(AIPerfBaseModel):
@@ -30,8 +32,10 @@ class SummaryData(AIPerfBaseModel):
     quantiles: dict[str, float] = Field(
         description="Quantile to value {quantile: value}"
     )
-    sum: float = Field(description="Sum of all observed values")
-    count: float = Field(description="Total number of observations")
+    sum: float | None = Field(default=None, description="Sum of all observed values")
+    count: float | None = Field(
+        default=None, description="Total number of observations"
+    )
 
 
 class MetricSample(AIPerfBaseModel):
@@ -54,9 +58,7 @@ class MetricSample(AIPerfBaseModel):
 class MetricFamily(AIPerfBaseModel):
     """Group of related metrics with same name and type."""
 
-    type: str = Field(
-        description="Metric type: counter, gauge, histogram, summary, untyped"
-    )
+    type: PrometheusMetricType = Field(description="Metric type as enum")
     help: str = Field(description="Metric description from HELP text")
     samples: list[MetricSample] = Field(
         description="Metric samples grouped by base labels"
@@ -99,6 +101,9 @@ class ServerMetricsSnapshotTimeSeries(AIPerfBaseModel):
     snapshots: list[tuple[int, dict[str, MetricFamily]]] = Field(
         default_factory=list, description="List of (timestamp_ns, metrics) tuples"
     )
+    max_snapshots: int = Field(
+        default=300, description="Maximum snapshots to retain (prevents OOM)"
+    )
 
     def append_snapshot(
         self, timestamp_ns: int, metrics: dict[str, MetricFamily]
@@ -110,6 +115,11 @@ class ServerMetricsSnapshotTimeSeries(AIPerfBaseModel):
             metrics: Complete Prometheus metrics snapshot
         """
         self.snapshots.append((timestamp_ns, metrics))
+
+        # Enforce retention limit to prevent unbounded memory growth
+        if len(self.snapshots) > self.max_snapshots:
+            # Keep most recent snapshots
+            self.snapshots = self.snapshots[-self.max_snapshots :]
 
     def filter_by_time_window(
         self, min_timestamp_ns: int | None, max_timestamp_ns: int | None

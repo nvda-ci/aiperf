@@ -572,10 +572,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         while not self.stop_requested:
             await asyncio.sleep(Environment.UI.REALTIME_METRICS_INTERVAL)
             async with self.processing_status_lock:
-                if (
-                    self.processing_stats.total_records
-                    == self._previous_realtime_records
-                ):
+                if self.processing_stats.processed == self._previous_realtime_records:
                     continue  # No new records have been processed, so no need to update the metrics
                 self._previous_realtime_records = self.processing_stats.processed
             await self._report_realtime_metrics()

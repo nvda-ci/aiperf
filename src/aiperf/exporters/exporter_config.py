@@ -16,6 +16,11 @@ class ExporterConfig:
     service_config: ServiceConfig
     telemetry_results: TelemetryResults | None = None
 
+    @property
+    def results(self) -> ProcessRecordsResult:
+        """Legacy alias for process_records_result."""
+        return self.process_records_result
+
 
 @dataclass
 class FileExportInfo:

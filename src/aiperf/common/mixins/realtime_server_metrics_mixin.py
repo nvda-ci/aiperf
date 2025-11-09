@@ -27,7 +27,8 @@ class RealtimeServerMetricsMixin(MessageBusClientMixin):
     async def _on_realtime_server_metrics(self, message: RealtimeServerMetricsMessage):
         """Update the server metrics from a real-time server metrics message."""
         self.debug(
-            f"Mixin received server metrics message with {len(message.metrics)} metrics, triggering hook"
+            lambda: f"Mixin received server metrics message with {len(message.metrics)} metrics "
+            f"(metrics: {[m.tag for m in message.metrics]}), triggering hook"
         )
 
         async with self._server_metrics_lock:

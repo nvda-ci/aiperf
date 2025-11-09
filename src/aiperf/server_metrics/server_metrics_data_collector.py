@@ -111,7 +111,14 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
                 if family.name.endswith("_created"):
                     continue
 
-                match family.type:
+                # Normalize string type to enum (prometheus_client uses "counter", "untyped", etc.)
+                try:
+                    metric_type = PrometheusMetricType(family.type)
+                except ValueError:
+                    # Map "untyped" to UNKNOWN
+                    metric_type = PrometheusMetricType.UNKNOWN
+
+                match metric_type:
                     case PrometheusMetricType.HISTOGRAM:
                         samples = self._process_histogram_family(family)
                     case PrometheusMetricType.SUMMARY:
@@ -123,11 +130,11 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
                     ):
                         samples = self._process_simple_family(family)
                     case _:
-                        self.warning(f"Unsupported metric type: {family.type}")
+                        self.warning(f"Unsupported metric type: {metric_type}")
                         continue
 
                 metrics_dict[family.name] = MetricFamily(
-                    type=family.type,
+                    type=metric_type,
                     help=family.documentation or "",
                     samples=samples,
                 )

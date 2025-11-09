@@ -41,8 +41,13 @@ class ServerMetricsRecordsMessage(BaseServiceMessage):
 
     @property
     def valid(self) -> bool:
-        """Whether the server metrics record collection was valid."""
-        return self.error is None and len(self.records) > 0
+        """Whether server metrics collection succeeded (empty response is valid)."""
+        return self.error is None
+
+    @property
+    def has_data(self) -> bool:
+        """Whether any metrics were collected."""
+        return len(self.records) > 0
 
 
 class ProcessServerMetricsResultMessage(BaseServiceMessage):
