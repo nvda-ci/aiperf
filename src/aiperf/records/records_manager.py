@@ -50,7 +50,7 @@ from aiperf.common.models import (
     ErrorDetailsCount,
     ProcessingStats,
     ProcessRecordsResult,
-    ProfileResults,
+    ProfileResultSummary,
     ServerMetricsRecord,
 )
 from aiperf.common.models.processor_summary_results import (
@@ -990,23 +990,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                     ErrorDetails(message=f"Unknown result type: {type(result)}")
                 )
 
-        # Extract metric results count for ProfileResultSummary
-        completed = 0
-        if ResultsProcessorType.METRIC_RESULTS in summary_results:
-            metric_summary = summary_results[ResultsProcessorType.METRIC_RESULTS]
-            if isinstance(metric_summary, MetricSummaryResult):
-                completed = len(metric_summary.results)
-        elif ResultsProcessorType.TIMESLICE in summary_results:
-            timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
-            if isinstance(timeslice_summary, TimesliceSummaryResult):
-                # Count total metrics across all timeslices
-                completed = sum(
-                    len(metrics)
-                    for metrics in timeslice_summary.timeslice_results.values()
-                )
-
+        # Use total processed records (not metric count)
         async with self.processing_status_lock:
-            profile_summary = ProfileResults(
+            completed = self.processing_stats.total_records
+            profile_summary = ProfileResultSummary(
                 completed=completed,
                 start_ns=self.start_time_ns or time.time_ns(),
                 end_ns=self.end_time_ns or time.time_ns(),

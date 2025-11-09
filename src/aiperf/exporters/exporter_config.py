@@ -6,6 +6,7 @@ from pathlib import Path
 
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.models import ProcessRecordsResult
+from aiperf.common.models.telemetry_models import TelemetryResults
 
 
 @dataclass
@@ -13,6 +14,7 @@ class ExporterConfig:
     process_records_result: ProcessRecordsResult
     user_config: UserConfig
     service_config: ServiceConfig
+    telemetry_results: TelemetryResults | None = None
 
 
 @dataclass

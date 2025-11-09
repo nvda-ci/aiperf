@@ -106,7 +106,7 @@ class TimesliceMetricResultsProcessor(MetricResultsProcessor):
         timeslice_metric_results = {}
 
         # Start timeslice indices at zero
-        for counter, timeslice_index in enumerate[TimeSliceT](
+        for counter, timeslice_index in enumerate(
             sorted(self._timeslice_results.keys())
         ):
             metric_results = [

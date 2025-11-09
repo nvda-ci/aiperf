@@ -37,7 +37,7 @@ class ServerMetricsExportResultsProcessor(
         user_config: UserConfig,
         **kwargs,
     ):
-        output_file = user_config.output.profile_export_server_metrics_jsonl_file
+        output_file = user_config.output.server_metrics_export_jsonl_file
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.unlink(missing_ok=True)
 
