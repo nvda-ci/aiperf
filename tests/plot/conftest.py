@@ -414,3 +414,59 @@ def real_data_parent_dir() -> Path:
         Path to the fixtures directory containing all real runs.
     """
     return FIXTURES_DIR
+
+
+@pytest.fixture
+def real_qwen_gpu_telemetry() -> Path:
+    """
+    Path to real GPU telemetry data from Qwen concurrency1 run.
+
+    Returns:
+        Path to gpu_telemetry_export.jsonl file.
+    """
+    gpu_file = QWEN_CONCURRENCY1_DIR / "gpu_telemetry_export.jsonl"
+    if not gpu_file.exists():
+        pytest.skip(f"GPU telemetry file not found: {gpu_file}")
+    return gpu_file
+
+
+@pytest.fixture
+def real_qwen_profile_data() -> Path:
+    """
+    Path to real profile data from Qwen concurrency1 run.
+
+    Returns:
+        Path to profile_export.jsonl file.
+    """
+    profile_file = QWEN_CONCURRENCY1_DIR / "profile_export.jsonl"
+    if not profile_file.exists():
+        pytest.skip(f"Profile file not found: {profile_file}")
+    return profile_file
+
+
+@pytest.fixture
+def real_qwen_aggregated_data() -> Path:
+    """
+    Path to real aggregated data from Qwen concurrency1 run.
+
+    Returns:
+        Path to profile_export_aiperf.json file.
+    """
+    agg_file = QWEN_CONCURRENCY1_DIR / "profile_export_aiperf.json"
+    if not agg_file.exists():
+        pytest.skip(f"Aggregated file not found: {agg_file}")
+    return agg_file
+
+
+@pytest.fixture
+def qwen_concurrency8_dir() -> Path:
+    """
+    Path to Qwen concurrency 8 run directory for higher concurrency testing.
+
+    Returns:
+        Path to the Qwen concurrency 8 fixture directory.
+    """
+    qwen_c8_dir = FIXTURES_DIR / "qwen_concurrency8"
+    if not qwen_c8_dir.exists():
+        pytest.skip(f"Qwen concurrency 8 fixture not found: {qwen_c8_dir}")
+    return qwen_c8_dir

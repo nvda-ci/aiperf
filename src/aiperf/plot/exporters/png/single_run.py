@@ -69,6 +69,11 @@ class SingleRunPNGExporter(BasePNGExporter):
         # Plot 8-9: GPU telemetry plots (if data available)
         generated_files.extend(self._generate_gpu_plots(run, available_metrics))
 
+        # Plot 10: Dispersed throughput over time (if request data available)
+        generated_files.extend(
+            self._generate_dispersed_throughput_over_time(run, available_metrics)
+        )
+
         self._create_summary_file(generated_files)
 
         return generated_files
@@ -82,7 +87,7 @@ class SingleRunPNGExporter(BasePNGExporter):
                 df=df,
                 x_col="request_number",
                 y_metric="time_to_first_token",
-                title="TTFT Over Time",
+                title="TTFT Per Request Over Time",
                 x_label="Request Number",
                 y_label=self._get_metric_label(
                     "time_to_first_token", None, available_metrics
@@ -105,7 +110,7 @@ class SingleRunPNGExporter(BasePNGExporter):
                 df=df,
                 x_col="request_number",
                 y_metric="inter_token_latency",
-                title="Inter-Token Latency Over Time",
+                title="Inter-Token Latency Per Request Over Time",
                 x_label="Request Number",
                 y_label=self._get_metric_label(
                     "inter_token_latency", None, available_metrics
@@ -122,13 +127,34 @@ class SingleRunPNGExporter(BasePNGExporter):
     def _generate_latency_over_time(
         self, df: pd.DataFrame, available_metrics: dict
     ) -> list[Path]:
-        """Generate latency over time plot."""
+        """Generate latency over time plot with percentile overlays."""
         try:
-            fig = self.plot_generator.create_time_series_area(
-                df=df,
+            df_sorted = df.sort_values("timestamp").copy()
+
+            # Calculate rolling percentiles (window of 10 requests, minimum 1)
+            window_size = min(10, len(df_sorted))
+            df_sorted["p50"] = (
+                df_sorted["request_latency"]
+                .rolling(window=window_size, min_periods=1)
+                .quantile(0.50)
+            )
+            df_sorted["p95"] = (
+                df_sorted["request_latency"]
+                .rolling(window=window_size, min_periods=1)
+                .quantile(0.95)
+            )
+            df_sorted["p99"] = (
+                df_sorted["request_latency"]
+                .rolling(window=window_size, min_periods=1)
+                .quantile(0.99)
+            )
+
+            fig = self.plot_generator.create_latency_scatter_with_percentiles(
+                df=df_sorted,
                 x_col="timestamp",
                 y_metric="request_latency",
-                title="Request Latency Over Time",
+                percentile_cols=["p50", "p95", "p99"],
+                title="Request Latency Over Time with Percentiles",
                 x_label="Time (seconds)",
                 y_label=self._get_metric_label(
                     "request_latency", None, available_metrics
@@ -361,18 +387,105 @@ class SingleRunPNGExporter(BasePNGExporter):
             self._generate_gpu_utilization_with_throughput(run, available_metrics)
         )
 
-        # Plot 2: GPU Memory Breakdown
+        # Plot 2: GPU Metrics Overlay
         generated_files.extend(
-            self._generate_gpu_memory_breakdown(run, available_metrics)
+            self._generate_gpu_metrics_overlay(run, available_metrics)
         )
 
         return generated_files
+
+    def _calculate_dispersed_throughput_events(
+        self, requests_df: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Calculate throughput using event-based approach with evenly dispersed tokens.
+
+        Tokens are evenly distributed across the generation phase (from TTFT to request_end)
+        rather than being counted at a single event. This creates smooth throughput curves
+        that accurately represent the token generation rate over time.
+
+        Args:
+            requests_df: DataFrame with request data including timestamps and metrics
+
+        Returns:
+            DataFrame with columns: timestamp_s, throughput_tokens_per_sec, active_requests
+        """
+        events = []
+
+        for _, row in requests_df.iterrows():
+            request_start_ns = row.get("request_start_ns")
+            request_end_ns = row.get("request_end_ns")
+
+            if pd.isna(request_start_ns) or pd.isna(request_end_ns):
+                continue
+
+            if isinstance(request_start_ns, pd.Timestamp):
+                request_start_ns = request_start_ns.value
+            if isinstance(request_end_ns, pd.Timestamp):
+                request_end_ns = request_end_ns.value
+
+            request_start_ns = int(request_start_ns)
+            request_end_ns = int(request_end_ns)
+
+            ttft_ms = row.get("time_to_first_token", 0)
+            if pd.isna(ttft_ms):
+                ttft_ms = 0
+
+            generation_start_ns = (
+                request_start_ns + int(ttft_ms * 1e6)
+                if ttft_ms > 0
+                else request_start_ns
+            )
+
+            output_tokens = row.get("output_sequence_length", 0)
+            if pd.isna(output_tokens):
+                output_tokens = 0
+
+            generation_duration_ns = request_end_ns - generation_start_ns
+
+            if generation_duration_ns > 0 and output_tokens > 0:
+                token_rate = output_tokens / (generation_duration_ns / 1e9)
+
+                events.append(
+                    {
+                        "timestamp_ns": generation_start_ns,
+                        "delta_rate": token_rate,
+                        "active_delta": 1,
+                    }
+                )
+                events.append(
+                    {
+                        "timestamp_ns": request_end_ns,
+                        "delta_rate": -token_rate,
+                        "active_delta": -1,
+                    }
+                )
+
+        if not events:
+            return pd.DataFrame(
+                columns=["timestamp_s", "throughput_tokens_per_sec", "active_requests"]
+            )
+
+        events_df = pd.DataFrame(events).sort_values("timestamp_ns")
+
+        events_df["throughput_tokens_per_sec"] = events_df["delta_rate"].cumsum()
+        events_df["active_requests"] = events_df["active_delta"].cumsum()
+
+        start_ns = events_df["timestamp_ns"].min()
+        events_df["timestamp_s"] = (events_df["timestamp_ns"] - start_ns) / 1e9
+
+        return events_df[
+            ["timestamp_s", "throughput_tokens_per_sec", "active_requests"]
+        ].reset_index(drop=True)
 
     def _generate_gpu_utilization_with_throughput(
         self, run: RunData, available_metrics: dict
     ) -> list[Path]:
         """
-        Generate GPU utilization plot with output token throughput overlay.
+        Generate throughput plot with GPU utilization overlay.
+
+        Uses event-based dispersed throughput calculation where tokens are evenly
+        distributed across the generation phase for accurate representation.
 
         Args:
             run: RunData object with gpu_telemetry and requests DataFrames
@@ -384,79 +497,39 @@ class SingleRunPNGExporter(BasePNGExporter):
         try:
             gpu_df = run.gpu_telemetry.copy()
 
-            # Aggregate by GPU if multiple GPUs present
             if "gpu_index" in gpu_df.columns:
-                # Group by timestamp_s and calculate mean across GPUs
                 gpu_df = (
                     gpu_df.groupby("timestamp_s")
                     .agg({"gpu_utilization": "mean"})
                     .reset_index()
                 )
 
-            # Calculate throughput from requests data
             if run.requests is not None and not run.requests.empty:
                 requests_df = run.requests.copy()
 
-                # Convert request_end_ns to timestamp_s relative to run start
-                if "request_end_ns" in requests_df.columns:
-                    if pd.api.types.is_datetime64_any_dtype(
-                        requests_df["request_end_ns"]
-                    ):
-                        end_times_ns = requests_df["request_end_ns"].astype("int64")
-                    else:
-                        end_times_ns = requests_df["request_end_ns"]
+                required_cols = [
+                    "request_start_ns",
+                    "request_end_ns",
+                    "output_sequence_length",
+                ]
+                if all(col in requests_df.columns for col in required_cols):
+                    throughput_df = self._calculate_dispersed_throughput_events(
+                        requests_df
+                    )
 
-                    start_time_ns = end_times_ns.min()
-                    requests_df["timestamp_s"] = (end_times_ns - start_time_ns) / 1e9
-
-                    # Calculate throughput: tokens per second in 1-second windows
-                    if "output_sequence_length" in requests_df.columns:
-                        # Round timestamps to nearest second for binning
-                        requests_df["time_bin"] = requests_df["timestamp_s"].round(0)
-
-                        throughput_df = (
-                            requests_df.groupby("time_bin")
-                            .agg({"output_sequence_length": "sum"})
-                            .reset_index()
-                        )
-                        throughput_df = throughput_df.rename(
-                            columns={
-                                "time_bin": "timestamp_s",
-                                "output_sequence_length": "output_token_throughput",
-                            }
-                        )
-
-                        # Merge with GPU data
-                        # Round GPU timestamps for alignment
-                        gpu_df["time_bin"] = gpu_df["timestamp_s"].round(0)
-                        merged_df = pd.merge(
-                            gpu_df,
-                            throughput_df,
-                            left_on="time_bin",
-                            right_on="timestamp_s",
-                            how="left",
-                        )
-                        merged_df = merged_df.drop(columns=["time_bin"])
-                        # Use the original GPU timestamp
-                        merged_df["timestamp_s"] = merged_df["timestamp_s_x"]
-                        merged_df = merged_df.drop(
-                            columns=["timestamp_s_x", "timestamp_s_y"]
-                        )
-                        # Fill NaN throughput with 0
-                        merged_df["output_token_throughput"] = merged_df[
-                            "output_token_throughput"
-                        ].fillna(0)
-
-                        # Create the plot
+                    if not throughput_df.empty:
                         fig = self.plot_generator.create_gpu_dual_axis_plot(
-                            df=merged_df,
-                            x_col="timestamp_s",
-                            y1_metric="gpu_utilization",
-                            y2_metric="output_token_throughput",
-                            title="GPU Utilization with Output Token Throughput",
+                            df_primary=throughput_df,
+                            df_secondary=gpu_df,
+                            x_col_primary="timestamp_s",
+                            x_col_secondary="timestamp_s",
+                            y1_metric="throughput_tokens_per_sec",
+                            y2_metric="gpu_utilization",
+                            active_count_col="active_requests",
+                            title="Output Token Throughput with GPU Utilization",
                             x_label="Time (s)",
-                            y1_label="GPU Utilization (%)",
-                            y2_label="Output Tokens/sec",
+                            y1_label="Output Tokens/sec",
+                            y2_label="GPU Utilization (%)",
                         )
 
                         path = self.output_dir / "gpu_utilization_throughput.png"
@@ -464,7 +537,6 @@ class SingleRunPNGExporter(BasePNGExporter):
                         self.info("✓ Generated gpu_utilization_throughput.png")
                         return [path]
 
-            # Fallback: plot GPU utilization only if throughput can't be calculated
             self.warning(
                 "Could not calculate throughput overlay - plotting GPU utilization only"
             )
@@ -474,11 +546,11 @@ class SingleRunPNGExporter(BasePNGExporter):
             self.error(f"Failed to generate GPU utilization with throughput: {e}")
             return []
 
-    def _generate_gpu_memory_breakdown(
+    def _generate_gpu_metrics_overlay(
         self, run: RunData, available_metrics: dict
     ) -> list[Path]:
         """
-        Generate GPU memory breakdown plot.
+        Generate GPU metrics overlay plot with power, temperature, and clock speeds.
 
         Args:
             run: RunData object with gpu_telemetry DataFrame
@@ -490,39 +562,96 @@ class SingleRunPNGExporter(BasePNGExporter):
         try:
             gpu_df = run.gpu_telemetry.copy()
 
-            # Check if required columns exist
-            if (
-                "gpu_memory_used" not in gpu_df.columns
-                or "gpu_memory_free" not in gpu_df.columns
-            ):
-                self.warning("GPU memory columns not found in telemetry data")
+            required_cols = [
+                "gpu_power_usage",
+                "gpu_temperature",
+                "sm_clock_frequency",
+                "memory_clock_frequency",
+            ]
+            missing_cols = [col for col in required_cols if col not in gpu_df.columns]
+
+            if missing_cols:
+                self.warning(
+                    f"GPU metrics columns not found in telemetry data: {missing_cols}"
+                )
                 return []
 
-            # Aggregate by GPU if multiple GPUs present
-            if "gpu_index" in gpu_df.columns:
-                # Group by timestamp_s and calculate mean across GPUs
-                gpu_df = (
-                    gpu_df.groupby("timestamp_s")
-                    .agg({"gpu_memory_used": "mean", "gpu_memory_free": "mean"})
-                    .reset_index()
-                )
-
-            # Create the plot
-            fig = self.plot_generator.create_gpu_memory_stacked_area(
+            fig = self.plot_generator.create_gpu_metrics_overlay(
                 df=gpu_df,
                 x_col="timestamp_s",
-                used_col="gpu_memory_used",
-                free_col="gpu_memory_free",
-                title="GPU Memory Usage Over Time",
+                power_col="gpu_power_usage",
+                temp_col="gpu_temperature",
+                sm_clock_col="sm_clock_frequency",
+                mem_clock_col="memory_clock_frequency",
+                gpu_id_col="gpu_uuid",
+                title="GPU Metrics Over Time",
                 x_label="Time (s)",
-                y_label="Memory (GB)",
             )
 
-            path = self.output_dir / "gpu_memory_breakdown.png"
+            path = self.output_dir / "gpu_metrics_overlay.png"
             self._export_figure(fig, path)
-            self.info("✓ Generated gpu_memory_breakdown.png")
+            self.info("✓ Generated gpu_metrics_overlay.png")
             return [path]
 
         except Exception as e:
-            self.error(f"Failed to generate GPU memory breakdown: {e}")
+            self.error(f"Failed to generate GPU metrics overlay: {e}")
+            return []
+
+    def _generate_dispersed_throughput_over_time(
+        self, run: RunData, available_metrics: dict
+    ) -> list[Path]:
+        """
+        Generate standalone dispersed throughput over time plot.
+
+        Shows output token throughput with tokens evenly distributed across
+        the generation phase (from TTFT to request_end).
+
+        Args:
+            run: RunData object with requests DataFrame
+            available_metrics: Dictionary with display_names and units for metrics
+
+        Returns:
+            List of Path objects for generated PNG files
+        """
+        try:
+            if run.requests is None or run.requests.empty:
+                self.debug("No requests data available for dispersed throughput plot")
+                return []
+
+            requests_df = run.requests.copy()
+
+            required_cols = [
+                "request_start_ns",
+                "request_end_ns",
+                "output_sequence_length",
+            ]
+            if not all(col in requests_df.columns for col in required_cols):
+                self.warning(
+                    f"Missing required columns for dispersed throughput plot. "
+                    f"Required: {required_cols}"
+                )
+                return []
+
+            throughput_df = self._calculate_dispersed_throughput_events(requests_df)
+
+            if throughput_df.empty:
+                self.warning("No throughput data to plot")
+                return []
+
+            fig = self.plot_generator.create_time_series_area(
+                df=throughput_df,
+                x_col="timestamp_s",
+                y_metric="throughput_tokens_per_sec",
+                title="Dispersed Output Token Throughput Over Time",
+                x_label="Time (s)",
+                y_label="Output Tokens/sec",
+            )
+
+            path = self.output_dir / "dispersed_throughput_over_time.png"
+            self._export_figure(fig, path)
+            self.info("✓ Generated dispersed_throughput_over_time.png")
+            return [path]
+
+        except Exception as e:
+            self.error(f"Failed to generate dispersed throughput plot: {e}")
             return []

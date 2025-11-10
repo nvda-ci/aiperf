@@ -545,7 +545,7 @@ class PlotGenerator:
                 x=df[x_col],
                 y=df[y_metric],
                 mode="lines",
-                line=dict(width=2, color=NVIDIA_GREEN),
+                line=dict(width=2, color=NVIDIA_GREEN, shape="hv"),
                 fill="tozeroy",
                 fillcolor="rgba(118, 185, 0, 0.2)",
                 showlegend=False,
@@ -555,90 +555,6 @@ class PlotGenerator:
 
         # Apply NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y_label)
-        fig.update_layout(layout)
-
-        return fig
-
-    def create_time_series_band_plot(
-        self,
-        df: pd.DataFrame,
-        x_col: str,
-        y_avg_col: str,
-        y_min_col: str,
-        y_max_col: str,
-        title: str | None = None,
-        x_label: str | None = None,
-        y_label: str | None = None,
-    ) -> go.Figure:
-        """Create a time series plot with average line and min/max shaded band.
-
-        Args:
-            df: DataFrame containing the time series data
-            x_col: Column name for x-axis (e.g., "timeslice")
-            y_avg_col: Column name for average values
-            y_min_col: Column name for minimum values
-            y_max_col: Column name for maximum values
-            title: Plot title (auto-generated if None)
-            x_label: X-axis label (auto-generated if None)
-            y_label: Y-axis label (auto-generated if None)
-
-        Returns:
-            Plotly Figure object with average line and shaded band
-        """
-        fig = go.Figure()
-
-        # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_avg_col.replace('_', ' ').title()} Over Time"
-        if x_label is None:
-            x_label = x_col.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_avg_col.replace("_", " ").title()
-
-        # Upper boundary (max) - invisible line
-        fig.add_trace(
-            go.Scatter(
-                x=df[x_col],
-                y=df[y_max_col],
-                mode="lines",
-                line=dict(width=0),
-                showlegend=False,
-                hoverinfo="skip",
-                name="max",
-            )
-        )
-
-        # Lower boundary (min) - filled to previous trace (max)
-        fig.add_trace(
-            go.Scatter(
-                x=df[x_col],
-                y=df[y_min_col],
-                mode="lines",
-                line=dict(width=0),
-                fill="tonexty",
-                fillcolor="rgba(118, 185, 0, 0.15)",
-                showlegend=False,
-                hoverinfo="skip",
-                name="min",
-            )
-        )
-
-        # Average line
-        fig.add_trace(
-            go.Scatter(
-                x=df[x_col],
-                y=df[y_avg_col],
-                mode="lines+markers",
-                line=dict(width=3, color=NVIDIA_GREEN),
-                marker=dict(size=8, color=NVIDIA_GREEN),
-                name="Average",
-                showlegend=True,
-                hovertemplate=f"{x_label}: %{{x}}<br>{y_label}: %{{y:.2f}}<extra></extra>",
-            )
-        )
-
-        # Apply NVIDIA branding layout
-        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
         fig.update_layout(layout)
 
         return fig
@@ -820,23 +736,32 @@ class PlotGenerator:
 
     def create_gpu_dual_axis_plot(
         self,
-        df: pd.DataFrame,
-        x_col: str,
+        df_primary: pd.DataFrame,
+        df_secondary: pd.DataFrame,
+        x_col_primary: str,
+        x_col_secondary: str,
         y1_metric: str,
         y2_metric: str,
+        active_count_col: str | None = None,
         title: str | None = None,
         x_label: str | None = None,
         y1_label: str | None = None,
         y2_label: str | None = None,
     ) -> go.Figure:
         """
-        Create a dual Y-axis plot for GPU metrics with overlay.
+        Create a dual Y-axis plot with independent data sources.
+
+        Primary metric (left Y-axis, typically throughput) is plotted as a step function.
+        Secondary metric (right Y-axis, typically GPU utilization) is plotted as filled area.
 
         Args:
-            df: DataFrame containing the time series data
-            x_col: Column name for x-axis (e.g., "timestamp_s")
-            y1_metric: Column name for primary y-axis (left, e.g., "gpu_utilization")
-            y2_metric: Column name for secondary y-axis (right, e.g., "throughput")
+            df_primary: DataFrame for primary metric (left Y-axis)
+            df_secondary: DataFrame for secondary metric (right Y-axis)
+            x_col_primary: Column name for x-axis in primary DataFrame
+            x_col_secondary: Column name for x-axis in secondary DataFrame
+            y1_metric: Column name for primary y-axis (left)
+            y2_metric: Column name for secondary y-axis (right)
+            active_count_col: Optional column name in df_primary for active request count (for tooltip)
             title: Plot title (auto-generated if None)
             x_label: X-axis label (auto-generated if None)
             y1_label: Primary Y-axis label (auto-generated if None)
@@ -847,7 +772,6 @@ class PlotGenerator:
         """
         fig = go.Figure()
 
-        # Auto-generate labels if not provided
         if title is None:
             title = f"{y1_metric.replace('_', ' ').title()} with {y2_metric.replace('_', ' ').title()}"
         if x_label is None:
@@ -857,39 +781,43 @@ class PlotGenerator:
         if y2_label is None:
             y2_label = y2_metric.replace("_", " ").title()
 
-        # Primary metric (left Y-axis) - filled area
+        primary_hover = f"{x_label}: %{{x:.1f}}s<br>{y1_label}: %{{y:.1f}}"
+        if active_count_col and active_count_col in df_primary.columns:
+            primary_hover += "<br>Active Requests: %{customdata}"
+
+        primary_hover += "<extra></extra>"
+
+        customdata = df_primary[active_count_col] if active_count_col else None
+
         fig.add_trace(
             go.Scatter(
-                x=df[x_col],
-                y=df[y1_metric],
+                x=df_primary[x_col_primary],
+                y=df_primary[y1_metric],
                 mode="lines",
-                line=dict(width=2, color=NVIDIA_GREEN),
-                fill="tozeroy",
-                fillcolor="rgba(118, 185, 0, 0.3)",
+                line=dict(width=2, color=NVIDIA_GREEN, shape="hv"),
                 name=y1_label,
                 yaxis="y",
-                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{y1_label}: %{{y:.1f}}<extra></extra>",
+                customdata=customdata,
+                hovertemplate=primary_hover,
             )
         )
 
-        # Secondary metric (right Y-axis) - line with markers
         fig.add_trace(
             go.Scatter(
-                x=df[x_col],
-                y=df[y2_metric],
-                mode="lines+markers",
+                x=df_secondary[x_col_secondary],
+                y=df_secondary[y2_metric],
+                mode="lines",
                 line=dict(width=2, color=self.colors["secondary"]),
-                marker=dict(size=6, color=self.colors["secondary"]),
+                fill="tozeroy",
+                fillcolor=f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.3)",
                 name=y2_label,
                 yaxis="y2",
                 hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
             )
         )
 
-        # Apply base NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y1_label, hovermode="x unified")
 
-        # Add secondary y-axis
         layout["yaxis2"] = {
             "title": y2_label,
             "overlaying": "y",
@@ -900,10 +828,97 @@ class PlotGenerator:
             "color": NVIDIA_TEXT_LIGHT,
         }
 
-        # Update legend position to avoid overlap with secondary axis
         layout["legend"]["x"] = 0.02
         layout["legend"]["xanchor"] = "left"
 
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_latency_scatter_with_percentiles(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        y_metric: str,
+        percentile_cols: list[str],
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+    ) -> go.Figure:
+        """
+        Create a scatter plot with rolling percentile overlays for latency analysis.
+
+        Displays individual request latencies as scatter points with overlaid percentile
+        lines to provide statistical context. This visualization is ideal for identifying
+        tail latency, temporal patterns, and debugging anomalies.
+
+        Args:
+            df: DataFrame containing the time series data with percentile columns
+            x_col: Column name for x-axis (e.g., "timestamp")
+            y_metric: Column name for y-axis metric (e.g., "request_latency")
+            percentile_cols: List of column names for percentile lines (e.g., ["p50", "p95", "p99"])
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y_label: Y-axis label (auto-generated if None)
+
+        Returns:
+            Plotly Figure object with scatter points and percentile lines
+        """
+        fig = go.Figure()
+
+        # Auto-generate labels if not provided
+        if title is None:
+            title = f"{y_metric.replace('_', ' ').title()} Over Time with Percentiles"
+        if x_label is None:
+            x_label = x_col.replace("_", " ").title()
+        if y_label is None:
+            y_label = y_metric.replace("_", " ").title()
+
+        # Get NVIDIA color scheme for percentile lines
+        n_percentiles = len(percentile_cols)
+        percentile_colors = get_nvidia_color_scheme(
+            n_percentiles, self.colors["secondary"]
+        )
+
+        # Individual request scatter points (semi-transparent)
+        fig.add_trace(
+            go.Scatter(
+                x=df[x_col],
+                y=df[y_metric],
+                mode="markers",
+                marker=dict(
+                    size=6,
+                    opacity=0.4,
+                    color=self.colors["secondary"],
+                    line=dict(width=0),
+                ),
+                name="Individual Requests",
+                hovertemplate=f"{x_label}: %{{x:.2f}}<br>{y_label}: %{{y:.2f}}<extra></extra>",
+            )
+        )
+
+        # Add percentile lines with NVIDIA color palette
+        for idx, percentile_col in enumerate(percentile_cols):
+            if percentile_col not in df.columns:
+                continue
+
+            # Extract percentile number from column name (e.g., "p95" -> "p95")
+            percentile_display = percentile_col.upper()
+            color = percentile_colors[idx % len(percentile_colors)]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df[x_col],
+                    y=df[percentile_col],
+                    mode="lines",
+                    line=dict(width=2.5, color=color),
+                    name=percentile_display,
+                    hovertemplate=f"{x_label}: %{{x:.2f}}<br>{percentile_display}: %{{y:.2f}}<extra></extra>",
+                )
+            )
+
+        # Apply NVIDIA branding layout with unified hover
+        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
         fig.update_layout(layout)
 
         return fig
@@ -975,6 +990,143 @@ class PlotGenerator:
 
         # Apply NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_gpu_metrics_overlay(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        power_col: str,
+        temp_col: str,
+        sm_clock_col: str,
+        mem_clock_col: str,
+        gpu_id_col: str = "gpu_uuid",
+        title: str | None = None,
+        x_label: str | None = None,
+    ) -> go.Figure:
+        """
+        Create a multi-metric overlay plot for GPU telemetry data.
+
+        Shows power, temperature, and clock speeds on dual Y-axes with separate
+        lines per GPU UUID. Left axis shows power (W) and temperature (°C).
+        Right axis shows clock frequencies (MHz).
+
+        Args:
+            df: DataFrame containing GPU telemetry time series data
+            x_col: Column name for x-axis (e.g., "timestamp_s")
+            power_col: Column name for power usage (W)
+            temp_col: Column name for GPU temperature (°C)
+            sm_clock_col: Column name for SM clock frequency (MHz)
+            mem_clock_col: Column name for memory clock frequency (MHz)
+            gpu_id_col: Column name for GPU identifier (default: "gpu_uuid")
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+
+        Returns:
+            Plotly Figure object with dual Y-axes and per-GPU traces
+        """
+        fig = go.Figure()
+
+        if title is None:
+            title = "GPU Metrics Over Time"
+        if x_label is None:
+            x_label = "Time (s)"
+
+        gpu_ids = (
+            sorted(df[gpu_id_col].unique()) if gpu_id_col in df.columns else [None]
+        )
+        n_gpus = len(gpu_ids)
+
+        colors = get_nvidia_color_scheme(n_gpus, self.colors["secondary"])
+
+        metric_configs = [
+            {
+                "col": power_col,
+                "name": "Power",
+                "unit": "W",
+                "yaxis": "y",
+                "dash": None,
+                "color_idx": 0,
+            },
+            {
+                "col": temp_col,
+                "name": "Temperature",
+                "unit": "°C",
+                "yaxis": "y",
+                "dash": "dot",
+                "color_idx": 1,
+            },
+            {
+                "col": sm_clock_col,
+                "name": "SM Clock",
+                "unit": "MHz",
+                "yaxis": "y2",
+                "dash": None,
+                "color_idx": 2,
+            },
+            {
+                "col": mem_clock_col,
+                "name": "Memory Clock",
+                "unit": "MHz",
+                "yaxis": "y2",
+                "dash": "dash",
+                "color_idx": 3,
+            },
+        ]
+
+        for gpu_idx, gpu_id in enumerate(gpu_ids):
+            if gpu_id is None:
+                gpu_df = df
+                gpu_label = ""
+            else:
+                gpu_df = df[df[gpu_id_col] == gpu_id]
+                gpu_label = f" (GPU-{gpu_idx})"
+
+            base_color = colors[gpu_idx % len(colors)]
+
+            for metric in metric_configs:
+                if metric["col"] not in gpu_df.columns:
+                    continue
+
+                metric_name = f"{metric['name']} ({metric['unit']}){gpu_label}"
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=gpu_df[x_col],
+                        y=gpu_df[metric["col"]],
+                        mode="lines",
+                        line=dict(
+                            width=2,
+                            color=base_color,
+                            dash=metric["dash"],
+                        ),
+                        name=metric_name,
+                        yaxis=metric["yaxis"],
+                        hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{metric['name']}: %{{y:.1f}} {metric['unit']}<extra></extra>",
+                        legendgroup=f"gpu{gpu_idx}",
+                    )
+                )
+
+        layout = self._get_base_layout(
+            title, x_label, "Power (W) / Temp (°C)", hovermode="x unified"
+        )
+
+        layout["yaxis2"] = {
+            "title": "Clock Frequency (MHz)",
+            "overlaying": "y",
+            "side": "right",
+            "gridcolor": self.colors["grid"],
+            "showline": True,
+            "linecolor": self.colors["border"],
+            "color": self.colors["text"],
+        }
+
+        layout["legend"]["x"] = 0.02
+        layout["legend"]["xanchor"] = "left"
+        layout["legend"]["tracegroupgap"] = 10
+
         fig.update_layout(layout)
 
         return fig

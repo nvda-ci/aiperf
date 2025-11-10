@@ -87,7 +87,9 @@ def sample_single_run_data(tmp_path):
     # Create per-request DataFrame
     per_request_data = pd.DataFrame(
         {
-            "request_end_ns": [1000000000000 + i * 500000000 for i in range(10)],
+            "request_end_ns": pd.to_datetime(
+                [1000000000000 + i * 500000000 for i in range(10)], unit="ns", utc=True
+            ),
             "time_to_first_token": [45.0 + i * 2 for i in range(10)],
             "inter_token_latency": [18.0 + i * 0.5 for i in range(10)],
             "request_latency": [900.0 + i * 10 for i in range(10)],
@@ -969,3 +971,321 @@ class TestSharedExporterFunctionality:
 
         # May generate fewer plots if metrics are missing
         assert isinstance(generated_files, list)
+
+
+class TestSingleRunGPUPlots:
+    """Tests for GPU plot generation in SingleRunPNGExporter."""
+
+    @pytest.fixture
+    def gpu_telemetry_df(self):
+        """Create sample GPU telemetry DataFrame."""
+        return pd.DataFrame(
+            {
+                "timestamp_s": [0.0, 1.0, 2.0, 3.0, 4.0],
+                "gpu_index": [0, 0, 0, 0, 0],
+                "gpu_uuid": ["GPU-0", "GPU-0", "GPU-0", "GPU-0", "GPU-0"],
+                "gpu_utilization": [45.5, 67.2, 78.9, 82.3, 75.4],
+                "gpu_memory_used": [2.5, 4.0, 5.5, 6.0, 5.0],
+                "gpu_memory_free": [5.5, 4.0, 2.5, 2.0, 3.0],
+                "gpu_power_usage": [50.0, 100.0, 150.0, 140.0, 120.0],
+                "gpu_temperature": [60.0, 65.0, 70.0, 72.0, 68.0],
+                "sm_clock_frequency": [1200.0, 1800.0, 2400.0, 2600.0, 2200.0],
+                "memory_clock_frequency": [8000.0, 9000.0, 9500.0, 9500.0, 9200.0],
+            }
+        )
+
+    @pytest.fixture
+    def requests_df_for_gpu(self):
+        """Create sample requests DataFrame for GPU throughput calculation."""
+        return pd.DataFrame(
+            {
+                "request_start_ns": pd.to_datetime(
+                    [
+                        500_000_000,
+                        800_000_000,
+                        1_200_000_000,
+                        1_800_000_000,
+                        2_300_000_000,
+                    ],
+                    unit="ns",
+                    utc=True,
+                ),
+                "request_end_ns": pd.to_datetime(
+                    [
+                        1_000_000_000,
+                        1_500_000_000,
+                        2_000_000_000,
+                        2_500_000_000,
+                        3_000_000_000,
+                    ],
+                    unit="ns",
+                    utc=True,
+                ),
+                "time_to_first_token": [50, 75, 100, 80, 90],
+                "output_sequence_length": [100, 150, 200, 180, 220],
+            }
+        )
+
+    def test_generate_gpu_plots_with_telemetry(
+        self, tmp_path, sample_available_metrics, gpu_telemetry_df, requests_df_for_gpu
+    ):
+        """Test that GPU plots are generated when telemetry data is available."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=requests_df_for_gpu,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=gpu_telemetry_df,
+        )
+
+        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+
+        assert len(gpu_files) > 0
+        for file_path in gpu_files:
+            assert file_path.exists()
+            assert file_path.suffix == ".png"
+
+    def test_generate_gpu_plots_no_telemetry(self, tmp_path, sample_available_metrics):
+        """Test that no GPU plots are generated when telemetry data is missing."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=None,
+        )
+
+        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+
+        assert gpu_files == []
+
+    def test_generate_gpu_plots_empty_telemetry(
+        self, tmp_path, sample_available_metrics
+    ):
+        """Test that no GPU plots are generated when telemetry DataFrame is empty."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=pd.DataFrame(),
+        )
+
+        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+
+        assert gpu_files == []
+
+    def test_generate_gpu_utilization_with_throughput(
+        self, tmp_path, sample_available_metrics, gpu_telemetry_df, requests_df_for_gpu
+    ):
+        """Test GPU utilization with throughput overlay plot generation."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=requests_df_for_gpu,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=gpu_telemetry_df,
+        )
+
+        gpu_files = exporter._generate_gpu_utilization_with_throughput(
+            run, sample_available_metrics
+        )
+
+        assert len(gpu_files) == 1
+        assert gpu_files[0].name == "gpu_utilization_throughput.png"
+        assert gpu_files[0].exists()
+
+    def test_generate_gpu_utilization_no_requests(
+        self, tmp_path, sample_available_metrics, gpu_telemetry_df
+    ):
+        """Test GPU utilization plot when requests data is missing."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=gpu_telemetry_df,
+        )
+
+        gpu_files = exporter._generate_gpu_utilization_with_throughput(
+            run, sample_available_metrics
+        )
+
+        assert gpu_files == []
+
+    def test_generate_gpu_metrics_overlay(
+        self, tmp_path, sample_available_metrics, gpu_telemetry_df
+    ):
+        """Test GPU metrics overlay plot generation."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=gpu_telemetry_df,
+        )
+
+        gpu_files = exporter._generate_gpu_metrics_overlay(
+            run, sample_available_metrics
+        )
+
+        assert len(gpu_files) == 1
+        assert gpu_files[0].name == "gpu_metrics_overlay.png"
+        assert gpu_files[0].exists()
+
+    def test_generate_gpu_metrics_overlay_missing_columns(
+        self, tmp_path, sample_available_metrics
+    ):
+        """Test GPU metrics overlay plot when required columns are missing."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        incomplete_gpu_df = pd.DataFrame(
+            {
+                "timestamp_s": [0.0, 1.0, 2.0],
+                "gpu_utilization": [45.5, 67.2, 78.9],
+            }
+        )
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=None,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=incomplete_gpu_df,
+        )
+
+        gpu_files = exporter._generate_gpu_metrics_overlay(
+            run, sample_available_metrics
+        )
+
+        assert gpu_files == []
+
+    def test_generate_dispersed_throughput_over_time(
+        self, tmp_path, sample_available_metrics, requests_df_for_gpu
+    ):
+        """Test dispersed throughput over time plot generation."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=4,
+            ),
+            requests=requests_df_for_gpu,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=None,
+        )
+
+        files = exporter._generate_dispersed_throughput_over_time(
+            run, sample_available_metrics
+        )
+
+        assert len(files) == 1
+        assert files[0].name == "dispersed_throughput_over_time.png"
+        assert files[0].exists()
+
+    def test_generate_gpu_plots_multi_gpu_aggregation(
+        self, tmp_path, sample_available_metrics, requests_df_for_gpu
+    ):
+        """Test that GPU plots aggregate data correctly across multiple GPUs."""
+        exporter = SingleRunPNGExporter(output_dir=tmp_path)
+
+        multi_gpu_df = pd.DataFrame(
+            {
+                "timestamp_s": [0.0, 0.0, 1.0, 1.0, 2.0, 2.0],
+                "gpu_index": [0, 1, 0, 1, 0, 1],
+                "gpu_uuid": ["GPU-0", "GPU-1", "GPU-0", "GPU-1", "GPU-0", "GPU-1"],
+                "gpu_utilization": [45.0, 55.0, 65.0, 75.0, 70.0, 80.0],
+                "gpu_memory_used": [2.0, 3.0, 4.0, 5.0, 4.5, 5.5],
+                "gpu_memory_free": [6.0, 5.0, 4.0, 3.0, 3.5, 2.5],
+                "gpu_power_usage": [50.0, 60.0, 100.0, 110.0, 120.0, 130.0],
+                "gpu_temperature": [60.0, 62.0, 65.0, 67.0, 68.0, 70.0],
+                "sm_clock_frequency": [1200.0, 1300.0, 1800.0, 1900.0, 2200.0, 2300.0],
+                "memory_clock_frequency": [
+                    8000.0,
+                    8100.0,
+                    9000.0,
+                    9100.0,
+                    9200.0,
+                    9300.0,
+                ],
+            }
+        )
+
+        run = RunData(
+            metadata=RunMetadata(
+                run_name="test_run",
+                run_path=tmp_path / "test_run",
+                model="Test Model",
+                concurrency=1,
+            ),
+            requests=requests_df_for_gpu,
+            aggregated={},
+            timeslices=None,
+            slice_duration=None,
+            gpu_telemetry=multi_gpu_df,
+        )
+
+        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+
+        assert len(gpu_files) > 0
+        for file_path in gpu_files:
+            assert file_path.exists()
