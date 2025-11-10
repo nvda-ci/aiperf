@@ -12,10 +12,14 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
+# Import handlers to register them with the factory
+import aiperf.plot.handlers.multi_run_handlers  # noqa: F401
 from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
 from aiperf.plot.core.data_loader import RunData
-from aiperf.plot.core.plot_specs import MULTI_RUN_PLOT_SPECS, PlotSpec, PlotType
+from aiperf.plot.core.data_preparation import flatten_config
+from aiperf.plot.core.plot_specs import MULTI_RUN_PLOT_SPECS, PlotSpec
+from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
 
@@ -95,7 +99,7 @@ class MultiRunPNGExporter(BasePNGExporter):
         self, spec: PlotSpec, df: pd.DataFrame, available_metrics: dict
     ) -> go.Figure:
         """
-        Create a plot figure from a plot specification.
+        Create a plot figure from a plot specification using the factory pattern.
 
         Args:
             spec: Plot specification
@@ -105,45 +109,14 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        x_metric = next(m for m in spec.metrics if m.axis == "x")
-        y_metric = next(m for m in spec.metrics if m.axis == "y")
-
-        # Determine x and y labels
-        if x_metric.name == "concurrency":
-            x_label = "Concurrency Level"
-        else:
-            x_label = self._get_metric_label(
-                x_metric.name, x_metric.stat or DEFAULT_PERCENTILE, available_metrics
-            )
-
-        y_label = self._get_metric_label(
-            y_metric.name, y_metric.stat or "avg", available_metrics
+        # Create handler instance from factory
+        handler = PlotTypeHandlerFactory.create_instance(
+            spec.plot_type,
+            plot_generator=self.plot_generator,
         )
 
-        if spec.plot_type == PlotType.PARETO:
-            return self.plot_generator.create_pareto_plot(
-                df=df,
-                x_metric=x_metric.name,
-                y_metric=y_metric.name,
-                label_by=spec.label_by,
-                group_by=spec.group_by,
-                title=spec.title,
-                x_label=x_label,
-                y_label=y_label,
-            )
-        elif spec.plot_type == PlotType.SCATTER_LINE:
-            return self.plot_generator.create_scatter_line_plot(
-                df=df,
-                x_metric=x_metric.name,
-                y_metric=y_metric.name,
-                label_by=spec.label_by,
-                group_by=spec.group_by,
-                title=spec.title,
-                x_label=x_label,
-                y_label=y_label,
-            )
-        else:
-            raise ValueError(f"Unsupported plot type for multi-run: {spec.plot_type}")
+        # Use handler to create the plot
+        return handler.create_plot(spec, df, available_metrics)
 
     def _runs_to_dataframe(
         self, runs: list[RunData], available_metrics: dict
@@ -151,21 +124,35 @@ class MultiRunPNGExporter(BasePNGExporter):
         """
         Convert list of run data into a DataFrame for plotting.
 
+        Extracts all configuration fields (not just model and concurrency) to support
+        arbitrary swept parameter analysis.
+
         Args:
             runs: List of RunData objects
             available_metrics: Dictionary with display_names and units
 
         Returns:
-            DataFrame with columns for metrics and metadata
+            DataFrame with columns for metrics, metadata, and all config fields
         """
-
         rows = []
         for run in runs:
             row = {}
 
+            # Extract metadata fields
             row["model"] = run.metadata.model or "Unknown"
             row["concurrency"] = run.metadata.concurrency or 1
+            row["request_count"] = run.metadata.request_count
+            row["duration_seconds"] = run.metadata.duration_seconds
+            if run.metadata.endpoint_type:
+                row["endpoint_type"] = run.metadata.endpoint_type
 
+            # Extract and flatten all input_config fields
+            if "input_config" in run.aggregated:
+                config = run.aggregated["input_config"]
+                flattened = flatten_config(config)
+                row.update(flattened)
+
+            # Extract metric values
             for key, value in run.aggregated.items():
                 if key in NON_METRIC_KEYS:
                     continue

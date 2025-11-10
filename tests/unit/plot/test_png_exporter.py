@@ -15,6 +15,10 @@ import pytest
 
 from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.core.data_loader import RunData, RunMetadata
+from aiperf.plot.core.data_preparation import (
+    prepare_request_timeseries,
+    validate_request_uniformity,
+)
 from aiperf.plot.exporters.png import MultiRunPNGExporter, SingleRunPNGExporter
 
 
@@ -407,7 +411,7 @@ class TestSingleRunPNGExporter:
         self, single_run_exporter, sample_single_run_data
     ):
         """Test conversion of per-request data to DataFrame."""
-        df = single_run_exporter._per_request_to_dataframe(sample_single_run_data)
+        df = prepare_request_timeseries(sample_single_run_data)
 
         # Check DataFrame structure
         assert len(df) == 10  # 10 requests
@@ -588,7 +592,7 @@ class TestSingleRunPNGExporter:
             slice_duration=10.0,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is True
         assert warning is None
 
@@ -667,7 +671,7 @@ class TestSingleRunPNGExporter:
             slice_duration=10.0,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is False
         assert warning is not None
         assert "varying ISL/OSL" in warning
@@ -750,7 +754,7 @@ class TestSingleRunPNGExporter:
             slice_duration=None,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is False
         assert warning is not None
         assert "varying ISL/OSL" in warning
@@ -859,7 +863,7 @@ class TestSingleRunPNGExporter:
             slice_duration=None,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is False
         assert warning is not None
         assert "varying ISL/OSL" in warning
@@ -903,7 +907,7 @@ class TestSingleRunPNGExporter:
             slice_duration=None,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is True
         assert warning is None
 
@@ -929,7 +933,7 @@ class TestSingleRunPNGExporter:
             slice_duration=None,
         )
 
-        is_uniform, warning = single_run_exporter._check_request_uniformity(run_data)
+        is_uniform, warning = validate_request_uniformity(run_data)
         assert is_uniform is True
         assert warning is None
 
