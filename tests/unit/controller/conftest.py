@@ -33,20 +33,22 @@ def system_controller(
     user_config: UserConfig,
     mock_service_manager: AsyncMock,
 ) -> SystemController:
-    """Create a SystemController instance with mocked dependencies."""
+    """Create a SystemController instance with mocked dependencies.
+
+    With global ZMQ mocking, we no longer need to patch CommunicationFactory.
+    We only mock controller-specific dependencies like ServiceManager, ProxyManager,
+    and UIFactory.
+    """
     with (
-        patch("aiperf.controller.system_controller.ServiceManagerFactory") as mock_factory,
+        patch(
+            "aiperf.controller.system_controller.ServiceManagerFactory"
+        ) as mock_factory,
         patch("aiperf.controller.system_controller.ProxyManager") as mock_proxy,
         patch("aiperf.controller.system_controller.AIPerfUIFactory") as mock_ui_factory,
-        patch("aiperf.common.factories.CommunicationFactory") as mock_comm_factory,
-    ):  # fmt: skip
+    ):
         mock_factory.create_instance.return_value = mock_service_manager
         mock_proxy.return_value = AsyncMock()
         mock_ui_factory.create_instance.return_value = AsyncMock()
-
-        # Mock the communication factory to return a mock communication object
-        mock_comm = AsyncMock()
-        mock_comm_factory.get_or_create_instance.return_value = mock_comm
 
         controller = SystemController(
             user_config=user_config,

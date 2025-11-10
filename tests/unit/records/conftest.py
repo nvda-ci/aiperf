@@ -26,28 +26,13 @@ def sample_turn():
 
 @pytest.fixture
 def inference_result_parser(user_config):
-    """Create an InferenceResultParser with mocked dependencies."""
+    """Create an InferenceResultParser with mocked endpoint dependencies.
 
-    def mock_communication_init(self, service_config, **kwargs):
-        from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
-
-        AIPerfLifecycleMixin.__init__(self, service_config=service_config, **kwargs)
-        self.service_config = service_config
-        self.comms = MagicMock()
-        for method in [
-            "trace_or_debug",
-            "debug",
-            "info",
-            "warning",
-            "error",
-            "exception",
-        ]:
-            setattr(self, method, MagicMock())
-
+    With global ZMQ mocking, we can instantiate the parser directly without
+    patching CommunicationMixin. We only need to mock endpoint-specific
+    dependencies that would make external calls.
+    """
     with (
-        patch(
-            "aiperf.common.mixins.CommunicationMixin.__init__", mock_communication_init
-        ),
         patch(
             "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config"
         ),

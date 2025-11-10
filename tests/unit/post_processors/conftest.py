@@ -4,7 +4,6 @@
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TypeVar
 from unittest.mock import Mock
 
 import pytest
@@ -13,7 +12,6 @@ from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, Us
 from aiperf.common.enums import CreditPhase, EndpointType, ExportLevel, MessageType
 from aiperf.common.enums.metric_enums import MetricValueTypeT
 from aiperf.common.messages import MetricRecordsMessage
-from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models import (
     ErrorDetails,
     ParsedResponse,
@@ -37,27 +35,7 @@ from tests.unit.conftest import (
     DEFAULT_OUTPUT_TOKENS,
     DEFAULT_START_TIME_NS,
 )
-
-T = TypeVar("T", bound=AIPerfLifecycleMixin)
-
-
-@asynccontextmanager
-async def aiperf_lifecycle(instance: T) -> T:
-    """Generic async context manager for any AIPerfLifecycleMixin lifecycle.
-
-    Handles initialize, start, and stop automatically for any component
-    implementing the AIPerfLifecycleMixin interface.
-
-    Usage:
-        async with aiperf_lifecycle(processor) as proc:
-            await proc.process_record(record, metadata)
-    """
-    await instance.initialize()
-    await instance.start()
-    try:
-        yield instance
-    finally:
-        await instance.stop()
+from tests.unit.utils import aiperf_lifecycle
 
 
 @asynccontextmanager

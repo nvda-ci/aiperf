@@ -19,39 +19,37 @@ from aiperf.common.models.record_models import RequestInfo, RequestRecord
 from aiperf.workers.worker import Worker
 
 
-class MockWorker(Worker):
-    """Mock implementation of Worker for testing."""
+@pytest.mark.asyncio
+class TestWorker:
+    @pytest.fixture
+    def worker(self):
+        """Create a Worker for testing with mocked external dependencies.
 
-    def __init__(self):
+        With global ZMQ mocking, we can instantiate Worker directly without
+        complex patching patterns. We only need to mock external I/O dependencies
+        like TCP connectors and endpoint factories.
+        """
         with (
             patch(
                 "aiperf.transports.aiohttp_client.create_tcp_connector"
             ) as mock_tcp_connector,
             patch(
                 "aiperf.common.factories.EndpointFactory.create_instance"
-            ) as mock_client_factory,
+            ) as mock_endpoint_factory,
         ):
             mock_tcp_connector.return_value = Mock()
 
-            mock_client = Mock()
-            mock_client.send_request = AsyncMock()
-            mock_client_factory.return_value = mock_client
+            mock_endpoint = Mock()
+            mock_endpoint.send_request = AsyncMock()
+            mock_endpoint_factory.return_value = mock_endpoint
 
-            super().__init__(
+            return Worker(
                 service_config=ServiceConfig(),
                 user_config=UserConfig(
                     endpoint=EndpointConfig(model_names=["test-model"]),
                 ),
-                service_id="mock-service-id",
+                service_id="test-worker",
             )
-
-
-@pytest.mark.asyncio
-class TestWorker:
-    @pytest.fixture
-    def worker(self):
-        """Create a mock Worker for testing."""
-        return MockWorker()
 
     async def test_send_with_optional_cancel_should_cancel_false(self, worker):
         """Test _send_with_optional_cancel when should_cancel=False."""

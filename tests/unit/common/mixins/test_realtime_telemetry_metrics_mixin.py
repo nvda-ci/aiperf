@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -20,29 +20,30 @@ class TestRealtimeTelemetryMetricsMixin:
 
     @pytest.fixture
     def mocked_mixin(self):
-        """Create a RealtimeTelemetryMetricsMixin instance with mocked dependencies."""
+        """Create a RealtimeTelemetryMetricsMixin instance with mocked dependencies.
+
+        With global ZMQ mocking, we can instantiate the mixin directly without
+        patching MessageBusClientMixin. The ZMQ context creation is handled
+        automatically by the global mock.
+        """
         service_config = ServiceConfig()
         mock_controller = MagicMock()
 
-        # Mock the MessageBusClientMixin.__init__ to avoid initialization issues
-        with patch(
-            "aiperf.common.mixins.message_bus_mixin.MessageBusClientMixin.__init__",
-            return_value=None,
-        ):
-            mixin = RealtimeTelemetryMetricsMixin(
-                service_config=service_config, controller=mock_controller
-            )
-            # Manually set attributes that would be set by parent __init__
-            mixin._controller = mock_controller
-            mixin._telemetry_metrics = []
-            mixin.run_hooks = AsyncMock()
-            mixin.debug = MagicMock()
+        mixin = RealtimeTelemetryMetricsMixin(
+            service_config=service_config, controller=mock_controller
+        )
+        # Mock methods that would trigger external actions
+        mixin.run_hooks = AsyncMock()
+        mixin.debug = MagicMock()
 
         return mixin
 
     def test_mixin_initialization(self, mocked_mixin):
-        """Test that mixin initializes with correct attributes."""
-        assert hasattr(mocked_mixin, "_controller")
+        """Test that mixin initializes with correct attributes.
+
+        With proper initialization (not manually patched), we test what the mixin
+        actually provides according to its implementation.
+        """
         assert hasattr(mocked_mixin, "_telemetry_metrics")
         assert hasattr(mocked_mixin, "_telemetry_metrics_lock")
         assert mocked_mixin._telemetry_metrics == []
