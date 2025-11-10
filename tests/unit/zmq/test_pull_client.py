@@ -13,7 +13,7 @@ import zmq.asyncio
 
 from aiperf.common.enums import LifecycleState, MessageType
 from aiperf.common.environment import Environment
-from aiperf.common.messages import Message
+from aiperf.common.messages import HeartbeatMessage, Message
 from aiperf.zmq.pull_client import ZMQPullClient
 
 
@@ -185,8 +185,6 @@ class TestZMQPullClientConcurrency:
         self, mock_zmq_context, wait_for_background_task
     ):
         """Test that semaphore limits concurrent message processing."""
-        from aiperf.common.messages import HeartbeatMessage
-
         messages = [
             HeartbeatMessage(
                 service_id="test-service",

@@ -14,6 +14,7 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import zmq.asyncio
 
 from aiperf.common import random_generator as rng
 from aiperf.common.aiperf_logger import _TRACE
@@ -45,10 +46,10 @@ def mock_zmq_globally(monkeypatch):
 
     Tests in tests/zmq/ will use their own more specific mocking from tests/zmq/conftest.py.
     """
-    import itertools
-    from unittest.mock import AsyncMock, MagicMock, Mock
 
-    import zmq.asyncio
+    async def _block_forever():
+        """Block forever by awaiting a Future that never completes."""
+        await asyncio.Future()  # Never resolves
 
     # Create mock socket
     mock_socket = AsyncMock(spec=zmq.asyncio.Socket)
@@ -56,10 +57,11 @@ def mock_zmq_globally(monkeypatch):
     mock_socket.connect = Mock()
     mock_socket.close = Mock()
     mock_socket.setsockopt = Mock()
-    mock_socket.send_string = AsyncMock()
+    mock_socket.send = AsyncMock()
     mock_socket.send_multipart = AsyncMock()
-    mock_socket.recv_string = AsyncMock(side_effect=itertools.repeat(zmq.Again()))
-    mock_socket.recv_multipart = AsyncMock(side_effect=itertools.repeat(zmq.Again()))
+    # Block forever instead of raising zmq.Again in a loop
+    mock_socket.recv = AsyncMock(side_effect=_block_forever)
+    mock_socket.recv_multipart = AsyncMock(side_effect=_block_forever)
     mock_socket.closed = False
 
     # Create mock context

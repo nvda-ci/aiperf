@@ -68,7 +68,6 @@ class TestDatasetManagerSequentialIteration:
             service_config = ServiceConfig()
             dataset_manager = DatasetManager(service_config, user_config)
 
-            # Initialize the manager before use
             await dataset_manager.initialize()
 
             # Configure the dataset to load conversations
@@ -137,7 +136,6 @@ class TestDatasetManagerSequentialIteration:
             service_config = ServiceConfig()
             custom_manager = DatasetManager(service_config, custom_config)
 
-            # Initialize the manager before use
             await custom_manager.initialize()
 
             # Configure the dataset
@@ -200,7 +198,6 @@ class TestDatasetManagerSequentialIteration:
             service_config = ServiceConfig()
             dataset_manager = DatasetManager(service_config, user_config)
 
-            # Initialize the manager before use
             await dataset_manager.initialize()
 
             # Configure the dataset

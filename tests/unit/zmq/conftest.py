@@ -171,9 +171,10 @@ class BaseClientTestHelper:
             mock_socket.recv = AsyncMock(side_effect=recv_side_effect)
         elif recv_return_value is not None:
             # Return value once, then block forever instead of busy loop
+            # Use generator expression to create fresh coroutines on each call
             mock_socket.recv = AsyncMock(
                 side_effect=itertools.chain(
-                    [recv_return_value], itertools.repeat(_block_forever)
+                    [recv_return_value], (_block_forever() for _ in itertools.count())
                 )
             )
         else:

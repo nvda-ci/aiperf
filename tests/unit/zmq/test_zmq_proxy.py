@@ -10,8 +10,9 @@ from unittest.mock import Mock, patch
 import pytest
 import zmq
 
-from aiperf.common.config import ZMQTCPConfig
+from aiperf.common.config import ZMQTCPConfig, ZMQTCPProxyConfig
 from aiperf.common.enums import ZMQProxyType
+from aiperf.common.factories import ZMQProxyFactory
 from aiperf.zmq.zmq_proxy_base import ProxyEndType, ProxySocketClient
 from aiperf.zmq.zmq_proxy_sockets import (
     ZMQDealerRouterProxy,
@@ -219,8 +220,6 @@ class TestProxyLifecycle:
     @pytest.mark.asyncio
     async def test_proxy_with_capture_socket(self, mock_zmq_context):
         """Test proxy with capture socket enabled."""
-        from aiperf.common.config import ZMQTCPProxyConfig
-
         config = ZMQTCPConfig()
         base_config = config.event_bus_proxy_config
         # Create a new config with capture address
@@ -239,8 +238,6 @@ class TestProxyLifecycle:
     @pytest.mark.asyncio
     async def test_proxy_with_control_socket(self, mock_zmq_context):
         """Test proxy with control socket enabled."""
-        from aiperf.common.config import ZMQTCPProxyConfig
-
         config = ZMQTCPConfig()
         base_config = config.event_bus_proxy_config
         # Create a new config with control address
@@ -261,8 +258,6 @@ class TestProxyLifecycle:
         self, mock_zmq_socket, mock_zmq_context
     ):
         """Test that stop closes all sockets (frontend, backend, capture, control)."""
-        from aiperf.common.config import ZMQTCPProxyConfig
-
         config = ZMQTCPConfig()
         base_config = config.event_bus_proxy_config
         # Create a new config with both capture and control addresses
@@ -327,8 +322,6 @@ class TestProxyEdgeCases:
     @pytest.mark.asyncio
     async def test_all_proxy_types_are_registered(self):
         """Test that all proxy types are registered in the factory."""
-        from aiperf.common.factories import ZMQProxyFactory
-
         # Verify all expected proxy types are registered
         assert ZMQProxyType.XPUB_XSUB in ZMQProxyFactory._registry
         assert ZMQProxyType.DEALER_ROUTER in ZMQProxyFactory._registry

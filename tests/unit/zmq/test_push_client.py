@@ -159,6 +159,7 @@ class TestZMQPushClientEdgeCases:
         client = ZMQPushClient(address="tcp://127.0.0.1:5555", bind=True)
 
         # Don't initialize
+        client.socket = None
         with pytest.raises(NotInitializedError):
             await client.push(sample_message)
 

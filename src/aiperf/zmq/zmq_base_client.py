@@ -58,7 +58,7 @@ class BaseZMQClient(AIPerfLifecycleMixin):
         """Raise an exception if the socket is not initialized or closed."""
         if self.stop_requested:
             raise asyncio.CancelledError("Socket was stopped")
-        if not self.was_initialized:
+        if not self.socket:
             raise NotInitializedError("Socket not initialized or closed")
 
     @property

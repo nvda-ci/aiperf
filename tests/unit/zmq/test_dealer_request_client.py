@@ -5,7 +5,7 @@ Tests for dealer_request_client.py - ZMQDealerRequestClient class.
 """
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import zmq
@@ -125,9 +125,6 @@ class TestZMQDealerRequestClientRequest:
         self, mock_zmq_context, sample_message, wait_for_background_task
     ):
         """Test that request sends message and waits for response."""
-        import asyncio
-        from unittest.mock import AsyncMock, Mock
-
         response_message = HeartbeatMessage(
             service_id="test-service",
             state=LifecycleState.RUNNING,
@@ -153,8 +150,6 @@ class TestZMQDealerRequestClientRequest:
         mock_socket.send = AsyncMock(side_effect=mock_send)
         mock_socket.recv = AsyncMock(side_effect=mock_recv)
         mock_zmq_context.socket = Mock(return_value=mock_socket)
-
-        from aiperf.zmq.dealer_request_client import ZMQDealerRequestClient
 
         client = ZMQDealerRequestClient(address="tcp://127.0.0.1:5555", bind=False)
         await client.initialize()
