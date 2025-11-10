@@ -32,9 +32,46 @@ from aiperf.common.models import (
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.types import MessageTypeT
 from aiperf.module_loader import ensure_modules_loaded
-from tests.unit.zmq.mock_zmq import (
-    mock_zmq_communication as mock_zmq_communication,  # import fixture globally
-)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def mock_zmq_globally(monkeypatch):
+    """
+    Globally mock ZMQ for all tests to prevent real socket/context creation.
+
+    This fixture runs automatically for every test across the entire test suite.
+    It prevents ZMQ from creating real sockets and contexts which could cause
+    resource leaks, port conflicts, and test failures.
+
+    Tests in tests/zmq/ will use their own more specific mocking from tests/zmq/conftest.py.
+    """
+    import itertools
+    from unittest.mock import AsyncMock, MagicMock, Mock
+
+    import zmq.asyncio
+
+    # Create mock socket
+    mock_socket = AsyncMock(spec=zmq.asyncio.Socket)
+    mock_socket.bind = Mock()
+    mock_socket.connect = Mock()
+    mock_socket.close = Mock()
+    mock_socket.setsockopt = Mock()
+    mock_socket.send_string = AsyncMock()
+    mock_socket.send_multipart = AsyncMock()
+    mock_socket.recv_string = AsyncMock(side_effect=itertools.repeat(zmq.Again()))
+    mock_socket.recv_multipart = AsyncMock(side_effect=itertools.repeat(zmq.Again()))
+    mock_socket.closed = False
+
+    # Create mock context
+    mock_context = MagicMock(spec=zmq.asyncio.Context)
+    mock_context.socket = Mock(return_value=mock_socket)
+    mock_context.term = Mock()
+
+    # Mock Context.instance() to return our mock context
+    monkeypatch.setattr("zmq.asyncio.Context.instance", lambda: mock_context)
+
+    return mock_context
+
 
 real_sleep = (
     asyncio.sleep
@@ -100,24 +137,6 @@ def reset_random_generator() -> Generator[None, None, None]:
     rng.reset()
 
 
-@pytest.fixture
-def mock_zmq_socket() -> Generator[MagicMock, None, None]:
-    """Fixture to provide a mock ZMQ socket."""
-    zmq_socket = MagicMock()
-    with patch("zmq.Socket", new_callable=zmq_socket):
-        yield zmq_socket
-
-
-@pytest.fixture
-def mock_zmq_context() -> Generator[MagicMock, None, None]:
-    """Fixture to provide a mock ZMQ context."""
-    zmq_context = MagicMock()
-    zmq_context.socket.return_value = mock_zmq_socket()
-
-    with patch("zmq.Context", new_callable=zmq_context):
-        yield zmq_context
-
-
 @pytest.fixture(autouse=True)
 def reset_singleton_factories():
     """Reset singleton factory instances between tests to prevent state leakage.
@@ -144,19 +163,6 @@ def reset_singleton_factories():
         AIPerfUIFactory._instances.clear()
     if hasattr(AIPerfUIFactory, "_instances_pid"):
         AIPerfUIFactory._instances_pid.clear()
-
-
-@pytest.fixture
-def mock_communication(mock_zmq_communication: MagicMock) -> MagicMock:  # noqa: F811 : used as a fixture
-    """
-    Create a mock communication object for testing service communication.
-
-    This mock tracks published messages and subscriptions for verification in tests.
-
-    Returns:
-        An MagicMock configured to behave like ZMQCommunication
-    """
-    return mock_zmq_communication
 
 
 @pytest.fixture
