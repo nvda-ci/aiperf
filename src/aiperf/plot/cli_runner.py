@@ -22,18 +22,14 @@ def run_plot_controller(
         mode: Output mode for plots (PNG, HTML, or SERVER). Defaults to PNG.
         theme: Plot theme to use (LIGHT or DARK). Defaults to LIGHT.
     """
-    # Determine input paths
     input_paths = paths or ["./artifacts"]
     input_paths = [Path(p) for p in input_paths]
 
-    # Determine output directory
     output_dir = Path(output) if output else input_paths[0] / "plot_export"
 
-    # Convert theme string to enum if needed
     if isinstance(theme, str):
         theme = PlotTheme(theme.lower())
 
-    # Create and run controller
     controller = PlotController(
         paths=input_paths,
         output_dir=output_dir,
@@ -43,6 +39,5 @@ def run_plot_controller(
 
     generated_files = controller.run()
 
-    # Print success message
-    print(f"\n✓ Generated {len(generated_files)} plots")
+    print(f"\nGenerated {len(generated_files)} plots")
     print(f"Saved to: {output_dir}")

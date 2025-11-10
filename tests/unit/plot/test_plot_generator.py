@@ -339,7 +339,7 @@ class TestPlotGenerator:
 
         # Test the helper method directly
         models = ["ModelA", "ModelB", "ModelC"]
-        color_map = plot_generator._assign_model_colors(models)
+        color_map = plot_generator._assign_group_colors(models)
 
         # Verify all models get colors
         assert len(color_map) == 3
@@ -355,10 +355,10 @@ class TestPlotGenerator:
     def test_color_consistency_across_models(self, plot_generator):
         """Test that same model gets same color across different calls."""
         models1 = ["ModelX", "ModelY", "ModelZ"]
-        colors1 = plot_generator._assign_model_colors(models1)
+        colors1 = plot_generator._assign_group_colors(models1)
 
         models2 = ["ModelX", "ModelY", "ModelZ"]
-        colors2 = plot_generator._assign_model_colors(models2)
+        colors2 = plot_generator._assign_group_colors(models2)
 
         # Same models in same order should get same colors
         assert colors1 == colors2
@@ -367,7 +367,7 @@ class TestPlotGenerator:
         """Test that color assignment cycles when there are more models than colors."""
         # Create more models than available colors
         models = [f"Model{i}" for i in range(15)]
-        color_map = plot_generator._assign_model_colors(models)
+        color_map = plot_generator._assign_group_colors(models)
 
         # All models should get a color
         assert len(color_map) == 15
@@ -531,8 +531,8 @@ class TestTimeSeriesHistogram:
         assert marker.color == NVIDIA_GREEN
 
 
-class TestGPUPlots:
-    """Tests for GPU plotting functions."""
+class TestDualAxisPlots:
+    """Tests for dual-axis plotting functions."""
 
     @pytest.fixture
     def gpu_metrics_df(self):
@@ -563,13 +563,19 @@ class TestGPUPlots:
         throughput_df["active_requests"] = [2, 3, 4, 5, 4, 3]
         gpu_df = gpu_metrics_df[["timestamp_s", "gpu_utilization"]].copy()
 
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=throughput_df,
             df_secondary=gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
             active_count_col="active_requests",
         )
 
@@ -592,13 +598,19 @@ class TestGPUPlots:
         throughput_df = gpu_metrics_df[["timestamp_s", "throughput"]].copy()
         gpu_df = gpu_metrics_df[["timestamp_s", "gpu_utilization"]].copy()
 
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=throughput_df,
             df_secondary=gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
             title=title,
             x_label=x_label,
             y1_label=y1_label,
@@ -611,17 +623,23 @@ class TestGPUPlots:
         assert fig.layout.yaxis2.title.text == y2_label
 
     def test_gpu_dual_axis_plot_auto_labels(self, plot_generator, gpu_metrics_df):
-        """Test GPU dual-axis plot with auto-generated labels."""
+        """Test dual-axis plot with auto-generated labels."""
         throughput_df = gpu_metrics_df[["timestamp_s", "throughput"]].copy()
         gpu_df = gpu_metrics_df[["timestamp_s", "gpu_utilization"]].copy()
 
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=throughput_df,
             df_secondary=gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
         )
 
         assert "Throughput" in fig.layout.title.text
@@ -629,17 +647,23 @@ class TestGPUPlots:
         assert fig.layout.xaxis.title.text == "Time (s)"
 
     def test_gpu_dual_axis_plot_styling(self, plot_generator, gpu_metrics_df):
-        """Test GPU dual-axis plot styling (colors, line widths)."""
+        """Test dual-axis plot styling (colors, line widths)."""
         throughput_df = gpu_metrics_df[["timestamp_s", "throughput"]].copy()
         gpu_df = gpu_metrics_df[["timestamp_s", "gpu_utilization"]].copy()
 
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=throughput_df,
             df_secondary=gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
         )
 
         assert fig.data[0].line.color == NVIDIA_GREEN
@@ -647,34 +671,53 @@ class TestGPUPlots:
         assert fig.data[1].line.width == 2
 
     def test_gpu_dual_axis_layout(self, plot_generator, gpu_metrics_df):
-        """Test that secondary y-axis is configured correctly."""
+        """Test that secondary y-axis is configured correctly with theme colors."""
         throughput_df = gpu_metrics_df[["timestamp_s", "throughput"]].copy()
         gpu_df = gpu_metrics_df[["timestamp_s", "gpu_utilization"]].copy()
 
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=throughput_df,
             df_secondary=gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
         )
 
         assert fig.layout.yaxis2 is not None
         assert fig.layout.yaxis2.overlaying == "y"
         assert fig.layout.yaxis2.side == "right"
 
+        # Verify theme consistency for yaxis2
+        from aiperf.plot.constants import LIGHT_THEME_COLORS
+
+        assert fig.layout.yaxis2.gridcolor == LIGHT_THEME_COLORS["grid"]
+        assert fig.layout.yaxis2.linecolor == LIGHT_THEME_COLORS["border"]
+        assert fig.layout.yaxis2.color == LIGHT_THEME_COLORS["text"]
+
     def test_gpu_dual_axis_with_empty_dataframe(self, plot_generator):
-        """Test GPU dual-axis plot with empty DataFrame."""
+        """Test dual-axis plot with empty DataFrame."""
         empty_throughput_df = pd.DataFrame({"timestamp_s": [], "throughput": []})
         empty_gpu_df = pd.DataFrame({"timestamp_s": [], "gpu_utilization": []})
-        fig = plot_generator.create_gpu_dual_axis_plot(
+        fig = plot_generator.create_dual_axis_plot(
             df_primary=empty_throughput_df,
             df_secondary=empty_gpu_df,
             x_col_primary="timestamp_s",
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
         )
 
         assert isinstance(fig, go.Figure)

@@ -224,7 +224,7 @@ class TestMultiRunPNGExporter:
         assert summary_path.exists()
 
         # Check summary content
-        content = summary_path.read_text()
+        content = summary_path.read_text(encoding="utf-8")
         assert "AIPerf Plot Export Summary" in content
         assert "Generated 3 plots" in content
 

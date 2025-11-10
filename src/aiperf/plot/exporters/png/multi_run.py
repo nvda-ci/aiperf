@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
+from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.plot_specs import MULTI_RUN_PLOT_SPECS, PlotSpec, PlotType
@@ -157,7 +158,6 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             DataFrame with columns for metrics and metadata
         """
-        from aiperf.common.models.record_models import MetricResult
 
         rows = []
         for run in runs:

@@ -10,6 +10,7 @@ and made available to test functions in the same directory and subdirectories.
 
 import json
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -243,7 +244,7 @@ def multiple_run_dirs(
                 f.write(json.dumps(record) + "\n")
 
         # Write aggregated JSON with different concurrency
-        agg_data = sample_aggregated_data.copy()
+        agg_data = deepcopy(sample_aggregated_data)
         agg_data["input_config"]["loadgen"]["concurrency"] = concurrency
         json_file = run_dir / "profile_export_aiperf.json"
         with open(json_file, "w") as f:
@@ -309,6 +310,7 @@ def parent_dir_with_single_run(
 def nested_run_dirs(
     tmp_path: Path,
     sample_jsonl_data: list[dict[str, Any]],
+    sample_aggregated_data: dict[str, Any],
 ) -> Path:
     """
     Create nested run directories (run containing another run).
@@ -316,6 +318,7 @@ def nested_run_dirs(
     Args:
         tmp_path: Pytest's tmp_path fixture.
         sample_jsonl_data: Sample JSONL records.
+        sample_aggregated_data: Sample aggregated data.
 
     Returns:
         Path to parent directory containing nested runs.
@@ -330,6 +333,9 @@ def nested_run_dirs(
     with open(outer_jsonl, "w") as f:
         for record in sample_jsonl_data:
             f.write(json.dumps(record) + "\n")
+    outer_json = outer / "profile_export_aiperf.json"
+    with open(outer_json, "w") as f:
+        json.dump(sample_aggregated_data, f)
 
     # Create inner run nested inside outer
     inner = outer / "inner_run"
@@ -338,6 +344,9 @@ def nested_run_dirs(
     with open(inner_jsonl, "w") as f:
         for record in sample_jsonl_data:
             f.write(json.dumps(record) + "\n")
+    inner_json = inner / "profile_export_aiperf.json"
+    with open(inner_json, "w") as f:
+        json.dump(sample_aggregated_data, f)
 
     return parent
 

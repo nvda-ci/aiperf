@@ -24,7 +24,6 @@ from aiperf.plot.constants import (
     PROFILE_EXPORT_GPU_TELEMETRY_JSONL,
     PROFILE_EXPORT_JSONL,
     PROFILE_EXPORT_TIMESLICES_CSV,
-    PROFILE_EXPORT_TIMESLICES_JSON,
 )
 from aiperf.plot.exceptions import DataLoadError
 
@@ -83,6 +82,53 @@ class RunData:
     gpu_telemetry: pd.DataFrame | None = None
 
 
+class DerivedMetricCalculator:
+    """
+    Registry for derived metric calculations.
+
+    Provides a centralized registry of functions that compute derived metrics
+    from base metrics when GPU telemetry data is available. New derived metrics
+    can be added by registering additional calculator functions.
+    """
+
+    @staticmethod
+    def per_gpu_throughput(
+        aggregated: dict[str, Any], gpu_count: int
+    ) -> dict[str, Any] | None:
+        """
+        Calculate per-GPU throughput by dividing total throughput by GPU count.
+
+        Args:
+            aggregated: Aggregated metrics dictionary
+            gpu_count: Total number of GPUs
+
+        Returns:
+            Dictionary with per-GPU throughput stats and unit, or None if base metric not found
+        """
+        if "output_token_throughput" not in aggregated:
+            return None
+
+        throughput_data = aggregated["output_token_throughput"]
+        if not isinstance(throughput_data, dict):
+            return None
+
+        per_gpu_data = {"unit": "tokens/sec/gpu"}
+
+        for key, value in throughput_data.items():
+            if key == "unit":
+                continue
+            if isinstance(value, int | float):
+                per_gpu_data[key] = value / gpu_count
+
+        return per_gpu_data
+
+
+# Registry mapping metric names to their calculator functions
+DERIVED_METRICS_REGISTRY: dict[str, callable] = {
+    "output_token_throughput_per_gpu": DerivedMetricCalculator.per_gpu_throughput,
+}
+
+
 class DataLoader(AIPerfLoggerMixin):
     """
     Loader for AIPerf profiling data.
@@ -139,9 +185,11 @@ class DataLoader(AIPerfLoggerMixin):
         # Load aggregated JSON
         aggregated = self._load_aggregated_json(run_path / PROFILE_EXPORT_AIPERF_JSON)
 
-        # Load timeslices CSV and JSON (optional - may not exist for all runs)
+        # Add derived metrics
+        self._add_all_derived_metrics(aggregated)
+
+        # Load timeslices CSV (optional - may not exist for all runs)
         timeslices_path = run_path / PROFILE_EXPORT_TIMESLICES_CSV
-        timeslices_json_path = run_path / PROFILE_EXPORT_TIMESLICES_JSON
         timeslices_df = None
         slice_duration = None
 
@@ -151,21 +199,12 @@ class DataLoader(AIPerfLoggerMixin):
             except DataLoadError as e:
                 self.warning(f"Failed to load timeslice CSV data: {e}")
 
-        # Load timeslice JSON to get slice_duration
-        if timeslices_json_path.exists():
-            try:
-                timeslice_json = self._load_timeslices_json(timeslices_json_path)
-                # Extract slice_duration from input_config.output.slice_duration
-                if "input_config" in timeslice_json:
-                    input_config = timeslice_json["input_config"]
-                    if (
-                        "output" in input_config
-                        and "slice_duration" in input_config["output"]
-                    ):
-                        slice_duration = input_config["output"]["slice_duration"]
-                        self.info(f"Extracted slice_duration: {slice_duration}s")
-            except DataLoadError as e:
-                self.warning(f"Failed to load timeslice JSON data: {e}")
+        # Extract slice_duration from aggregated JSON's input_config
+        if "input_config" in aggregated:
+            input_config = aggregated["input_config"]
+            if "output" in input_config and "slice_duration" in input_config["output"]:
+                slice_duration = input_config["output"]["slice_duration"]
+                self.info(f"Extracted slice_duration: {slice_duration}s")
 
         # Extract metadata
         metadata = self._extract_metadata(run_path, requests_df, aggregated)
@@ -380,24 +419,21 @@ class DataLoader(AIPerfLoggerMixin):
         self.info(f"Calculated GPU count from telemetry: {gpu_count}")
         return gpu_count
 
-    def add_derived_gpu_metrics(self, aggregated: dict[str, Any]) -> dict[str, Any]:
+    def _add_all_derived_metrics(self, aggregated: dict[str, Any]) -> None:
         """
-        Add derived GPU metrics to aggregated data when telemetry is available.
+        Add all registered derived GPU metrics to aggregated data when telemetry is available.
 
-        Creates output_token_throughput_per_gpu by dividing output_token_throughput
-        by the GPU count extracted from telemetry data. If telemetry data is not
-        available or GPU count cannot be determined, no metrics are added.
+        Iterates through the DERIVED_METRICS_REGISTRY and applies each calculator function
+        to compute derived metrics from base metrics and GPU telemetry data. Metrics are
+        added in-place to the aggregated dictionary.
 
         Args:
             aggregated: The aggregated data dictionary (will be modified in-place)
 
-        Returns:
-            The modified aggregated dictionary (same object as input)
-
         Examples:
             >>> loader = DataLoader()
             >>> run = loader.load_run(Path("results/run1"))
-            >>> loader.add_derived_gpu_metrics(run.aggregated)
+            >>> # Derived metrics are automatically added during load_run()
             >>> if "output_token_throughput_per_gpu" in run.aggregated:
             ...     print("GPU metric available")
         """
@@ -407,36 +443,24 @@ class DataLoader(AIPerfLoggerMixin):
             self.debug(
                 "Skipping derived GPU metrics: telemetry data not available or no GPUs found"
             )
-            return aggregated
+            return
 
-        if "output_token_throughput" not in aggregated:
-            self.debug(
-                "Skipping derived GPU metrics: output_token_throughput metric not found"
+        # Iterate through registry and apply each calculator
+        metrics_added = []
+        for metric_name, calculator_func in DERIVED_METRICS_REGISTRY.items():
+            try:
+                result = calculator_func(aggregated, gpu_count)
+                if result is not None:
+                    aggregated[metric_name] = result
+                    metrics_added.append(metric_name)
+            except Exception as e:
+                self.warning(f"Failed to calculate derived metric '{metric_name}': {e}")
+
+        if metrics_added:
+            self.info(
+                f"Added {len(metrics_added)} derived metric(s): {', '.join(metrics_added)} "
+                f"(using {gpu_count} GPUs)"
             )
-            return aggregated
-
-        throughput_data = aggregated["output_token_throughput"]
-        if not isinstance(throughput_data, dict):
-            self.warning(
-                "output_token_throughput has unexpected structure, skipping derived metrics"
-            )
-            return aggregated
-
-        per_gpu_data = {}
-        per_gpu_data["unit"] = "tokens/sec/gpu"
-
-        for key, value in throughput_data.items():
-            if key == "unit":
-                continue
-            if isinstance(value, int | float):
-                per_gpu_data[key] = value / gpu_count
-
-        aggregated["output_token_throughput_per_gpu"] = per_gpu_data
-        self.info(
-            f"Added derived metric: output_token_throughput_per_gpu (divided by {gpu_count} GPUs)"
-        )
-
-        return aggregated
 
     def get_available_metrics(self, run_data: RunData) -> dict[str, dict[str, str]]:
         """
@@ -702,37 +726,6 @@ class DataLoader(AIPerfLoggerMixin):
         except OSError as e:
             raise DataLoadError(
                 f"Failed to read CSV file: {e}", path=str(csv_path)
-            ) from e
-
-    def _load_timeslices_json(self, json_path: Path) -> dict[str, Any]:
-        """
-        Load timeslice data from JSON file to extract configuration.
-
-        Args:
-            json_path: Path to the profile_export_aiperf_timeslices.json file.
-
-        Returns:
-            Dictionary containing timeslice data and input config.
-
-        Raises:
-            DataLoadError: If file cannot be read or parsed.
-        """
-        if not json_path.exists():
-            raise DataLoadError("Timeslices JSON file not found", path=str(json_path))
-
-        try:
-            with open(json_path, encoding="utf-8") as f:
-                data = json.load(f)
-
-            self.info(f"Loaded timeslice JSON from {json_path}")
-            return data
-        except json.JSONDecodeError as e:
-            raise DataLoadError(
-                f"Failed to parse JSON file: {e}", path=str(json_path)
-            ) from e
-        except OSError as e:
-            raise DataLoadError(
-                f"Failed to read JSON file: {e}", path=str(json_path)
             ) from e
 
     def _load_gpu_telemetry_jsonl(

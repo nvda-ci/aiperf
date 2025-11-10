@@ -16,10 +16,8 @@ import seaborn as sns
 from aiperf.plot.constants import (
     DARK_THEME_COLORS,
     LIGHT_THEME_COLORS,
-    NVIDIA_BORDER,
     NVIDIA_GOLD,
     NVIDIA_GREEN,
-    NVIDIA_TEXT_LIGHT,
     PLOT_FONT_FAMILY,
     PlotTheme,
 )
@@ -80,26 +78,27 @@ class PlotGenerator:
             LIGHT_THEME_COLORS if theme == PlotTheme.LIGHT else DARK_THEME_COLORS
         )
 
-    def _assign_model_colors(self, models: list[str]) -> dict[str, str]:
-        """Dynamically assign colors to models from NVIDIA palette.
+    def _assign_group_colors(self, groups: list[str]) -> dict[str, str]:
+        """Dynamically assign colors to groups from NVIDIA palette.
 
-        Colors are assigned in a consistent order based on sorted model names,
-        ensuring the same model always gets the same color across different plots.
+        Colors are assigned in a consistent order based on sorted group values,
+        ensuring the same group always gets the same color across different plots.
 
         Args:
-            models: List of unique model names from the data
+            groups: List of unique group values from the data (e.g., model names,
+                concurrency levels, or any other categorical configuration parameter)
 
         Returns:
-            Dictionary mapping model name to color hex code
+            Dictionary mapping group value to color hex code
         """
-        sorted_models = sorted(models)  # Sort for consistency
+        sorted_groups = sorted(groups)  # Sort for consistency
         color_scheme = get_nvidia_color_scheme(
-            len(sorted_models), self.colors["secondary"]
+            len(sorted_groups), self.colors["secondary"]
         )
 
         color_map = {}
-        for i, model in enumerate(sorted_models):
-            color_map[model] = color_scheme[i]
+        for i, group in enumerate(sorted_groups):
+            color_map[group] = color_scheme[i]
 
         return color_map
 
@@ -190,25 +189,27 @@ class PlotGenerator:
         Prepare group list and color mapping for multi-series plots.
 
         Handles grouping logic and color assignment in a consistent way across
-        all plot types that support grouping (e.g., by model).
+        all plot types that support grouping (e.g., by model, concurrency, or
+        any other categorical configuration parameter).
 
         Args:
             df: DataFrame containing the data
-            group_by: Column name to group by (e.g., "model"), or None for no grouping
+            group_by: Column name to group by (e.g., "model", "concurrency"), or
+                None for no grouping
 
         Returns:
-            Tuple of (groups, model_colors) where:
+            Tuple of (groups, group_colors) where:
             - groups: Sorted list of group values, or [None] if no grouping
-            - model_colors: Dict mapping group names to color hex codes
+            - group_colors: Dict mapping group values to color hex codes
         """
         if group_by and group_by in df.columns:
             groups = sorted(df[group_by].unique(), reverse=True)
-            model_colors = self._assign_model_colors(list(groups))
+            group_colors = self._assign_group_colors(list(groups))
         else:
             groups = [None]
-            model_colors = {}
+            group_colors = {}
 
-        return groups, model_colors
+        return groups, group_colors
 
     def create_pareto_plot(
         self,
@@ -251,7 +252,7 @@ class PlotGenerator:
             y_label = y_metric.replace("_", " ").title()
 
         # Prepare groups and colors
-        groups, model_colors = self._prepare_groups(df_sorted, group_by)
+        groups, group_colors = self._prepare_groups(df_sorted, group_by)
 
         for group in groups:
             if group is None:
@@ -262,7 +263,7 @@ class PlotGenerator:
                 group_data = df_sorted[df_sorted[group_by] == group].sort_values(
                     x_metric
                 )
-                group_color = model_colors.get(group, NVIDIA_GREEN)
+                group_color = group_colors.get(group, NVIDIA_GREEN)
                 group_name = group
 
             # Calculate Pareto frontier for this group using vectorized operations
@@ -393,7 +394,7 @@ class PlotGenerator:
             y_label = y_metric.replace("_", " ").title()
 
         # Prepare groups and colors
-        groups, model_colors = self._prepare_groups(df_sorted, group_by)
+        groups, group_colors = self._prepare_groups(df_sorted, group_by)
 
         for group in groups:
             if group is None:
@@ -404,7 +405,7 @@ class PlotGenerator:
                 group_data = df_sorted[df_sorted[group_by] == group].sort_values(
                     x_metric
                 )
-                group_color = model_colors.get(group, NVIDIA_GREEN)
+                group_color = group_colors.get(group, NVIDIA_GREEN)
                 group_name = group
 
             # Shadow layer
@@ -734,7 +735,7 @@ class PlotGenerator:
 
         return fig
 
-    def create_gpu_dual_axis_plot(
+    def create_dual_axis_plot(
         self,
         df_primary: pd.DataFrame,
         df_secondary: pd.DataFrame,
@@ -742,6 +743,12 @@ class PlotGenerator:
         x_col_secondary: str,
         y1_metric: str,
         y2_metric: str,
+        primary_mode: str,
+        primary_line_shape: str | None,
+        primary_fill: str | None,
+        secondary_mode: str,
+        secondary_line_shape: str | None,
+        secondary_fill: str | None,
         active_count_col: str | None = None,
         title: str | None = None,
         x_label: str | None = None,
@@ -749,10 +756,16 @@ class PlotGenerator:
         y2_label: str | None = None,
     ) -> go.Figure:
         """
-        Create a dual Y-axis plot with independent data sources.
+        Create a dual Y-axis plot with independent data sources and configurable visualization modes.
 
-        Primary metric (left Y-axis, typically throughput) is plotted as a step function.
-        Secondary metric (right Y-axis, typically GPU utilization) is plotted as filled area.
+        This generic method supports plotting any two metrics on separate Y-axes with
+        independent data sources and full control over visualization styles (line modes,
+        shapes, and fill patterns).
+
+        Examples:
+            - Throughput + GPU utilization (step function + filled area)
+            - Price + volume (lines + bars)
+            - Temperature + pressure (smooth splines + lines)
 
         Args:
             df_primary: DataFrame for primary metric (left Y-axis)
@@ -761,11 +774,17 @@ class PlotGenerator:
             x_col_secondary: Column name for x-axis in secondary DataFrame
             y1_metric: Column name for primary y-axis (left)
             y2_metric: Column name for secondary y-axis (right)
-            active_count_col: Optional column name in df_primary for active request count (for tooltip)
+            primary_mode: Plotly mode for primary trace (e.g., "lines", "markers", "lines+markers")
+            primary_line_shape: Line shape for primary trace (e.g., "linear", "hv" for step, "spline", or None)
+            primary_fill: Fill pattern for primary trace (e.g., "tozeroy", "tonexty", or None for no fill)
+            secondary_mode: Plotly mode for secondary trace (e.g., "lines", "markers", "lines+markers")
+            secondary_line_shape: Line shape for secondary trace (e.g., "linear", "hv" for step, "spline", or None)
+            secondary_fill: Fill pattern for secondary trace (e.g., "tozeroy", "tonexty", or None for no fill)
+            active_count_col: Optional column name in df_primary for supplementary data (shown in tooltip)
             title: Plot title (auto-generated if None)
-            x_label: X-axis label (auto-generated if None)
-            y1_label: Primary Y-axis label (auto-generated if None)
-            y2_label: Secondary Y-axis label (auto-generated if None)
+            x_label: X-axis label (auto-generated from x_col_primary if None)
+            y1_label: Primary Y-axis label (auto-generated from y1_metric if None)
+            y2_label: Secondary Y-axis label (auto-generated from y2_metric if None)
 
         Returns:
             Plotly Figure object with dual Y-axes
@@ -789,32 +808,52 @@ class PlotGenerator:
 
         customdata = df_primary[active_count_col] if active_count_col else None
 
-        fig.add_trace(
-            go.Scatter(
-                x=df_primary[x_col_primary],
-                y=df_primary[y1_metric],
-                mode="lines",
-                line=dict(width=2, color=NVIDIA_GREEN, shape="hv"),
-                name=y1_label,
-                yaxis="y",
-                customdata=customdata,
-                hovertemplate=primary_hover,
-            )
-        )
+        # Build primary trace configuration
+        primary_trace_config = {
+            "x": df_primary[x_col_primary],
+            "y": df_primary[y1_metric],
+            "mode": primary_mode,
+            "line": dict(width=2, color=NVIDIA_GREEN),
+            "name": y1_label,
+            "yaxis": "y",
+            "customdata": customdata,
+            "hovertemplate": primary_hover,
+        }
 
-        fig.add_trace(
-            go.Scatter(
-                x=df_secondary[x_col_secondary],
-                y=df_secondary[y2_metric],
-                mode="lines",
-                line=dict(width=2, color=self.colors["secondary"]),
-                fill="tozeroy",
-                fillcolor=f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.3)",
-                name=y2_label,
-                yaxis="y2",
-                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
+        # Apply line shape if specified
+        if primary_line_shape:
+            primary_trace_config["line"]["shape"] = primary_line_shape
+
+        # Apply fill if specified
+        if primary_fill:
+            primary_trace_config["fill"] = primary_fill
+            primary_trace_config["fillcolor"] = "rgba(118, 185, 0, 0.3)"
+
+        fig.add_trace(go.Scatter(**primary_trace_config))
+
+        # Build secondary trace configuration
+        secondary_trace_config = {
+            "x": df_secondary[x_col_secondary],
+            "y": df_secondary[y2_metric],
+            "mode": secondary_mode,
+            "line": dict(width=2, color=self.colors["secondary"]),
+            "name": y2_label,
+            "yaxis": "y2",
+            "hovertemplate": f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
+        }
+
+        # Apply line shape if specified
+        if secondary_line_shape:
+            secondary_trace_config["line"]["shape"] = secondary_line_shape
+
+        # Apply fill if specified
+        if secondary_fill:
+            secondary_trace_config["fill"] = secondary_fill
+            secondary_trace_config["fillcolor"] = (
+                f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.3)"
             )
-        )
+
+        fig.add_trace(go.Scatter(**secondary_trace_config))
 
         layout = self._get_base_layout(title, x_label, y1_label, hovermode="x unified")
 
@@ -822,14 +861,11 @@ class PlotGenerator:
             "title": y2_label,
             "overlaying": "y",
             "side": "right",
-            "gridcolor": "rgba(42, 42, 42, 0.3)",
+            "gridcolor": self.colors["grid"],
             "showline": True,
-            "linecolor": NVIDIA_BORDER,
-            "color": NVIDIA_TEXT_LIGHT,
+            "linecolor": self.colors["border"],
+            "color": self.colors["text"],
         }
-
-        layout["legend"]["x"] = 0.02
-        layout["legend"]["xanchor"] = "left"
 
         fig.update_layout(layout)
 

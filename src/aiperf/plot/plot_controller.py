@@ -107,7 +107,6 @@ class PlotController:
         for run_dir in run_dirs:
             try:
                 run_data = self.loader.load_run(run_dir, load_per_request_data=False)
-                self.loader.add_derived_gpu_metrics(run_data.aggregated)
                 runs.append(run_data)
             except Exception as e:
                 print(f"Warning: Failed to load run from {run_dir}: {e}")

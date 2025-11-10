@@ -5,6 +5,7 @@
 Tests for mode detection functionality.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -272,7 +273,11 @@ class TestNestedRunDirectories:
         assert len(run_dirs) == 2
 
     def test_nested_runs_counted_separately(
-        self, mode_detector: ModeDetector, nested_run_dirs: Path, sample_jsonl_data
+        self,
+        mode_detector: ModeDetector,
+        nested_run_dirs: Path,
+        sample_jsonl_data,
+        sample_aggregated_data,
     ) -> None:
         """Test that nested runs are counted separately."""
         # Add another standalone run at the parent level
@@ -282,27 +287,33 @@ class TestNestedRunDirectories:
         with open(jsonl_file, "w") as f:
             for record in sample_jsonl_data:
                 f.write(f"{record}\n")
+        json_file = standalone / "profile_export_aiperf.json"
+        with open(json_file, "w") as f:
+            json.dump(sample_aggregated_data, f)
 
         # Should find 3 runs total: outer, inner, standalone
         runs = mode_detector.find_run_directories([nested_run_dirs])
         assert len(runs) == 3
 
     def test_deeply_nested_runs(
-        self, mode_detector: ModeDetector, tmp_path: Path, sample_jsonl_data
+        self, mode_detector: ModeDetector, tmp_path: Path
     ) -> None:
         """Test multiple levels of nesting."""
         # Create three levels of nesting
         level1 = tmp_path / "level1"
         level1.mkdir()
         (level1 / "profile_export.jsonl").write_text('{"test": "level1"}\n')
+        (level1 / "profile_export_aiperf.json").write_text('{"test": "level1"}\n')
 
         level2 = level1 / "level2"
         level2.mkdir()
         (level2 / "profile_export.jsonl").write_text('{"test": "level2"}\n')
+        (level2 / "profile_export_aiperf.json").write_text('{"test": "level2"}\n')
 
         level3 = level2 / "level3"
         level3.mkdir()
         (level3 / "profile_export.jsonl").write_text('{"test": "level3"}\n')
+        (level3 / "profile_export_aiperf.json").write_text('{"test": "level3"}\n')
 
         # Should find all 3 levels
         runs = mode_detector.find_run_directories([tmp_path])
@@ -319,6 +330,7 @@ class TestFileContentEdgeCases:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "profile_export.jsonl").write_text("")
+        (run_dir / "profile_export_aiperf.json").write_text("{}")
 
         # Mode detection treats as valid
         assert mode_detector._is_run_directory(run_dir)
@@ -335,6 +347,7 @@ class TestFileContentEdgeCases:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "profile_export.jsonl").write_text("not valid json{{{")
+        (run_dir / "profile_export_aiperf.json").write_text("{}")
 
         # Mode detection doesn't validate content
         assert mode_detector._is_run_directory(run_dir)

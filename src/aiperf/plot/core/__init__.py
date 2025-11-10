@@ -7,6 +7,7 @@ Core plot functionality including data loading and mode detection.
 
 from aiperf.plot.core.data_loader import (
     DataLoader,
+    DerivedMetricCalculator,
     RunData,
     RunMetadata,
 )
@@ -29,6 +30,7 @@ from aiperf.plot.core.plot_specs import (
 __all__ = [
     "DataLoader",
     "DataSource",
+    "DerivedMetricCalculator",
     "MetricSpec",
     "ModeDetector",
     "PlotGenerator",

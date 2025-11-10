@@ -48,7 +48,7 @@ class BasePNGExporter(BaseExporter):
             generated_files: List of generated file paths
         """
         summary_path = self.output_dir / "summary.txt"
-        with open(summary_path, "w") as f:
+        with open(summary_path, "w", encoding="utf-8") as f:
             f.write("AIPerf Plot Export Summary\n")
             f.write("=" * 50 + "\n\n")
             f.write(f"Generated {len(generated_files)} plots:\n\n")

@@ -27,7 +27,6 @@ DEFAULT_HTML_OUTPUT_DIR = DEFAULT_OUTPUT_DIR / "html"
 PLOT_LOG_FILE = "aiperf_plot.log"
 
 
-# Plot modes
 class PlotMode(str, Enum):
     """Available output modes for plot generation."""
 
@@ -43,35 +42,31 @@ class PlotTheme(str, Enum):
     DARK = "dark"
 
 
-# Plot settings
 DEFAULT_PLOT_WIDTH = 1600
 DEFAULT_PLOT_HEIGHT = 800
 DEFAULT_PLOT_DPI = 150
 
-# NVIDIA Brand Colors - Dark Mode Theme
-# Based on generate_dashboard_keynote.py styling
-NVIDIA_GREEN = "#76B900"
-NVIDIA_DARK = "#0a0a0a"
-NVIDIA_GOLD = "#F4E5C3"  # Light gold for contrast
-NVIDIA_WHITE = "#FFFFFF"
-NVIDIA_DARK_BG = "#1a1a1a"  # Dark background
-NVIDIA_GRAY = "#999999"  # Light gray for dark mode
-NVIDIA_BORDER = "#333333"  # Dark border
-NVIDIA_TEXT_LIGHT = "#E0E0E0"  # Light text for dark backgrounds
-NVIDIA_CARD_BG = "#252525"  # Card backgrounds
-
-# System font stack matching dashboard design
 PLOT_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif"
 
-# Theme-specific color schemes
+NVIDIA_GREEN = "#76B900"
+NVIDIA_DARK = "#0a0a0a"
+NVIDIA_GOLD = "#F4E5C3"
+NVIDIA_WHITE = "#FFFFFF"
+NVIDIA_DARK_BG = "#1a1a1a"
+NVIDIA_GRAY = "#999999"
+NVIDIA_BORDER_DARK = "#333333"
+NVIDIA_BORDER_LIGHT = "#CCCCCC"
+NVIDIA_TEXT_LIGHT = "#E0E0E0"
+NVIDIA_CARD_BG = "#252525"
+
 DARK_THEME_COLORS = {
     "primary": NVIDIA_GREEN,
     "secondary": NVIDIA_GOLD,
     "background": NVIDIA_DARK_BG,
     "paper": NVIDIA_CARD_BG,
     "text": NVIDIA_TEXT_LIGHT,
-    "grid": NVIDIA_BORDER,
-    "border": NVIDIA_BORDER,
+    "grid": NVIDIA_BORDER_DARK,
+    "border": NVIDIA_BORDER_DARK,
 }
 
 LIGHT_THEME_COLORS = {
@@ -80,17 +75,13 @@ LIGHT_THEME_COLORS = {
     "background": NVIDIA_WHITE,
     "paper": NVIDIA_WHITE,
     "text": NVIDIA_DARK,
-    "grid": "#E0E0E0",
-    "border": "#CCCCCC",
+    "grid": NVIDIA_BORDER_LIGHT,
+    "border": NVIDIA_BORDER_LIGHT,
 }
 
 
-# Percentiles for statistical analysis
-# Numeric percentile values used to generate "p1", "p5", etc. keys dynamically
 DEFAULT_PERCENTILES = [1, 5, 10, 25, 50, 75, 90, 95, 99]
 DEFAULT_PERCENTILE = "p50"
-
-# Other statistical measures available in metric data (non-percentile)
 AVAILABLE_STATS = ["avg", "min", "max", "std"]
 
 # All available statistic keys as they appear in metric data
@@ -106,6 +97,3 @@ NON_METRIC_KEYS = {
     "was_cancelled",
     "error_summary",
 }
-
-# Re-export metric display name functions from metric_names module
-# These functions dynamically load display names from MetricRegistry and GPU telemetry config

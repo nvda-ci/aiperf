@@ -97,12 +97,18 @@ class SingleRunPNGExporter(BasePNGExporter):
         """
         for metric in spec.metrics:
             if (
-                metric.source == DataSource.REQUESTS
-                and (run.requests is None or run.requests.empty)
-                or metric.source == DataSource.TIMESLICES
-                and (run.timeslices is None or run.timeslices.empty)
-                or metric.source == DataSource.GPU_TELEMETRY
-                and (run.gpu_telemetry is None or run.gpu_telemetry.empty)
+                (
+                    metric.source == DataSource.REQUESTS
+                    and (run.requests is None or run.requests.empty)
+                )
+                or (
+                    metric.source == DataSource.TIMESLICES
+                    and (run.timeslices is None or run.timeslices.empty)
+                )
+                or (
+                    metric.source == DataSource.GPU_TELEMETRY
+                    and (run.gpu_telemetry is None or run.gpu_telemetry.empty)
+                )
             ):
                 return False
 
@@ -272,13 +278,19 @@ class SingleRunPNGExporter(BasePNGExporter):
             if throughput_df.empty:
                 raise ValueError("No throughput data available")
 
-            return self.plot_generator.create_gpu_dual_axis_plot(
+            return self.plot_generator.create_dual_axis_plot(
                 df_primary=throughput_df,
                 df_secondary=gpu_df,
                 x_col_primary="timestamp_s",
                 x_col_secondary="timestamp_s",
                 y1_metric=y1_metric.name,
                 y2_metric=y2_metric.name,
+                primary_mode="lines",
+                primary_line_shape="hv",
+                primary_fill=None,
+                secondary_mode="lines",
+                secondary_line_shape=None,
+                secondary_fill="tozeroy",
                 active_count_col="active_requests",
                 title=spec.title,
                 x_label="Time (s)",
