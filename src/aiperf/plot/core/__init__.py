@@ -18,13 +18,25 @@ from aiperf.plot.core.plot_generator import (
     PlotGenerator,
     get_nvidia_color_scheme,
 )
+from aiperf.plot.core.plot_specs import (
+    DataSource,
+    MetricSpec,
+    PlotSpec,
+    PlotType,
+    TimeSlicePlotSpec,
+)
 
 __all__ = [
     "DataLoader",
+    "DataSource",
+    "MetricSpec",
     "ModeDetector",
     "PlotGenerator",
+    "PlotSpec",
+    "PlotType",
     "RunData",
     "RunMetadata",
+    "TimeSlicePlotSpec",
     "VisualizationMode",
     "get_nvidia_color_scheme",
 ]

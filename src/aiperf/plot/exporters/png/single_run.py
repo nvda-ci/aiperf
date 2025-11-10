@@ -11,8 +11,18 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from aiperf.plot.core.data_loader import RunData
+from aiperf.plot.core.plot_specs import (
+    GPU_PLOT_SPECS,
+    SINGLE_RUN_PLOT_SPECS,
+    TIMESLICE_PLOT_SPECS,
+    DataSource,
+    PlotSpec,
+    PlotType,
+    TimeSlicePlotSpec,
+)
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
 
@@ -46,210 +56,319 @@ class SingleRunPNGExporter(BasePNGExporter):
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        df = self._per_request_to_dataframe(run)
-
-        if df.empty:
-            self.warning("No per-request data available for plotting")
-            return []
-
         generated_files = []
 
-        # Plot 1: TTFT over time
-        generated_files.extend(self._generate_ttft_over_time(df, available_metrics))
+        # Generate all configured plots
+        all_specs = SINGLE_RUN_PLOT_SPECS + TIMESLICE_PLOT_SPECS + GPU_PLOT_SPECS
 
-        # Plot 2: ITL over time
-        generated_files.extend(self._generate_itl_over_time(df, available_metrics))
+        for spec in all_specs:
+            try:
+                # Check if we can generate this plot based on data availability
+                if not self._can_generate_plot(spec, run):
+                    self.debug(f"Skipping {spec.name} - required data not available")
+                    continue
 
-        # Plot 3: Latency over time
-        generated_files.extend(self._generate_latency_over_time(df, available_metrics))
+                # Create the plot from spec
+                fig = self._create_plot_from_spec(spec, run, available_metrics)
 
-        # Plot 4-7: Timeslice plots (if data available)
-        generated_files.extend(self._generate_timeslices_plots(run, available_metrics))
+                # Export to PNG
+                path = self.output_dir / spec.filename
+                self._export_figure(fig, path)
+                self.info(f"✓ Generated {spec.filename}")
+                generated_files.append(path)
 
-        # Plot 8-9: GPU telemetry plots (if data available)
-        generated_files.extend(self._generate_gpu_plots(run, available_metrics))
-
-        # Plot 10: Dispersed throughput over time (if request data available)
-        generated_files.extend(
-            self._generate_dispersed_throughput_over_time(run, available_metrics)
-        )
+            except Exception as e:
+                self.error(f"Failed to generate {spec.name}: {e}")
 
         self._create_summary_file(generated_files)
 
         return generated_files
 
-    def _generate_ttft_over_time(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate TTFT over time plot."""
-        try:
-            fig = self.plot_generator.create_time_series_scatter(
-                df=df,
-                x_col="request_number",
-                y_metric="time_to_first_token",
-                title="TTFT Per Request Over Time",
-                x_label="Request Number",
-                y_label=self._get_metric_label(
-                    "time_to_first_token", None, available_metrics
-                ),
-            )
-            path = self.output_dir / "ttft_over_time.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated ttft_over_time.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate TTFT over time: {e}")
-            return []
-
-    def _generate_itl_over_time(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate ITL over time plot."""
-        try:
-            fig = self.plot_generator.create_time_series_scatter(
-                df=df,
-                x_col="request_number",
-                y_metric="inter_token_latency",
-                title="Inter-Token Latency Per Request Over Time",
-                x_label="Request Number",
-                y_label=self._get_metric_label(
-                    "inter_token_latency", None, available_metrics
-                ),
-            )
-            path = self.output_dir / "itl_over_time.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated itl_over_time.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate ITL over time: {e}")
-            return []
-
-    def _generate_latency_over_time(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate latency over time plot with percentile overlays."""
-        try:
-            df_sorted = df.sort_values("timestamp").copy()
-
-            # Calculate rolling percentiles (window of 10 requests, minimum 1)
-            window_size = min(10, len(df_sorted))
-            df_sorted["p50"] = (
-                df_sorted["request_latency"]
-                .rolling(window=window_size, min_periods=1)
-                .quantile(0.50)
-            )
-            df_sorted["p95"] = (
-                df_sorted["request_latency"]
-                .rolling(window=window_size, min_periods=1)
-                .quantile(0.95)
-            )
-            df_sorted["p99"] = (
-                df_sorted["request_latency"]
-                .rolling(window=window_size, min_periods=1)
-                .quantile(0.99)
-            )
-
-            fig = self.plot_generator.create_latency_scatter_with_percentiles(
-                df=df_sorted,
-                x_col="timestamp",
-                y_metric="request_latency",
-                percentile_cols=["p50", "p95", "p99"],
-                title="Request Latency Over Time with Percentiles",
-                x_label="Time (seconds)",
-                y_label=self._get_metric_label(
-                    "request_latency", None, available_metrics
-                ),
-            )
-            path = self.output_dir / "latency_over_time.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated latency_over_time.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate latency over time: {e}")
-            return []
-
-    def _generate_timeslices_plots(
-        self, run: RunData, available_metrics: dict
-    ) -> list[Path]:
-        """Generate timeslice histogram plots for all available metrics.
-
-        Creates separate PNG files for each metric showing bar charts across time slices.
+    def _can_generate_plot(self, spec: PlotSpec, run: RunData) -> bool:
+        """
+        Check if a plot can be generated based on data availability.
 
         Args:
-            run: RunData object with timeslices DataFrame
+            spec: Plot specification
+            run: RunData object
+
+        Returns:
+            True if the plot can be generated, False otherwise
+        """
+        for metric in spec.metrics:
+            if (
+                metric.source == DataSource.REQUESTS
+                and (run.requests is None or run.requests.empty)
+                or metric.source == DataSource.TIMESLICES
+                and (run.timeslices is None or run.timeslices.empty)
+                or metric.source == DataSource.GPU_TELEMETRY
+                and (run.gpu_telemetry is None or run.gpu_telemetry.empty)
+            ):
+                return False
+
+        # Special validation for dispersed throughput plot
+        if spec.name == "dispersed_throughput_over_time":
+            if run.requests is None or run.requests.empty:
+                return False
+            required_cols = [
+                "request_start_ns",
+                "request_end_ns",
+                "output_sequence_length",
+            ]
+            if not all(col in run.requests.columns for col in required_cols):
+                return False
+
+        # Special validation for GPU utilization with throughput
+        if spec.name == "gpu_utilization_and_throughput_over_time":
+            if run.requests is None or run.requests.empty:
+                return False
+            required_cols = [
+                "request_start_ns",
+                "request_end_ns",
+                "output_sequence_length",
+            ]
+            if not all(col in run.requests.columns for col in required_cols):
+                return False
+
+        return True
+
+    def _create_plot_from_spec(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """
+        Create a plot figure from a plot specification.
+
+        Args:
+            spec: Plot specification
+            run: RunData object
             available_metrics: Dictionary with display_names and units for metrics
 
         Returns:
-            List of Path objects for generated PNG files
+            Plotly figure object
         """
-        if run.timeslices is None or run.timeslices.empty:
-            self.debug("No timeslice data available for plotting")
-            return []
+        if spec.plot_type == PlotType.SCATTER:
+            return self._create_scatter_plot(spec, run, available_metrics)
+        elif spec.plot_type == PlotType.AREA:
+            return self._create_area_plot(spec, run, available_metrics)
+        elif spec.plot_type == PlotType.HISTOGRAM:
+            return self._create_histogram_plot(spec, run, available_metrics)
+        elif spec.plot_type == PlotType.DUAL_AXIS:
+            return self._create_dual_axis_plot(spec, run, available_metrics)
+        elif spec.plot_type == PlotType.SCATTER_WITH_PERCENTILES:
+            return self._create_scatter_with_percentiles_plot(
+                spec, run, available_metrics
+            )
+        else:
+            raise ValueError(f"Unsupported plot type: {spec.plot_type}")
 
-        self.info("Generating timeslice histogram plots")
-        generated_files = []
+    def _create_scatter_plot(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create a scatter plot from specification."""
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        # Statistic to use for histogram (configurable for future)
-        # Options: "avg", "p50", "p90", "p95", "p99", "min", "max"
-        stat_to_plot = "avg"
+        df = self._prepare_data_for_source(x_metric.source, run)
 
-        _, warning_message = self._check_request_uniformity(run)
+        return self.plot_generator.create_time_series_scatter(
+            df=df,
+            x_col=x_metric.name,
+            y_metric=y_metric.name,
+            title=spec.title,
+            x_label=self._get_axis_label(x_metric, available_metrics),
+            y_label=self._get_axis_label(y_metric, available_metrics),
+        )
 
-        # Define metrics to plot with their display names
-        metrics_to_plot = [
-            ("Time to First Token", "timeslices_ttft.png", "time_to_first_token"),
-            ("Inter Token Latency", "timeslices_itl.png", "inter_token_latency"),
-            ("Request Throughput", "timeslices_throughput.png", "request_throughput"),
-            ("Request Latency", "timeslices_latency.png", "request_latency"),
-        ]
+    def _create_area_plot(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create an area plot from specification."""
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        for metric_name, filename, metric_tag in metrics_to_plot:
-            try:
-                # Filter for this specific metric and statistic
-                metric_data = run.timeslices[
-                    (run.timeslices["Metric"] == metric_name)
-                    & (run.timeslices["Stat"] == stat_to_plot)
-                ].copy()
+        # Special handling for dispersed throughput
+        if y_metric.name == "throughput_tokens_per_sec":
+            df = self._per_request_to_dataframe(run)
+            throughput_df = self._calculate_dispersed_throughput_events(df)
+        else:
+            throughput_df = self._prepare_data_for_source(x_metric.source, run)
 
-                if metric_data.empty:
-                    self.debug(
-                        f"No timeslice data found for {metric_name} ({stat_to_plot})"
-                    )
-                    continue
+        return self.plot_generator.create_time_series_area(
+            df=throughput_df,
+            x_col=x_metric.name,
+            y_metric=y_metric.name,
+            title=spec.title,
+            x_label=self._get_axis_label(x_metric, available_metrics),
+            y_label=self._get_axis_label(y_metric, available_metrics),
+        )
 
-                # Prepare data for histogram (no pivoting needed)
-                plot_df = metric_data[["Timeslice", "Value"]].copy()
-                plot_df = plot_df.rename(columns={"Value": stat_to_plot})
+    def _create_histogram_plot(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create a histogram plot from specification (for timeslices)."""
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-                # Get unit for y-axis label
-                unit = metric_data["Unit"].iloc[0] if not metric_data.empty else ""
-                y_label = f"{metric_name} ({unit})" if unit else metric_name
+        # Filter timeslice data for specific metric and stat
+        metric_data = run.timeslices[
+            (run.timeslices["Metric"] == y_metric.name)
+            & (run.timeslices["Stat"] == y_metric.stat)
+        ].copy()
 
-                plot_warning = (
-                    warning_message if metric_tag == "request_throughput" else None
+        if metric_data.empty:
+            raise ValueError(f"No timeslice data for {y_metric.name} ({y_metric.stat})")
+
+        # Prepare data for histogram
+        plot_df = metric_data[["Timeslice", "Value"]].copy()
+        plot_df = plot_df.rename(columns={"Value": y_metric.stat})
+
+        # Get unit for y-axis label
+        unit = metric_data["Unit"].iloc[0] if not metric_data.empty else ""
+        y_label = f"{y_metric.name} ({unit})" if unit else y_metric.name
+
+        # Check if we need warning for throughput plot
+        warning_message = None
+        if "throughput" in spec.name.lower():
+            _, warning_message = self._check_request_uniformity(run)
+
+        # Determine if we should use slice_duration
+        use_slice_duration = (
+            isinstance(spec, TimeSlicePlotSpec) and spec.use_slice_duration
+        )
+
+        return self.plot_generator.create_time_series_histogram(
+            df=plot_df,
+            x_col=x_metric.name,
+            y_col=y_metric.stat,
+            title=spec.title,
+            x_label=self._get_axis_label(x_metric, available_metrics),
+            y_label=y_label,
+            slice_duration=run.slice_duration if use_slice_duration else None,
+            warning_text=warning_message,
+        )
+
+    def _create_dual_axis_plot(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create a dual-axis plot from specification."""
+        y1_metric = next(m for m in spec.metrics if m.axis == "y")
+        y2_metric = next(m for m in spec.metrics if m.axis == "y2")
+
+        # Handle GPU utilization with throughput overlay
+        if spec.name == "gpu_utilization_and_throughput_over_time":
+            # Prepare GPU data
+            gpu_df = run.gpu_telemetry.copy()
+            if "gpu_index" in gpu_df.columns:
+                gpu_df = (
+                    gpu_df.groupby("timestamp_s")
+                    .agg({"gpu_utilization": "mean"})
+                    .reset_index()
                 )
 
-                # Create the histogram
-                fig = self.plot_generator.create_time_series_histogram(
-                    df=plot_df,
-                    x_col="Timeslice",
-                    y_col=stat_to_plot,
-                    title=f"{metric_name} Across Time Slices",
-                    x_label="Time (s)",
-                    y_label=y_label,
-                    slice_duration=run.slice_duration,
-                    warning_text=plot_warning,
-                )
+            # Prepare throughput data
+            requests_df = self._per_request_to_dataframe(run)
+            throughput_df = self._calculate_dispersed_throughput_events(requests_df)
 
-                path = self.output_dir / filename
-                self._export_figure(fig, path)
-                self.info(f"✓ Generated {filename}")
-                generated_files.append(path)
+            if throughput_df.empty:
+                raise ValueError("No throughput data available")
 
-            except Exception as e:
-                self.error(f"Failed to generate timeslice plot for {metric_name}: {e}")
+            return self.plot_generator.create_gpu_dual_axis_plot(
+                df_primary=throughput_df,
+                df_secondary=gpu_df,
+                x_col_primary="timestamp_s",
+                x_col_secondary="timestamp_s",
+                y1_metric=y1_metric.name,
+                y2_metric=y2_metric.name,
+                active_count_col="active_requests",
+                title=spec.title,
+                x_label="Time (s)",
+                y1_label="Output Tokens/sec",
+                y2_label="GPU Utilization (%)",
+            )
+        else:
+            raise ValueError(f"Unsupported dual-axis plot: {spec.name}")
 
-        return generated_files
+    def _create_scatter_with_percentiles_plot(
+        self, spec: PlotSpec, run: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create a scatter plot with percentile overlays."""
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
+
+        df = self._prepare_data_for_source(x_metric.source, run)
+        df_sorted = df.sort_values(x_metric.name).copy()
+
+        # Calculate rolling percentiles
+        window_size = min(10, len(df_sorted))
+        df_sorted["p50"] = (
+            df_sorted[y_metric.name]
+            .rolling(window=window_size, min_periods=1)
+            .quantile(0.50)
+        )
+        df_sorted["p95"] = (
+            df_sorted[y_metric.name]
+            .rolling(window=window_size, min_periods=1)
+            .quantile(0.95)
+        )
+        df_sorted["p99"] = (
+            df_sorted[y_metric.name]
+            .rolling(window=window_size, min_periods=1)
+            .quantile(0.99)
+        )
+
+        return self.plot_generator.create_latency_scatter_with_percentiles(
+            df=df_sorted,
+            x_col=x_metric.name,
+            y_metric=y_metric.name,
+            percentile_cols=["p50", "p95", "p99"],
+            title=spec.title,
+            x_label=self._get_axis_label(x_metric, available_metrics),
+            y_label=self._get_axis_label(y_metric, available_metrics),
+        )
+
+    def _prepare_data_for_source(
+        self, source: DataSource, run: RunData
+    ) -> pd.DataFrame:
+        """
+        Prepare data from a specific source.
+
+        Args:
+            source: Data source to prepare
+            run: RunData object
+
+        Returns:
+            Prepared DataFrame
+        """
+        if source == DataSource.REQUESTS:
+            return self._per_request_to_dataframe(run)
+        elif source == DataSource.TIMESLICES:
+            return run.timeslices
+        elif source == DataSource.GPU_TELEMETRY:
+            return run.gpu_telemetry
+        else:
+            raise ValueError(f"Unsupported data source: {source}")
+
+    def _get_axis_label(self, metric_spec, available_metrics: dict) -> str:
+        """
+        Get axis label for a metric.
+
+        Args:
+            metric_spec: MetricSpec object
+            available_metrics: Dictionary with display_names and units
+
+        Returns:
+            Formatted axis label
+        """
+        if metric_spec.name == "request_number":
+            return "Request Number"
+        elif metric_spec.name == "timestamp":
+            return "Time (seconds)"
+        elif metric_spec.name == "timestamp_s" or metric_spec.name == "Timeslice":
+            return "Time (s)"
+        else:
+            return self._get_metric_label(
+                metric_spec.name, metric_spec.stat, available_metrics
+            )
 
     def _check_request_uniformity(self, run: RunData) -> tuple[bool, str | None]:
         """
@@ -364,36 +483,6 @@ class SingleRunPNGExporter(BasePNGExporter):
 
         return df
 
-    def _generate_gpu_plots(self, run: RunData, available_metrics: dict) -> list[Path]:
-        """
-        Generate GPU telemetry plots.
-
-        Args:
-            run: RunData object with gpu_telemetry DataFrame
-            available_metrics: Dictionary with display_names and units for metrics
-
-        Returns:
-            List of Path objects for generated PNG files
-        """
-        if run.gpu_telemetry is None or run.gpu_telemetry.empty:
-            self.debug("No GPU telemetry data available for plotting")
-            return []
-
-        self.info("Generating GPU telemetry plots")
-        generated_files = []
-
-        # Plot 1: GPU Utilization with Output Token Throughput overlay
-        generated_files.extend(
-            self._generate_gpu_utilization_with_throughput(run, available_metrics)
-        )
-
-        # Plot 2: GPU Metrics Overlay
-        generated_files.extend(
-            self._generate_gpu_metrics_overlay(run, available_metrics)
-        )
-
-        return generated_files
-
     def _calculate_dispersed_throughput_events(
         self, requests_df: pd.DataFrame
     ) -> pd.DataFrame:
@@ -477,181 +566,3 @@ class SingleRunPNGExporter(BasePNGExporter):
         return events_df[
             ["timestamp_s", "throughput_tokens_per_sec", "active_requests"]
         ].reset_index(drop=True)
-
-    def _generate_gpu_utilization_with_throughput(
-        self, run: RunData, available_metrics: dict
-    ) -> list[Path]:
-        """
-        Generate throughput plot with GPU utilization overlay.
-
-        Uses event-based dispersed throughput calculation where tokens are evenly
-        distributed across the generation phase for accurate representation.
-
-        Args:
-            run: RunData object with gpu_telemetry and requests DataFrames
-            available_metrics: Dictionary with display_names and units for metrics
-
-        Returns:
-            List of Path objects for generated PNG files
-        """
-        try:
-            gpu_df = run.gpu_telemetry.copy()
-
-            if "gpu_index" in gpu_df.columns:
-                gpu_df = (
-                    gpu_df.groupby("timestamp_s")
-                    .agg({"gpu_utilization": "mean"})
-                    .reset_index()
-                )
-
-            if run.requests is not None and not run.requests.empty:
-                requests_df = run.requests.copy()
-
-                required_cols = [
-                    "request_start_ns",
-                    "request_end_ns",
-                    "output_sequence_length",
-                ]
-                if all(col in requests_df.columns for col in required_cols):
-                    throughput_df = self._calculate_dispersed_throughput_events(
-                        requests_df
-                    )
-
-                    if not throughput_df.empty:
-                        fig = self.plot_generator.create_gpu_dual_axis_plot(
-                            df_primary=throughput_df,
-                            df_secondary=gpu_df,
-                            x_col_primary="timestamp_s",
-                            x_col_secondary="timestamp_s",
-                            y1_metric="throughput_tokens_per_sec",
-                            y2_metric="gpu_utilization",
-                            active_count_col="active_requests",
-                            title="Output Token Throughput with GPU Utilization",
-                            x_label="Time (s)",
-                            y1_label="Output Tokens/sec",
-                            y2_label="GPU Utilization (%)",
-                        )
-
-                        path = self.output_dir / "gpu_utilization_throughput.png"
-                        self._export_figure(fig, path)
-                        self.info("✓ Generated gpu_utilization_throughput.png")
-                        return [path]
-
-            self.warning(
-                "Could not calculate throughput overlay - plotting GPU utilization only"
-            )
-            return []
-
-        except Exception as e:
-            self.error(f"Failed to generate GPU utilization with throughput: {e}")
-            return []
-
-    def _generate_gpu_metrics_overlay(
-        self, run: RunData, available_metrics: dict
-    ) -> list[Path]:
-        """
-        Generate GPU metrics overlay plot with power, temperature, and clock speeds.
-
-        Args:
-            run: RunData object with gpu_telemetry DataFrame
-            available_metrics: Dictionary with display_names and units for metrics
-
-        Returns:
-            List of Path objects for generated PNG files
-        """
-        try:
-            gpu_df = run.gpu_telemetry.copy()
-
-            required_cols = [
-                "gpu_power_usage",
-                "gpu_temperature",
-                "sm_clock_frequency",
-                "memory_clock_frequency",
-            ]
-            missing_cols = [col for col in required_cols if col not in gpu_df.columns]
-
-            if missing_cols:
-                self.warning(
-                    f"GPU metrics columns not found in telemetry data: {missing_cols}"
-                )
-                return []
-
-            fig = self.plot_generator.create_gpu_metrics_overlay(
-                df=gpu_df,
-                x_col="timestamp_s",
-                power_col="gpu_power_usage",
-                temp_col="gpu_temperature",
-                sm_clock_col="sm_clock_frequency",
-                mem_clock_col="memory_clock_frequency",
-                gpu_id_col="gpu_uuid",
-                title="GPU Metrics Over Time",
-                x_label="Time (s)",
-            )
-
-            path = self.output_dir / "gpu_metrics_overlay.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated gpu_metrics_overlay.png")
-            return [path]
-
-        except Exception as e:
-            self.error(f"Failed to generate GPU metrics overlay: {e}")
-            return []
-
-    def _generate_dispersed_throughput_over_time(
-        self, run: RunData, available_metrics: dict
-    ) -> list[Path]:
-        """
-        Generate standalone dispersed throughput over time plot.
-
-        Shows output token throughput with tokens evenly distributed across
-        the generation phase (from TTFT to request_end).
-
-        Args:
-            run: RunData object with requests DataFrame
-            available_metrics: Dictionary with display_names and units for metrics
-
-        Returns:
-            List of Path objects for generated PNG files
-        """
-        try:
-            if run.requests is None or run.requests.empty:
-                self.debug("No requests data available for dispersed throughput plot")
-                return []
-
-            requests_df = run.requests.copy()
-
-            required_cols = [
-                "request_start_ns",
-                "request_end_ns",
-                "output_sequence_length",
-            ]
-            if not all(col in requests_df.columns for col in required_cols):
-                self.warning(
-                    f"Missing required columns for dispersed throughput plot. "
-                    f"Required: {required_cols}"
-                )
-                return []
-
-            throughput_df = self._calculate_dispersed_throughput_events(requests_df)
-
-            if throughput_df.empty:
-                self.warning("No throughput data to plot")
-                return []
-
-            fig = self.plot_generator.create_time_series_area(
-                df=throughput_df,
-                x_col="timestamp_s",
-                y_metric="throughput_tokens_per_sec",
-                title="Dispersed Output Token Throughput Over Time",
-                x_label="Time (s)",
-                y_label="Output Tokens/sec",
-            )
-
-            path = self.output_dir / "dispersed_throughput_over_time.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated dispersed_throughput_over_time.png")
-            return [path]
-
-        except Exception as e:
-            self.error(f"Failed to generate dispersed throughput plot: {e}")
-            return []

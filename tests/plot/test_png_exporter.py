@@ -199,9 +199,8 @@ class TestMultiRunPNGExporter:
         filenames = {f.name for f in generated_files}
 
         # Check expected files
-        assert "pareto_curve.png" in filenames
+        assert "pareto_curve_throughput_vs_latency.png" in filenames
         assert "ttft_vs_throughput.png" in filenames
-        assert "throughput_per_user_vs_concurrency.png" in filenames
 
     def test_export_multi_run_creates_summary(
         self,
@@ -1046,8 +1045,10 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=gpu_telemetry_df,
         )
 
-        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+        all_files = exporter.export(run, sample_available_metrics)
 
+        # Check that GPU files were generated
+        gpu_files = [f for f in all_files if "gpu" in f.name]
         assert len(gpu_files) > 0
         for file_path in gpu_files:
             assert file_path.exists()
@@ -1071,7 +1072,8 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=None,
         )
 
-        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+        all_files = exporter.export(run, sample_available_metrics)
+        gpu_files = [f for f in all_files if "gpu" in f.name]
 
         assert gpu_files == []
 
@@ -1095,7 +1097,8 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=pd.DataFrame(),
         )
 
-        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+        all_files = exporter.export(run, sample_available_metrics)
+        gpu_files = [f for f in all_files if "gpu" in f.name]
 
         assert gpu_files == []
 
@@ -1119,12 +1122,14 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=gpu_telemetry_df,
         )
 
-        gpu_files = exporter._generate_gpu_utilization_with_throughput(
-            run, sample_available_metrics
-        )
+        all_files = exporter.export(run, sample_available_metrics)
+        gpu_files = [
+            f
+            for f in all_files
+            if f.name == "gpu_utilization_and_throughput_over_time.png"
+        ]
 
         assert len(gpu_files) == 1
-        assert gpu_files[0].name == "gpu_utilization_throughput.png"
         assert gpu_files[0].exists()
 
     def test_generate_gpu_utilization_no_requests(
@@ -1147,72 +1152,14 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=gpu_telemetry_df,
         )
 
-        gpu_files = exporter._generate_gpu_utilization_with_throughput(
-            run, sample_available_metrics
-        )
+        all_files = exporter.export(run, sample_available_metrics)
+        gpu_util_files = [
+            f
+            for f in all_files
+            if f.name == "gpu_utilization_and_throughput_over_time.png"
+        ]
 
-        assert gpu_files == []
-
-    def test_generate_gpu_metrics_overlay(
-        self, tmp_path, sample_available_metrics, gpu_telemetry_df
-    ):
-        """Test GPU metrics overlay plot generation."""
-        exporter = SingleRunPNGExporter(output_dir=tmp_path)
-
-        run = RunData(
-            metadata=RunMetadata(
-                run_name="test_run",
-                run_path=tmp_path / "test_run",
-                model="Test Model",
-                concurrency=1,
-            ),
-            requests=None,
-            aggregated={},
-            timeslices=None,
-            slice_duration=None,
-            gpu_telemetry=gpu_telemetry_df,
-        )
-
-        gpu_files = exporter._generate_gpu_metrics_overlay(
-            run, sample_available_metrics
-        )
-
-        assert len(gpu_files) == 1
-        assert gpu_files[0].name == "gpu_metrics_overlay.png"
-        assert gpu_files[0].exists()
-
-    def test_generate_gpu_metrics_overlay_missing_columns(
-        self, tmp_path, sample_available_metrics
-    ):
-        """Test GPU metrics overlay plot when required columns are missing."""
-        exporter = SingleRunPNGExporter(output_dir=tmp_path)
-
-        incomplete_gpu_df = pd.DataFrame(
-            {
-                "timestamp_s": [0.0, 1.0, 2.0],
-                "gpu_utilization": [45.5, 67.2, 78.9],
-            }
-        )
-
-        run = RunData(
-            metadata=RunMetadata(
-                run_name="test_run",
-                run_path=tmp_path / "test_run",
-                model="Test Model",
-                concurrency=1,
-            ),
-            requests=None,
-            aggregated={},
-            timeslices=None,
-            slice_duration=None,
-            gpu_telemetry=incomplete_gpu_df,
-        )
-
-        gpu_files = exporter._generate_gpu_metrics_overlay(
-            run, sample_available_metrics
-        )
-
-        assert gpu_files == []
+        assert gpu_util_files == []
 
     def test_generate_dispersed_throughput_over_time(
         self, tmp_path, sample_available_metrics, requests_df_for_gpu
@@ -1234,13 +1181,13 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=None,
         )
 
-        files = exporter._generate_dispersed_throughput_over_time(
-            run, sample_available_metrics
-        )
+        all_files = exporter.export(run, sample_available_metrics)
+        throughput_files = [
+            f for f in all_files if f.name == "dispersed_throughput_over_time.png"
+        ]
 
-        assert len(files) == 1
-        assert files[0].name == "dispersed_throughput_over_time.png"
-        assert files[0].exists()
+        assert len(throughput_files) == 1
+        assert throughput_files[0].exists()
 
     def test_generate_gpu_plots_multi_gpu_aggregation(
         self, tmp_path, sample_available_metrics, requests_df_for_gpu
@@ -1284,7 +1231,8 @@ class TestSingleRunGPUPlots:
             gpu_telemetry=multi_gpu_df,
         )
 
-        gpu_files = exporter._generate_gpu_plots(run, sample_available_metrics)
+        all_files = exporter.export(run, sample_available_metrics)
+        gpu_files = [f for f in all_files if "gpu" in f.name]
 
         assert len(gpu_files) > 0
         for file_path in gpu_files:

@@ -10,9 +10,11 @@ Generates static PNG images comparing multiple profiling runs.
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
 from aiperf.plot.core.data_loader import RunData
+from aiperf.plot.core.plot_specs import MULTI_RUN_PLOT_SPECS, PlotSpec, PlotType
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
 
@@ -47,169 +49,100 @@ class MultiRunPNGExporter(BasePNGExporter):
 
         generated_files = []
 
-        # Plot 1: Pareto Curve
-        generated_files.extend(self._generate_pareto_curve(df, available_metrics))
+        # Generate all configured plots
+        for spec in MULTI_RUN_PLOT_SPECS:
+            try:
+                # Check if we can generate this plot
+                if not self._can_generate_plot(spec, df):
+                    self.debug(f"Skipping {spec.name} - required columns not available")
+                    continue
 
-        # Plot 2: TTFT vs Throughput
-        generated_files.extend(self._generate_ttft_vs_throughput(df, available_metrics))
+                # Create the plot from spec
+                fig = self._create_plot_from_spec(spec, df, available_metrics)
 
-        # Plot 3: Throughput per User vs Concurrency
-        generated_files.extend(
-            self._generate_throughput_per_user_vs_concurrency(df, available_metrics)
-        )
+                # Export to PNG
+                path = self.output_dir / spec.filename
+                self._export_figure(fig, path)
+                self.info(f"✓ Generated {spec.filename}")
+                generated_files.append(path)
 
-        # Plot 4: Token Throughput per GPU vs Latency (conditional)
-        if "output_token_throughput_per_gpu" in df.columns:
-            generated_files.extend(
-                self._generate_throughput_per_gpu_vs_latency(df, available_metrics)
-            )
-
-        # Plot 5: Token Throughput per GPU vs Interactivity (conditional)
-        if "output_token_throughput_per_gpu" in df.columns:
-            generated_files.extend(
-                self._generate_throughput_per_gpu_vs_interactivity(
-                    df, available_metrics
-                )
-            )
+            except Exception as e:
+                self.error(f"Failed to generate {spec.name}: {e}")
 
         self._create_summary_file(generated_files)
 
         return generated_files
 
-    def _generate_pareto_curve(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate pareto curve plot."""
-        try:
-            fig = self.plot_generator.create_pareto_plot(
-                df=df,
-                x_metric="request_latency",
-                y_metric="request_throughput",
-                label_by="concurrency",
-                group_by="model",
-                title="Pareto Curve: Throughput vs Latency",
-                x_label=self._get_metric_label(
-                    "request_latency", DEFAULT_PERCENTILE, available_metrics
-                ),
-                y_label=self._get_metric_label(
-                    "request_throughput", "avg", available_metrics
-                ),
-            )
-            path = self.output_dir / "pareto_curve.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated pareto_curve.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate pareto curve: {e}")
-            return []
+    def _can_generate_plot(self, spec: PlotSpec, df: pd.DataFrame) -> bool:
+        """
+        Check if a plot can be generated based on column availability.
 
-    def _generate_ttft_vs_throughput(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate TTFT vs Throughput plot."""
-        try:
-            fig = self.plot_generator.create_scatter_line_plot(
-                df=df,
-                x_metric="time_to_first_token",
-                y_metric="request_throughput",
-                label_by="concurrency",
-                group_by="model",
-                title="TTFT vs Throughput",
-                x_label=self._get_metric_label(
-                    "time_to_first_token", DEFAULT_PERCENTILE, available_metrics
-                ),
-                y_label=self._get_metric_label(
-                    "request_throughput", "avg", available_metrics
-                ),
-            )
-            path = self.output_dir / "ttft_vs_throughput.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated ttft_vs_throughput.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate TTFT vs throughput: {e}")
-            return []
+        Args:
+            spec: Plot specification
+            df: DataFrame with aggregated metrics
 
-    def _generate_throughput_per_user_vs_concurrency(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate Throughput per User vs Concurrency plot."""
-        try:
-            fig = self.plot_generator.create_scatter_line_plot(
-                df=df,
-                x_metric="concurrency",
-                y_metric="output_token_throughput_per_user",
-                label_by="concurrency",
-                group_by="model",
-                title="Output Token Throughput per User",
-                x_label="Concurrency Level",
-                y_label=self._get_metric_label(
-                    "output_token_throughput_per_user", "avg", available_metrics
-                ),
-            )
-            path = self.output_dir / "throughput_per_user_vs_concurrency.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated throughput_per_user_vs_concurrency.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate throughput per user plot: {e}")
-            return []
+        Returns:
+            True if the plot can be generated, False otherwise
+        """
+        # Check that all required metric columns exist in the DataFrame
+        for metric in spec.metrics:
+            if metric.name not in df.columns and metric.name != "concurrency":
+                return False
+        return True
 
-    def _generate_throughput_per_gpu_vs_latency(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate Token Throughput per GPU vs Latency plot."""
-        try:
-            fig = self.plot_generator.create_pareto_plot(
-                df=df,
-                x_metric="request_latency",
-                y_metric="output_token_throughput_per_gpu",
-                label_by="concurrency",
-                group_by="model",
-                title="Token Throughput per GPU vs End-to-end Latency",
-                x_label=self._get_metric_label(
-                    "request_latency", DEFAULT_PERCENTILE, available_metrics
-                ),
-                y_label=self._get_metric_label(
-                    "output_token_throughput_per_gpu", "avg", available_metrics
-                ),
-            )
-            path = self.output_dir / "throughput_per_gpu_vs_latency.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated throughput_per_gpu_vs_latency.png")
-            return [path]
-        except Exception as e:
-            self.error(f"Failed to generate throughput per GPU vs latency plot: {e}")
-            return []
+    def _create_plot_from_spec(
+        self, spec: PlotSpec, df: pd.DataFrame, available_metrics: dict
+    ) -> go.Figure:
+        """
+        Create a plot figure from a plot specification.
 
-    def _generate_throughput_per_gpu_vs_interactivity(
-        self, df: pd.DataFrame, available_metrics: dict
-    ) -> list[Path]:
-        """Generate Token Throughput per GPU vs Interactivity plot."""
-        try:
-            fig = self.plot_generator.create_scatter_line_plot(
+        Args:
+            spec: Plot specification
+            df: DataFrame with aggregated metrics
+            available_metrics: Dictionary with display_names and units for metrics
+
+        Returns:
+            Plotly figure object
+        """
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
+
+        # Determine x and y labels
+        if x_metric.name == "concurrency":
+            x_label = "Concurrency Level"
+        else:
+            x_label = self._get_metric_label(
+                x_metric.name, x_metric.stat or DEFAULT_PERCENTILE, available_metrics
+            )
+
+        y_label = self._get_metric_label(
+            y_metric.name, y_metric.stat or "avg", available_metrics
+        )
+
+        if spec.plot_type == PlotType.PARETO:
+            return self.plot_generator.create_pareto_plot(
                 df=df,
-                x_metric="output_token_throughput_per_gpu",
-                y_metric="output_token_throughput_per_user",
-                label_by="concurrency",
-                group_by="model",
-                title="Token Throughput per GPU vs Interactivity",
-                x_label=self._get_metric_label(
-                    "output_token_throughput_per_gpu", "avg", available_metrics
-                ),
-                y_label=self._get_metric_label(
-                    "output_token_throughput_per_user", "avg", available_metrics
-                ),
+                x_metric=x_metric.name,
+                y_metric=y_metric.name,
+                label_by=spec.label_by,
+                group_by=spec.group_by,
+                title=spec.title,
+                x_label=x_label,
+                y_label=y_label,
             )
-            path = self.output_dir / "throughput_per_gpu_vs_interactivity.png"
-            self._export_figure(fig, path)
-            self.info("✓ Generated throughput_per_gpu_vs_interactivity.png")
-            return [path]
-        except Exception as e:
-            self.error(
-                f"Failed to generate throughput per GPU vs interactivity plot: {e}"
+        elif spec.plot_type == PlotType.SCATTER_LINE:
+            return self.plot_generator.create_scatter_line_plot(
+                df=df,
+                x_metric=x_metric.name,
+                y_metric=y_metric.name,
+                label_by=spec.label_by,
+                group_by=spec.group_by,
+                title=spec.title,
+                x_label=x_label,
+                y_label=y_label,
             )
-            return []
+        else:
+            raise ValueError(f"Unsupported plot type for multi-run: {spec.plot_type}")
 
     def _runs_to_dataframe(
         self, runs: list[RunData], available_metrics: dict
