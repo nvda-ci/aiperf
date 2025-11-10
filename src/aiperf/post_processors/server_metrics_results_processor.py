@@ -128,11 +128,39 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
                 data=endpoint_data: f"  Endpoint {url}: {len(data.time_series.snapshots)} snapshots total"
             )
 
+        # Apply time-window filtering to align server metrics with inference window
+        filtered_hierarchy = self._server_metrics_hierarchy
+        if min_timestamp_ns is not None or max_timestamp_ns is not None:
+            filtered_hierarchy = ServerMetricsHierarchy()
+            for (
+                endpoint_url,
+                endpoint_data,
+            ) in self._server_metrics_hierarchy.endpoints.items():
+                # Filter time series to inference window
+                filtered_time_series = endpoint_data.time_series.filter_by_time_window(
+                    min_timestamp_ns, max_timestamp_ns
+                )
+                # Create filtered endpoint data with same metadata
+                from aiperf.common.models.server_metrics_models import ServerMetricsData
+
+                filtered_hierarchy.endpoints[endpoint_url] = ServerMetricsData(
+                    metadata=endpoint_data.metadata,
+                    time_series=filtered_time_series,
+                )
+                self.debug(
+                    lambda url=endpoint_url,
+                    orig_data=endpoint_data,
+                    filt_ts=filtered_time_series: (
+                        f"  Endpoint {url}: filtered {len(orig_data.time_series.snapshots)} "
+                        f"-> {len(filt_ts.snapshots)} snapshots"
+                    )
+                )
+
         # Get endpoints tested and successful from hierarchy
-        endpoints = list(self._server_metrics_hierarchy.endpoints.keys())
+        endpoints = list(filtered_hierarchy.endpoints.keys())
 
         return ServerMetricsSummaryResult(
-            server_metrics_data=self._server_metrics_hierarchy,
+            server_metrics_data=filtered_hierarchy,
             endpoints_tested=endpoints,
             endpoints_successful=endpoints,
             error_summary=[],

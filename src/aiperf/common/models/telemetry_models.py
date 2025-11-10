@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections import deque
 from typing import TYPE_CHECKING
 
 from pydantic import ConfigDict, Field
@@ -125,10 +126,13 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
 
     Uses the shared compute_metric_statistics() utility for consistent statistics
     computation across GPU telemetry and server metrics.
+
+    Memory is capped at max_snapshots to prevent unbounded growth on long runs.
     """
 
-    snapshots: list[GpuTelemetrySnapshot] = Field(
-        default_factory=list, description="Chronological snapshots of all metrics"
+    snapshots: deque[GpuTelemetrySnapshot] = Field(
+        default_factory=lambda: deque(maxlen=10000),
+        description="Chronological snapshots (capped at 10K to prevent OOM)",
     )
 
     def append_snapshot(self, metrics: dict[str, float], timestamp_ns: int) -> None:
@@ -137,6 +141,10 @@ class GpuMetricTimeSeries(AIPerfBaseModel):
         Args:
             metrics: Dictionary of metric_name -> value for this timestamp
             timestamp_ns: Timestamp when measurements were taken
+
+        Note:
+            Deque automatically evicts oldest snapshot when maxlen is reached,
+            preventing unbounded memory growth on long-running profiles.
         """
         snapshot = GpuTelemetrySnapshot(
             timestamp_ns=timestamp_ns,

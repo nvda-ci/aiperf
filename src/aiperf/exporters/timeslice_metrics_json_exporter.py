@@ -72,7 +72,14 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
 
         # Extract timeslice results from summary_results
         summary_results = self._process_records_result.summary_results
-        timeslice_summary = summary_results[ResultsProcessorType.TIMESLICE]
+
+        # Type-safe access with runtime check (type narrowing lost after dict access)
+        timeslice_result = summary_results.get(ResultsProcessorType.TIMESLICE)
+        if not isinstance(timeslice_result, TimesliceSummaryResult):
+            raise ValueError(
+                f"Expected TimesliceSummaryResult, got {type(timeslice_result).__name__}"
+            )
+        timeslice_summary: TimesliceSummaryResult = timeslice_result
 
         for timeslice_index in sorted(timeslice_summary.timeslice_results.keys()):
             metric_results = timeslice_summary.timeslice_results[timeslice_index]

@@ -11,7 +11,10 @@ from urllib.parse import urlparse
 
 import numpy as np
 
+from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.exceptions import NoMetricValue
+
+_logger = AIPerfLogger(__name__)
 
 
 def compute_histogram_delta(
@@ -39,7 +42,18 @@ def compute_histogram_delta(
 
     delta: dict[str, float] = {}
     for le_str in end_histogram:
-        delta[le_str] = end_histogram[le_str] - start_histogram.get(le_str, 0)
+        delta_value = end_histogram[le_str] - start_histogram.get(le_str, 0)
+
+        # Detect counter reset (server restart)
+        if delta_value < 0:
+            _logger.warning(
+                f"Histogram counter decreased for bucket '{le_str}': "
+                f"{start_histogram.get(le_str, 0)} -> {end_histogram[le_str]}. "
+                f"Counter reset detected (likely server restart). Using end value."
+            )
+            delta[le_str] = end_histogram[le_str]
+        else:
+            delta[le_str] = delta_value
 
     return delta
 
