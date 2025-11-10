@@ -53,6 +53,10 @@ def sample_multi_run_data(tmp_path):
                     "avg": 100.0,
                     "unit": "tokens/s/user",
                 },
+                "output_token_throughput_per_gpu": {
+                    "avg": 50.0,
+                    "unit": "tokens/s/gpu",
+                },
             },
             timeslices=None,
             slice_duration=None,
@@ -73,6 +77,10 @@ def sample_multi_run_data(tmp_path):
                 "output_token_throughput_per_user": {
                     "avg": 90.0,
                     "unit": "tokens/s/user",
+                },
+                "output_token_throughput_per_gpu": {
+                    "avg": 120.0,
+                    "unit": "tokens/s/gpu",
                 },
             },
             timeslices=None,
@@ -199,8 +207,9 @@ class TestMultiRunPNGExporter:
         filenames = {f.name for f in generated_files}
 
         # Check expected files
-        assert "pareto_curve_throughput_vs_latency.png" in filenames
+        assert "pareto_curve_throughput_per_gpu_vs_latency.png" in filenames
         assert "ttft_vs_throughput.png" in filenames
+        assert "pareto_curve_throughput_per_gpu_vs_interactivity.png" in filenames
 
     def test_export_multi_run_creates_summary(
         self,

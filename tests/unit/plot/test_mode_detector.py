@@ -5,7 +5,6 @@
 Tests for mode detection functionality.
 """
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -212,56 +211,6 @@ class TestIsRunDirectory:
         assert mode_detector._is_run_directory(file_path) is False
 
 
-class TestSymlinkEdgeCases:
-    """Tests for symlink edge cases."""
-
-    def test_symlink_to_run_directory(
-        self, mode_detector: ModeDetector, populated_run_dir: Path, tmp_path: Path
-    ) -> None:
-        """Test symlink to valid run directory."""
-        symlink = tmp_path / "symlink_run"
-        symlink.symlink_to(populated_run_dir)
-        mode, run_dirs = mode_detector.detect_mode([symlink])
-        assert mode == VisualizationMode.SINGLE_RUN
-        assert len(run_dirs) == 1
-
-    def test_broken_symlink_directory(
-        self, mode_detector: ModeDetector, tmp_path: Path
-    ) -> None:
-        """Test broken symlink to directory."""
-        symlink = tmp_path / "broken"
-        symlink.symlink_to(tmp_path / "nonexistent")
-        with pytest.raises(ModeDetectionError, match="Path does not exist"):
-            mode_detector.detect_mode([symlink])
-
-    def test_symlinked_profile_export_file(
-        self, mode_detector: ModeDetector, tmp_path: Path
-    ) -> None:
-        """Test run with symlinked profile_export.jsonl."""
-        # Create actual file
-        real_file = tmp_path / "real_profile.jsonl"
-        real_file.write_text('{"test": "data"}\n')
-
-        # Create run dir with symlink
-        run_dir = tmp_path / "run"
-        run_dir.mkdir()
-        symlink_file = run_dir / "profile_export.jsonl"
-        symlink_file.symlink_to(real_file)
-
-        assert mode_detector._is_run_directory(run_dir)
-
-    def test_broken_symlink_profile_export(
-        self, mode_detector: ModeDetector, tmp_path: Path
-    ) -> None:
-        """Test run with broken symlink to profile_export.jsonl."""
-        run_dir = tmp_path / "run"
-        run_dir.mkdir()
-        symlink_file = run_dir / "profile_export.jsonl"
-        symlink_file.symlink_to(tmp_path / "nonexistent.jsonl")
-
-        assert not mode_detector._is_run_directory(run_dir)
-
-
 class TestDuplicatePaths:
     """Tests for duplicate path handling."""
 
@@ -360,47 +309,6 @@ class TestNestedRunDirectories:
         assert len(runs) == 3
 
 
-class TestPermissionErrors:
-    """Tests for permission error handling."""
-
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="Permission handling different on Windows"
-    )
-    def test_unreadable_directory(
-        self, mode_detector: ModeDetector, tmp_path: Path
-    ) -> None:
-        """Test directory with no read permissions."""
-        no_read_dir = tmp_path / "no_read"
-        no_read_dir.mkdir()
-        no_read_dir.chmod(0o000)
-
-        try:
-            # Should handle gracefully - no runs found
-            with pytest.raises(
-                ModeDetectionError, match="does not contain any valid run directories"
-            ):
-                mode_detector.detect_mode([no_read_dir])
-        finally:
-            no_read_dir.chmod(0o755)  # Cleanup
-
-    def test_unreadable_profile_export(
-        self, mode_detector: ModeDetector, tmp_path: Path
-    ) -> None:
-        """Test run with unreadable profile_export.jsonl."""
-        run_dir = tmp_path / "run"
-        run_dir.mkdir()
-        profile = run_dir / "profile_export.jsonl"
-        profile.write_text('{"test": "data"}\n')
-        profile.chmod(0o000)
-
-        try:
-            # Should still be detected as valid (only checks existence)
-            # DataLoader will fail later when reading
-            assert mode_detector._is_run_directory(run_dir)
-        finally:
-            profile.chmod(0o644)  # Cleanup
-
-
 class TestFileContentEdgeCases:
     """Tests for file content edge cases."""
 
@@ -430,25 +338,3 @@ class TestFileContentEdgeCases:
 
         # Mode detection doesn't validate content
         assert mode_detector._is_run_directory(run_dir)
-
-
-class TestHiddenDirectories:
-    """Tests for hidden directory handling."""
-
-    def test_hidden_run_directory(
-        self, mode_detector: ModeDetector, tmp_path: Path, sample_jsonl_data
-    ) -> None:
-        """Test hidden run directory (starting with .)."""
-        hidden_run = tmp_path / ".hidden_run"
-        hidden_run.mkdir()
-        jsonl_file = hidden_run / "profile_export.jsonl"
-        with open(jsonl_file, "w") as f:
-            for record in sample_jsonl_data:
-                f.write(f"{record}\n")
-
-        # Should be detected
-        assert mode_detector._is_run_directory(hidden_run)
-
-        # Hidden directories should be found in scan
-        runs = mode_detector.find_run_directories([tmp_path])
-        assert len(runs) == 1

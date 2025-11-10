@@ -9,12 +9,16 @@ and made available to test functions in the same directory and subdirectories.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from aiperf.plot.core.mode_detector import ModeDetector
+
+logging.getLogger("choreographer").setLevel(logging.WARNING)
+logging.getLogger("kaleido").setLevel(logging.WARNING)
 
 # Path constants for static fixture data
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
