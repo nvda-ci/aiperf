@@ -11,7 +11,6 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
-# Import handlers to register them with the factory
 import aiperf.plot.handlers.single_run_handlers  # noqa: F401
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.plot_specs import (
@@ -57,20 +56,16 @@ class SingleRunPNGExporter(BasePNGExporter):
 
         generated_files = []
 
-        # Generate all configured plots
         all_specs = SINGLE_RUN_PLOT_SPECS + TIMESLICE_PLOT_SPECS + GPU_PLOT_SPECS
 
         for spec in all_specs:
             try:
-                # Check if we can generate this plot based on data availability
                 if not self._can_generate_plot(spec, run):
                     self.debug(f"Skipping {spec.name} - required data not available")
                     continue
 
-                # Create the plot from spec
                 fig = self._create_plot_from_spec(spec, run, available_metrics)
 
-                # Export to PNG
                 path = self.output_dir / spec.filename
                 self._export_figure(fig, path)
                 self.info(f"✓ Generated {spec.filename}")
@@ -111,30 +106,6 @@ class SingleRunPNGExporter(BasePNGExporter):
             ):
                 return False
 
-        # Special validation for dispersed throughput plot
-        if spec.name == "dispersed_throughput_over_time":
-            if run.requests is None or run.requests.empty:
-                return False
-            required_cols = [
-                "request_start_ns",
-                "request_end_ns",
-                "output_sequence_length",
-            ]
-            if not all(col in run.requests.columns for col in required_cols):
-                return False
-
-        # Special validation for GPU utilization with throughput
-        if spec.name == "gpu_utilization_and_throughput_over_time":
-            if run.requests is None or run.requests.empty:
-                return False
-            required_cols = [
-                "request_start_ns",
-                "request_end_ns",
-                "output_sequence_length",
-            ]
-            if not all(col in run.requests.columns for col in required_cols):
-                return False
-
         return True
 
     def _create_plot_from_spec(
@@ -151,12 +122,10 @@ class SingleRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        # Create handler instance from factory
         handler = PlotTypeHandlerFactory.create_instance(
             spec.plot_type,
             plot_generator=self.plot_generator,
             logger=self,
         )
 
-        # Use handler to create the plot
         return handler.create_plot(spec, run, available_metrics)

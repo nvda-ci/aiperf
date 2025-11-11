@@ -27,6 +27,8 @@ def run_plot_controller(
 
     output_dir = Path(output) if output else input_paths[0] / "plot_export"
 
+    if isinstance(mode, str):
+        mode = PlotMode(mode.lower())
     if isinstance(theme, str):
         theme = PlotTheme(theme.lower())
 

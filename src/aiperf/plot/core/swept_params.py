@@ -54,7 +54,7 @@ def detect_swept_parameters(
 
 def auto_select_group_by(
     df: pd.DataFrame, swept_params: list[str] | None = None
-) -> str:
+) -> str | None:
     """
     Automatically select the best parameter for grouping (coloring) in plots.
 
@@ -68,10 +68,13 @@ def auto_select_group_by(
         swept_params: List of swept parameter names (auto-detected if None)
 
     Returns:
-        Column name to use for group_by, defaults to "model"
+        Column name to use for group_by, or None if no swept parameters exist
     """
     if swept_params is None:
         swept_params = detect_swept_parameters(df)
+
+    if not swept_params:
+        return None
 
     # Prefer "model" if it's in swept params
     if "model" in swept_params:
@@ -90,12 +93,12 @@ def auto_select_group_by(
             best_count = unique_count
             best_param = param
 
-    return best_param if best_param else "model"
+    return best_param if best_param else swept_params[0]
 
 
 def auto_select_label_by(
     df: pd.DataFrame, swept_params: list[str] | None = None, group_by: str | None = None
-) -> str:
+) -> str | None:
     """
     Automatically select the best parameter for labeling points in plots.
 
@@ -110,10 +113,13 @@ def auto_select_label_by(
         group_by: The parameter being used for grouping (to avoid duplicates)
 
     Returns:
-        Column name to use for label_by, defaults to "concurrency"
+        Column name to use for label_by, or None if no swept parameters exist
     """
     if swept_params is None:
         swept_params = detect_swept_parameters(df)
+
+    if not swept_params:
+        return None
 
     # Prefer "concurrency" if it's in swept params
     if "concurrency" in swept_params:
@@ -134,4 +140,4 @@ def auto_select_label_by(
         if param != group_by:
             return param
 
-    return "concurrency"
+    return swept_params[0] if swept_params else None

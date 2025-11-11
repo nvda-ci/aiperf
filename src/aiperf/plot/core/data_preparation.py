@@ -226,10 +226,15 @@ def calculate_rolling_percentiles(
     Returns:
         DataFrame with additional p50, p95, p99 columns
     """
+    if df.empty:
+        return df.copy()
+
     df_sorted = df.copy()
 
     if window_size is None:
         window_size = min(10, len(df_sorted))
+
+    window_size = max(1, window_size)
 
     df_sorted["p50"] = (
         df_sorted[metric_col].rolling(window=window_size, min_periods=1).quantile(0.50)

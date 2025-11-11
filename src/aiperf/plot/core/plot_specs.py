@@ -74,6 +74,13 @@ class PlotSpec:
         filename: Output filename (auto-generated from name if None)
         label_by: Column to use for labeling points (for multi-series plots)
         group_by: Column to use for grouping data (for multi-series plots)
+        primary_mode: Visualization mode for primary (y) axis ("lines", "markers", "lines+markers")
+        primary_line_shape: Line shape for primary axis ("linear", "hv", "spline", None)
+        primary_fill: Fill mode for primary axis ("tozeroy", "tonexty", None)
+        secondary_mode: Visualization mode for secondary (y2) axis
+        secondary_line_shape: Line shape for secondary axis
+        secondary_fill: Fill mode for secondary axis
+        supplementary_col: Optional supplementary column name (e.g., "active_requests")
     """
 
     name: str
@@ -83,6 +90,13 @@ class PlotSpec:
     filename: str | None = None
     label_by: str | None = None
     group_by: str | None = None
+    primary_mode: str = "lines"
+    primary_line_shape: str | None = None
+    primary_fill: str | None = None
+    secondary_mode: str = "lines"
+    secondary_line_shape: str | None = None
+    secondary_fill: str | None = None
+    supplementary_col: str | None = None
 
 
 @dataclass
@@ -203,6 +217,13 @@ GPU_PLOT_SPECS: list[PlotSpec] = [
         ],
         title="Output Token Throughput with GPU Utilization",
         filename="gpu_utilization_and_throughput_over_time.png",
+        primary_mode="lines",
+        primary_line_shape="hv",
+        primary_fill=None,
+        secondary_mode="lines",
+        secondary_line_shape=None,
+        secondary_fill="tozeroy",
+        supplementary_col="active_requests",
     ),
 ]
 

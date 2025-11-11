@@ -355,8 +355,8 @@ class TestSingleRunPNGExporter:
             sample_single_run_data, sample_available_metrics
         )
 
-        # Should generate 3 plots for single-run
-        assert len(generated_files) == 3
+        # Should generate 4 plots for single-run (ttft, itl, latency, dispersed_throughput)
+        assert len(generated_files) == 4
 
         # Check that files exist
         for file_path in generated_files:
@@ -381,6 +381,7 @@ class TestSingleRunPNGExporter:
         assert "ttft_over_time.png" in filenames
         assert "itl_over_time.png" in filenames
         assert "latency_over_time.png" in filenames
+        assert "dispersed_throughput_over_time.png" in filenames
 
     def test_export_single_run_with_no_per_request_data(
         self,
@@ -471,8 +472,8 @@ class TestSingleRunPNGExporter:
             run_with_timeslices, sample_available_metrics
         )
 
-        # Should generate 3 regular plots + 1 timeslice plot (only TTFT has data)
-        assert len(generated_files) == 4
+        # Should generate 3 regular plots + 1 dispersed_throughput + 1 timeslice plot = 5
+        assert len(generated_files) == 5
 
         # Check that timeslice plot is in the generated files
         filenames = {f.name for f in generated_files}
@@ -541,8 +542,8 @@ class TestSingleRunPNGExporter:
             sample_single_run_data, sample_available_metrics
         )
 
-        # Should generate 3 plots without timeslice plots
-        assert len(generated_files) == 3
+        # Should generate 3 regular plots + 1 dispersed_throughput = 4 (no timeslice plots)
+        assert len(generated_files) == 4
 
         filenames = {f.name for f in generated_files}
         assert "ttft_over_time.png" in filenames
@@ -1250,3 +1251,310 @@ class TestSingleRunGPUPlots:
         assert len(gpu_files) > 0
         for file_path in gpu_files:
             assert file_path.exists()
+
+
+class TestDualAxisHandler:
+    """Tests for dual-axis handler."""
+
+    @pytest.fixture
+    def plot_generator(self):
+        """Create a PlotGenerator instance for testing."""
+        from aiperf.plot.core.plot_generator import PlotGenerator
+
+        return PlotGenerator()
+
+    @pytest.fixture
+    def dual_axis_handler(self, plot_generator):
+        """Create a DualAxisHandler instance for testing."""
+        from aiperf.plot.handlers.single_run_handlers import DualAxisHandler
+
+        return DualAxisHandler(plot_generator=plot_generator)
+
+    @pytest.fixture
+    def data_loader(self):
+        """Create a DataLoader instance for testing."""
+        from aiperf.plot.core.data_loader import DataLoader
+
+        return DataLoader()
+
+    @pytest.fixture
+    def available_metrics(self):
+        """Sample available metrics dictionary."""
+        return {
+            "throughput_tokens_per_sec": {
+                "display_name": "Output Tokens/sec",
+                "unit": "",
+            },
+            "gpu_utilization": {
+                "display_name": "GPU Utilization",
+                "unit": "%",
+            },
+            "timestamp_s": {
+                "display_name": "Time",
+                "unit": "s",
+            },
+        }
+
+    def test_original_gpu_plot_spec(
+        self,
+        dual_axis_handler,
+        data_loader,
+        available_metrics,
+        real_qwen_concurrency1_dir,
+    ):
+        """Test that the original GPU utilization plot still works."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        spec = PlotSpec(
+            name="gpu_utilization_and_throughput_over_time",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Output Token Throughput with GPU Utilization",
+            primary_mode="lines",
+            primary_line_shape="hv",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
+            supplementary_col="active_requests",
+        )
+
+        assert dual_axis_handler.can_handle(spec, run_data)
+        fig = dual_axis_handler.create_plot(spec, run_data, available_metrics)
+        assert fig is not None
+        assert len(fig.data) > 0
+
+    def test_custom_dual_axis_plot_different_name(
+        self,
+        dual_axis_handler,
+        data_loader,
+        available_metrics,
+        real_qwen_concurrency1_dir,
+    ):
+        """Test that a dual-axis plot with a different name works (not hardcoded)."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        spec = PlotSpec(
+            name="my_custom_dual_axis_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Custom Dual-Axis Plot",
+            primary_mode="lines",
+            primary_line_shape="linear",
+            primary_fill=None,
+            secondary_mode="lines",
+            secondary_line_shape=None,
+            secondary_fill="tozeroy",
+        )
+
+        assert dual_axis_handler.can_handle(spec, run_data)
+        fig = dual_axis_handler.create_plot(spec, run_data, available_metrics)
+        assert fig is not None
+        assert len(fig.data) > 0
+
+    def test_custom_styling_parameters(
+        self,
+        dual_axis_handler,
+        data_loader,
+        available_metrics,
+        real_qwen_concurrency1_dir,
+    ):
+        """Test that custom styling parameters are applied."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        spec = PlotSpec(
+            name="styled_dual_axis_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Custom Styled Plot",
+            primary_mode="markers",
+            primary_line_shape=None,
+            primary_fill="tozeroy",
+            secondary_mode="lines+markers",
+            secondary_line_shape="spline",
+            secondary_fill=None,
+        )
+
+        fig = dual_axis_handler.create_plot(spec, run_data, available_metrics)
+        assert fig is not None
+        assert len(fig.data) > 0
+
+    def test_missing_x_metric_uses_default(
+        self,
+        dual_axis_handler,
+        data_loader,
+        available_metrics,
+        real_qwen_concurrency1_dir,
+    ):
+        """Test that missing x metric defaults to timestamp_s."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        spec = PlotSpec(
+            name="no_x_metric_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Plot Without X Metric",
+        )
+
+        fig = dual_axis_handler.create_plot(spec, run_data, available_metrics)
+        assert fig is not None
+        assert len(fig.data) > 0
+
+    def test_can_handle_checks_gpu_telemetry(self, dual_axis_handler):
+        """Test that can_handle properly checks for GPU telemetry data."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        metadata = RunMetadata(
+            run_name="test_run",
+            run_path=Path("/tmp"),
+        )
+
+        run_data = RunData(
+            metadata=metadata,
+            requests=pd.DataFrame(),
+            timeslices=pd.DataFrame(),
+            aggregated={},
+            gpu_telemetry=None,
+            slice_duration=None,
+        )
+
+        spec = PlotSpec(
+            name="test_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Test Plot",
+        )
+
+        assert not dual_axis_handler.can_handle(spec, run_data)
+
+    def test_empty_primary_data_raises_error(
+        self,
+        dual_axis_handler,
+        data_loader,
+        available_metrics,
+        real_qwen_concurrency1_dir,
+    ):
+        """Test that empty primary data raises an appropriate error."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        spec = PlotSpec(
+            name="invalid_metric_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("nonexistent_metric", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Invalid Metric Plot",
+        )
+
+        with pytest.raises((ValueError, KeyError)):
+            dual_axis_handler.create_plot(spec, run_data, available_metrics)
+
+    def test_metric_prep_registry(self, dual_axis_handler):
+        """Test that the metric preparation registry contains expected functions."""
+        assert "throughput_tokens_per_sec" in dual_axis_handler.METRIC_PREP_FUNCTIONS
+        assert "gpu_utilization" in dual_axis_handler.METRIC_PREP_FUNCTIONS
+
+        assert callable(
+            dual_axis_handler.METRIC_PREP_FUNCTIONS["throughput_tokens_per_sec"]
+        )
+        assert callable(dual_axis_handler.METRIC_PREP_FUNCTIONS["gpu_utilization"])
+
+    def test_axis_labels_from_available_metrics(
+        self, dual_axis_handler, data_loader, real_qwen_concurrency1_dir
+    ):
+        """Test that axis labels are derived from available_metrics."""
+        from aiperf.plot.core.plot_specs import (
+            DataSource,
+            MetricSpec,
+            PlotSpec,
+            PlotType,
+        )
+
+        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+
+        custom_metrics = {
+            "throughput_tokens_per_sec": {
+                "display_name": "Custom Throughput Label",
+                "unit": "tok/s",
+            },
+            "gpu_utilization": {
+                "display_name": "Custom GPU Label",
+                "unit": "percent",
+            },
+        }
+
+        spec = PlotSpec(
+            name="custom_labels_plot",
+            plot_type=PlotType.DUAL_AXIS,
+            metrics=[
+                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
+                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            ],
+            title="Custom Labels Plot",
+        )
+
+        fig = dual_axis_handler.create_plot(spec, run_data, custom_metrics)
+        assert fig is not None
+
+        assert "Custom Throughput Label" in str(fig.layout.yaxis.title.text)
+        assert "Custom GPU Label" in str(fig.layout.yaxis2.title.text)

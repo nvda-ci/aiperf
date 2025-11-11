@@ -77,7 +77,6 @@ class ParetoHandler(BaseMultiRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        # Determine x and y labels
         if x_metric.name == "concurrency":
             x_label = "Concurrency Level"
         else:
@@ -119,7 +118,6 @@ class ScatterLineHandler(BaseMultiRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        # Determine x and y labels
         if x_metric.name == "concurrency":
             x_label = "Concurrency Level"
         else:

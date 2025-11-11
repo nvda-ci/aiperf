@@ -161,19 +161,6 @@ class AreaHandler(BaseSingleRunHandler):
                 data.requests is None or data.requests.empty
             ):
                 return False
-
-        # Special validation for dispersed throughput plot
-        if spec.name == "dispersed_throughput_over_time":
-            if data.requests is None or data.requests.empty:
-                return False
-            required_cols = [
-                "request_start_ns",
-                "request_end_ns",
-                "output_sequence_length",
-            ]
-            if not all(col in data.requests.columns for col in required_cols):
-                return False
-
         return True
 
     def create_plot(
@@ -183,7 +170,7 @@ class AreaHandler(BaseSingleRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        # Special handling for dispersed throughput
+        # Special handling for dispersed throughput due to nature of request throughput data
         if y_metric.name == "throughput_tokens_per_sec":
             df = prepare_request_timeseries(data)
             throughput_df = calculate_throughput_events(df)
@@ -220,10 +207,8 @@ class HistogramHandler(BaseSingleRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        # Prepare timeslice data
         plot_df = prepare_timeslice_metrics(data, y_metric.name, y_metric.stat)
 
-        # Get unit for y-axis label
         metric_data = data.timeslices[
             (data.timeslices["Metric"] == y_metric.name)
             & (data.timeslices["Stat"] == y_metric.stat)
@@ -231,12 +216,10 @@ class HistogramHandler(BaseSingleRunHandler):
         unit = metric_data["Unit"].iloc[0] if not metric_data.empty else ""
         y_label = f"{y_metric.name} ({unit})" if unit else y_metric.name
 
-        # Check if we need warning for throughput plot
         warning_message = None
         if "throughput" in spec.name.lower():
             _, warning_message = validate_request_uniformity(data, self.logger)
 
-        # Determine if we should use slice_duration
         use_slice_duration = (
             isinstance(spec, TimeSlicePlotSpec) and spec.use_slice_duration
         )
@@ -257,6 +240,14 @@ class HistogramHandler(BaseSingleRunHandler):
 class DualAxisHandler(BaseSingleRunHandler):
     """Handler for dual-axis plot type."""
 
+    # Metric-specific data preparation functions
+    METRIC_PREP_FUNCTIONS = {
+        "throughput_tokens_per_sec": lambda self, data: calculate_throughput_events(
+            prepare_request_timeseries(data)
+        ),
+        "gpu_utilization": lambda self, data: aggregate_gpu_telemetry(data),
+    }
+
     def can_handle(self, spec: PlotSpec, data: RunData) -> bool:
         """Check if dual-axis plot can be generated."""
         for metric in spec.metrics:
@@ -264,61 +255,70 @@ class DualAxisHandler(BaseSingleRunHandler):
                 data.gpu_telemetry is None or data.gpu_telemetry.empty
             ):
                 return False
-
-        # Special validation for GPU utilization with throughput
-        if spec.name == "gpu_utilization_and_throughput_over_time":
-            if data.requests is None or data.requests.empty:
-                return False
-            required_cols = [
-                "request_start_ns",
-                "request_end_ns",
-                "output_sequence_length",
-            ]
-            if not all(col in data.requests.columns for col in required_cols):
-                return False
-
         return True
+
+    def _prepare_metric_data(
+        self, metric_name: str, source: DataSource, data: RunData
+    ) -> pd.DataFrame:
+        """
+        Prepare data for a specific metric with optional special handling.
+
+        Args:
+            metric_name: Name of the metric
+            source: Data source for the metric
+            data: RunData object
+
+        Returns:
+            Prepared DataFrame
+        """
+        if metric_name in self.METRIC_PREP_FUNCTIONS:
+            return self.METRIC_PREP_FUNCTIONS[metric_name](self, data)
+        else:
+            return self._prepare_data_for_source(source, data)
 
     def create_plot(
         self, spec: PlotSpec, data: RunData, available_metrics: dict
     ) -> go.Figure:
         """Create a dual-axis plot."""
+        x_metric = next((m for m in spec.metrics if m.axis == "x"), None)
         y1_metric = next(m for m in spec.metrics if m.axis == "y")
         y2_metric = next(m for m in spec.metrics if m.axis == "y2")
 
-        # Handle GPU utilization with throughput overlay
-        if spec.name == "gpu_utilization_and_throughput_over_time":
-            # Prepare GPU data
-            gpu_df = aggregate_gpu_telemetry(data)
+        df_primary = self._prepare_metric_data(y1_metric.name, y1_metric.source, data)
+        df_secondary = self._prepare_metric_data(y2_metric.name, y2_metric.source, data)
 
-            # Prepare throughput data
-            requests_df = prepare_request_timeseries(data)
-            throughput_df = calculate_throughput_events(requests_df)
+        if df_primary.empty:
+            raise ValueError(f"No data available for primary metric: {y1_metric.name}")
 
-            if throughput_df.empty:
-                raise ValueError("No throughput data available")
+        x_col = x_metric.name if x_metric else "timestamp_s"
 
-            return self.plot_generator.create_dual_axis_plot(
-                df_primary=throughput_df,
-                df_secondary=gpu_df,
-                x_col_primary="timestamp_s",
-                x_col_secondary="timestamp_s",
-                y1_metric=y1_metric.name,
-                y2_metric=y2_metric.name,
-                primary_mode="lines",
-                primary_line_shape="hv",
-                primary_fill=None,
-                secondary_mode="lines",
-                secondary_line_shape=None,
-                secondary_fill="tozeroy",
-                active_count_col="active_requests",
-                title=spec.title,
-                x_label="Time (s)",
-                y1_label="Output Tokens/sec",
-                y2_label="GPU Utilization (%)",
-            )
-        else:
-            raise ValueError(f"Unsupported dual-axis plot: {spec.name}")
+        x_label = (
+            self._get_axis_label(x_metric, available_metrics)
+            if x_metric
+            else "Time (s)"
+        )
+        y1_label = self._get_axis_label(y1_metric, available_metrics)
+        y2_label = self._get_axis_label(y2_metric, available_metrics)
+
+        return self.plot_generator.create_dual_axis_plot(
+            df_primary=df_primary,
+            df_secondary=df_secondary,
+            x_col_primary=x_col,
+            x_col_secondary=x_col,
+            y1_metric=y1_metric.name,
+            y2_metric=y2_metric.name,
+            primary_mode=spec.primary_mode,
+            primary_line_shape=spec.primary_line_shape,
+            primary_fill=spec.primary_fill,
+            secondary_mode=spec.secondary_mode,
+            secondary_line_shape=spec.secondary_line_shape,
+            secondary_fill=spec.secondary_fill,
+            active_count_col=spec.supplementary_col,
+            title=spec.title,
+            x_label=x_label,
+            y1_label=y1_label,
+            y2_label=y2_label,
+        )
 
 
 @PlotTypeHandlerFactory.register(PlotType.SCATTER_WITH_PERCENTILES)
@@ -344,7 +344,6 @@ class ScatterWithPercentilesHandler(BaseSingleRunHandler):
         df = self._prepare_data_for_source(x_metric.source, data)
         df_sorted = df.sort_values(x_metric.name).copy()
 
-        # Calculate rolling percentiles
         df_sorted = calculate_rolling_percentiles(df_sorted, y_metric.name)
 
         return self.plot_generator.create_latency_scatter_with_percentiles(

@@ -19,11 +19,17 @@ The `aiperf plot` command generates static PNG visualizations from your profilin
 ## Quick Start
 
 ```bash
-# Compare multiple runs in a sweep directory (outputs to <sweep_directory>/plot_export/)
-aiperf plot <sweep_directory>
+# Analyze a single profiling run (outputs to <single_run_name>/plot_export/)
+aiperf plot <single_run_name>
 
-# Analyze a single profiling run (outputs to <run_directory>/plot_export/)
+# Compare multiple runs in a directory (outputs to <run_directory>/plot_export/)
 aiperf plot <run_directory>
+
+# Compare all runs in multiple directories (outputs to <run_directory>/plot_export/)
+aiperf plot <run_directory1> <run_directory2> ... <run_directoryn>
+
+# Compare multiple specific runs (outputs to <single_run_name1>/plot_export/)
+aiperf plot <single_run_name1> <single_run_name2> ... <single_run_namen>
 
 # Specify custom output location
 aiperf plot <path> --output <output_directory>
@@ -54,10 +60,8 @@ artifacts/sweep_qwen/          # Contains multiple runs
 └── Qwen3-0.6B-concurrency4/
 ```
 
-**Generated plots (5 default):**
-1. **Pareto Curve** - Throughput vs latency trade-offs with Pareto frontier highlighting optimal configurations
+**Generated plots (3 default):**
 2. **TTFT vs Throughput** - Time to first token vs request throughput across concurrency levels
-3. **Output Token Throughput per User** - Per-user output token throughput at different concurrency levels
 4. **Token Throughput per GPU vs Latency** - GPU efficiency vs latency (when GPU telemetry available)
 5. **Token Throughput per GPU vs Interactivity** - GPU efficiency vs TTFT (when GPU telemetry available)
 
@@ -127,33 +131,27 @@ Traditional binning creates artificial spikes, requires arbitrary bin size selec
 
 ![Dispersed Throughput Over Time](../diagrams/plot_examples/single_run/dispersed_throughput_over_time.png)
 
-> [!TIP]
-> Compare dispersed throughput with GPU utilization to identify bottlenecks:
-> - **GPU idle**: Low throughput + low GPU utilization = insufficient load
-> - **GPU saturation**: Flat throughput + high GPU utilization = capacity limit
-> - **Inefficiency**: High GPU utilization + low throughput = poor batching
-
-> [!NOTE]
-> **Technical details**: O(k log k) complexity where k = 2×requests. Much faster than binning's O(n×m) where n = bins, m = requests. Creates step function with exact state transitions and no approximation errors.
-
 ## Command Options
 
 ### Basic Options
 
 ```bash
-# Default behavior: plots from ./artifacts directory
-aiperf plot
+# Analyze a single profiling run (outputs to <single_run_name>/plot_export/)
+aiperf plot <single_run_name>
 
-# Specify one or more paths
-aiperf plot <path>
+# Compare multiple runs in a directory (outputs to <run_directory>/plot_export/)
+aiperf plot <run_directory>
 
-# Compare specific runs from different directories
-aiperf plot <run1_path> <run2_path> <run3_path>
+# Compare all runs in multiple directories (outputs to <run_directory>/plot_export/)
+aiperf plot <run_directory1> <run_directory2> ... <run_directoryn>
 
-# Custom output directory
+# Compare multiple specific runs (outputs to <single_run_name1>/plot_export/)
+aiperf plot <single_run_name1> <single_run_name2> ... <single_run_namen>
+
+# Specify custom output location
 aiperf plot <path> --output <output_directory>
 
-# Dark theme for presentations
+# Use dark theme for presentations
 aiperf plot <path> --theme dark
 ```
 

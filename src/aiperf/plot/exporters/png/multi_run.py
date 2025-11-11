@@ -12,7 +12,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
-# Import handlers to register them with the factory
 import aiperf.plot.handlers.multi_run_handlers  # noqa: F401
 from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
@@ -54,18 +53,14 @@ class MultiRunPNGExporter(BasePNGExporter):
 
         generated_files = []
 
-        # Generate all configured plots
         for spec in MULTI_RUN_PLOT_SPECS:
             try:
-                # Check if we can generate this plot
                 if not self._can_generate_plot(spec, df):
                     self.debug(f"Skipping {spec.name} - required columns not available")
                     continue
 
-                # Create the plot from spec
                 fig = self._create_plot_from_spec(spec, df, available_metrics)
 
-                # Export to PNG
                 path = self.output_dir / spec.filename
                 self._export_figure(fig, path)
                 self.info(f"✓ Generated {spec.filename}")
@@ -89,7 +84,6 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             True if the plot can be generated, False otherwise
         """
-        # Check that all required metric columns exist in the DataFrame
         for metric in spec.metrics:
             if metric.name not in df.columns and metric.name != "concurrency":
                 return False
@@ -109,13 +103,11 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        # Create handler instance from factory
         handler = PlotTypeHandlerFactory.create_instance(
             spec.plot_type,
             plot_generator=self.plot_generator,
         )
 
-        # Use handler to create the plot
         return handler.create_plot(spec, df, available_metrics)
 
     def _runs_to_dataframe(
@@ -124,8 +116,7 @@ class MultiRunPNGExporter(BasePNGExporter):
         """
         Convert list of run data into a DataFrame for plotting.
 
-        Extracts all configuration fields (not just model and concurrency) to support
-        arbitrary swept parameter analysis.
+        Extracts all configuration fields to support arbitrary swept parameter analysis.
 
         Args:
             runs: List of RunData objects
@@ -138,7 +129,6 @@ class MultiRunPNGExporter(BasePNGExporter):
         for run in runs:
             row = {}
 
-            # Extract metadata fields
             row["model"] = run.metadata.model or "Unknown"
             row["concurrency"] = run.metadata.concurrency or 1
             row["request_count"] = run.metadata.request_count
@@ -146,13 +136,11 @@ class MultiRunPNGExporter(BasePNGExporter):
             if run.metadata.endpoint_type:
                 row["endpoint_type"] = run.metadata.endpoint_type
 
-            # Extract and flatten all input_config fields
             if "input_config" in run.aggregated:
                 config = run.aggregated["input_config"]
                 flattened = flatten_config(config)
                 row.update(flattened)
 
-            # Extract metric values
             for key, value in run.aggregated.items():
                 if key in NON_METRIC_KEYS:
                     continue
