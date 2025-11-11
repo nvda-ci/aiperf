@@ -149,6 +149,7 @@ class OutputDefaults:
     # Backward compatibility alias
     PROFILE_EXPORT_GPU_TELEMETRY_JSONL_FILE = GPU_TELEMETRY_EXPORT_JSONL_FILE
     SERVER_METRICS_EXPORT_JSONL_FILE = Path("server_metrics_export.jsonl")
+    SERVER_METRICS_METADATA_JSONL_FILE = Path("server_metrics_metadata.jsonl")
     EXPORT_LEVEL = ExportLevel.RECORDS
     SLICE_DURATION = None
 

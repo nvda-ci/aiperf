@@ -12,12 +12,39 @@ from unittest.mock import patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import EndpointType
+from aiperf.common.enums import EndpointType, ResultsProcessorType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
+from aiperf.common.models.record_models import (
+    ProcessRecordsResult,
+    ProfileResultSummary,
+)
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
 from aiperf.exporters.timeslice_metrics_csv_exporter import TimesliceMetricsCsvExporter
+
+
+def create_mock_process_records_result(timeslice_metric_results):
+    """Helper to create ProcessRecordsResult with timeslice data."""
+    timeslice_result = TimesliceSummaryResult(
+        timeslice_results=timeslice_metric_results
+    )
+
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
+
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.TIMESLICE: timeslice_result},
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 @pytest.fixture
@@ -94,35 +121,26 @@ def sample_timeslice_metric_results():
 @pytest.fixture
 def mock_results_with_timeslices(sample_timeslice_metric_results):
     """Create mock results with timeslice data."""
-
-    class MockResultsWithTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = sample_timeslice_metric_results
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = True
-            self.was_cancelled = False
-            self.error_summary = []
-
-    return MockResultsWithTimeslices()
+    return create_mock_process_records_result(sample_timeslice_metric_results)
 
 
 @pytest.fixture
 def mock_results_without_timeslices():
     """Create mock results without timeslice data."""
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=0,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
 
-    class MockResultsNoTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = None
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = False
-            self.was_cancelled = False
-            self.error_summary = []
-
-    return MockResultsNoTimeslices()
+    return ProcessRecordsResult(
+        summary_results={},  # No timeslice results
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 class TestTimesliceMetricsCsvExporterInitialization:
@@ -271,21 +289,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             for i in range(5)
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -322,21 +332,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             1: [MetricResult(tag="metric", header="Metric", unit="ms", avg=10.0)],
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -383,21 +385,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             ]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -447,21 +441,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             ]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -506,21 +492,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             ]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -551,21 +529,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             0: [MetricResult(tag="metric", header="Metric", unit="ms", avg=45.0)]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -596,21 +566,13 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
             0: [MetricResult(tag="metric", header="Metric", unit="", avg=45.0)]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -739,21 +701,13 @@ class TestTimesliceMetricsCsvExporterIntegration:
             for i in range(10)
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -786,21 +740,13 @@ class TestTimesliceMetricsCsvExporterIntegration:
             0: [],  # Empty metric list
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,

@@ -39,7 +39,10 @@ if TYPE_CHECKING:
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
     from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
-    from aiperf.common.models.server_metrics_models import ServerMetricsRecord
+    from aiperf.common.models.server_metrics_models import (
+        ServerMetricsMetadata,
+        ServerMetricsRecord,
+    )
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
     from aiperf.timing.config import TimingManagerConfig
@@ -536,6 +539,9 @@ class ServerMetricsResultsProcessorProtocol(Protocol):
     This protocol is separate from ResultsProcessorProtocol because server metrics data
     has fundamentally different structure (hierarchical Prometheus snapshots) compared
     to inference metrics (flat key-value pairs).
+
+    Processors implementing this protocol can handle both server metrics records
+    (time-varying data) and metadata messages (static endpoint information).
     """
 
     async def process_server_metrics_record(
@@ -545,6 +551,17 @@ class ServerMetricsResultsProcessorProtocol(Protocol):
 
         Args:
             record: ServerMetricsRecord containing Prometheus metrics snapshot and metadata
+        """
+        ...
+
+    async def process_server_metrics_metadata(
+        self, collector_id: str, metadata: "ServerMetricsMetadata"
+    ) -> None:
+        """Process server metrics metadata for an endpoint.
+
+        Args:
+            collector_id: Unique identifier for the server metrics data collector
+            metadata: ServerMetricsMetadata containing static endpoint information
         """
         ...
 

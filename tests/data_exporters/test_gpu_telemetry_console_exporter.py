@@ -8,10 +8,12 @@ from rich.console import Console
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.enums import EndpointType
-from aiperf.common.models import ProfileResults
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.gpu_telemetry_console_exporter import (
     GPUTelemetryConsoleExporter,
+)
+from tests.data_exporters.conftest import (
+    create_mock_process_records_result_from_metrics,
 )
 
 
@@ -36,12 +38,7 @@ def mock_user_config(mock_endpoint_config):
 @pytest.fixture
 def mock_profile_results():
     """Create mock profile results."""
-    return ProfileResults(
-        records=[],
-        start_ns=0,
-        end_ns=0,
-        completed=0,
-    )
+    return create_mock_process_records_result_from_metrics([])
 
 
 class TestGPUTelemetryConsoleExporter:

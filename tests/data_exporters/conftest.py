@@ -6,7 +6,16 @@
 import pytest
 
 from aiperf.common.config import ServiceConfig
+from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import (
+    MetricSummaryResult,
+    TimesliceSummaryResult,
+)
+from aiperf.common.models.record_models import (
+    ProcessRecordsResult,
+    ProfileResultSummary,
+)
 from aiperf.common.models.telemetry_models import (
     TelemetryHierarchy,
     TelemetryMetrics,
@@ -160,12 +169,34 @@ def empty_telemetry_results():
     )
 
 
+def create_mock_process_records_result_from_metrics(
+    metric_results: list[MetricResult],
+) -> ProcessRecordsResult:
+    """Helper to create ProcessRecordsResult from a list of MetricResult objects."""
+    metric_summary = MetricSummaryResult(results=metric_results)
+
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=0,
+        end_ns=0,
+        was_cancelled=False,
+        error_summary=[],
+    )
+
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.METRIC_RESULTS: metric_summary},
+        profile_summary=profile_summary,
+        errors=[],
+    )
+
+
 def create_exporter_config(
     profile_results, user_config, telemetry_results=None, verbose=True
 ):
     """Helper to create ExporterConfig with common defaults."""
     return ExporterConfig(
-        results=profile_results,
+        process_records_result=profile_results,
         user_config=user_config,
         service_config=ServiceConfig(verbose=verbose),
         telemetry_results=telemetry_results,
@@ -234,32 +265,40 @@ def sample_timeslice_metric_results():
 @pytest.fixture
 def mock_results_with_timeslices(sample_timeslice_metric_results):
     """Create mock results with timeslice data."""
+    timeslice_result = TimesliceSummaryResult(
+        timeslice_results=sample_timeslice_metric_results
+    )
 
-    class MockResultsWithTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = sample_timeslice_metric_results
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = True
-            self.was_cancelled = False
-            self.error_summary = []
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
 
-    return MockResultsWithTimeslices()
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.TIMESLICE: timeslice_result},
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 @pytest.fixture
 def mock_results_without_timeslices():
     """Create mock results without timeslice data."""
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=0,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
 
-    class MockResultsNoTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = None
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = False
-            self.was_cancelled = False
-            self.error_summary = []
-
-    return MockResultsNoTimeslices()
+    return ProcessRecordsResult(
+        summary_results={},  # No timeslice results
+        profile_summary=profile_summary,
+        errors=[],
+    )

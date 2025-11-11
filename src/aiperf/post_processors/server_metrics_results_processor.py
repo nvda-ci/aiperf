@@ -10,6 +10,7 @@ from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.models.processor_summary_results import ServerMetricsSummaryResult
 from aiperf.common.models.server_metrics_models import (
     ServerMetricsHierarchy,
+    ServerMetricsMetadata,
     ServerMetricsRecord,
 )
 from aiperf.common.protocols import (
@@ -33,6 +34,7 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
         super().__init__(user_config=user_config, **kwargs)
         self._server_metrics_hierarchy = ServerMetricsHierarchy()
         self._discovered_metrics: set[tuple[str, str, frozenset]] = set()
+        self._metadata_by_endpoint: dict[str, ServerMetricsMetadata] = {}
 
     def get_server_metrics_hierarchy(self) -> ServerMetricsHierarchy:
         """Get the accumulated server metrics hierarchy."""
@@ -45,7 +47,50 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
             record: ServerMetricsRecord containing Prometheus metrics snapshot and metadata
         """
         self._server_metrics_hierarchy.add_record(record)
+
+        # If we have stored metadata for this endpoint (with metric_schemas),
+        # apply it to the hierarchy to ensure the complete metadata is available
+        endpoint_url = record.endpoint_url
+        if (
+            endpoint_url in self._metadata_by_endpoint
+            and endpoint_url in self._server_metrics_hierarchy.endpoints
+        ):
+            stored_metadata = self._metadata_by_endpoint[endpoint_url]
+            # Only update if the stored metadata has metric_schemas
+            if stored_metadata.metric_schemas:
+                self._server_metrics_hierarchy.endpoints[
+                    endpoint_url
+                ].metadata = stored_metadata
+
         self._discover_metrics_from_record(record)
+
+    async def process_server_metrics_metadata(
+        self, collector_id: str, metadata: ServerMetricsMetadata
+    ) -> None:
+        """Process server metrics metadata and update hierarchy.
+
+        Stores the metadata (including metric_schemas) and applies it to the
+        hierarchy if endpoint data already exists.
+
+        Args:
+            collector_id: Unique identifier for the server metrics data collector
+            metadata: ServerMetricsMetadata containing static endpoint information and metric_schemas
+        """
+        endpoint_url = metadata.endpoint_url
+        self._metadata_by_endpoint[endpoint_url] = metadata
+
+        # If endpoint already exists in hierarchy, update its metadata with the full metadata
+        # (including metric_schemas that were sent separately)
+        if endpoint_url in self._server_metrics_hierarchy.endpoints:
+            self._server_metrics_hierarchy.endpoints[endpoint_url].metadata = metadata
+            self.debug(
+                f"Updated metadata for endpoint {endpoint_url} "
+                f"with {len(metadata.metric_schemas)} metric schemas"
+            )
+        else:
+            self.debug(
+                f"Stored metadata for endpoint {endpoint_url} (will apply when first record arrives)"
+            )
 
     def _discover_metrics_from_record(self, record: ServerMetricsRecord) -> None:
         """Discover metrics from a record for auto-aggregation.

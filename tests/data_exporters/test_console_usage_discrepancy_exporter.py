@@ -9,13 +9,17 @@ from rich.console import Console
 
 from aiperf.common.config import EndpointConfig, UserConfig
 from aiperf.common.enums import EndpointType, GenericMetricUnit, MetricTimeUnit
-from aiperf.common.models import MetricResult, ProfileResults
+from aiperf.common.models import MetricResult
+from aiperf.common.models.record_models import ProcessRecordsResult
 from aiperf.exporters.console_usage_discrepancy_exporter import (
     ConsoleUsageDiscrepancyExporter,
 )
 from aiperf.metrics.types.request_count_metric import RequestCountMetric
 from aiperf.metrics.types.usage_diff_metrics import UsageDiscrepancyCountMetric
-from tests.data_exporters.conftest import create_exporter_config
+from tests.data_exporters.conftest import (
+    create_exporter_config,
+    create_mock_process_records_result_from_metrics,
+)
 
 THRESHOLD_PATCH = (
     "aiperf.common.environment.Environment.METRICS.USAGE_PCT_DIFF_THRESHOLD"
@@ -38,8 +42,8 @@ class TestConsoleUsageDiscrepancyExporter:
 
     def _create_profile_results(
         self, count: int, total_records: int = 100, include_discrepancy: bool = True
-    ) -> ProfileResults:
-        """Helper to create a ProfileResults with optional discrepancy count metric."""
+    ) -> ProcessRecordsResult:
+        """Helper to create a ProcessRecordsResult with optional discrepancy count metric."""
         records = []
         if include_discrepancy:
             records.append(
@@ -75,12 +79,7 @@ class TestConsoleUsageDiscrepancyExporter:
                 ),
             ]
         )
-        return ProfileResults(
-            records=records,
-            completed=total_records,
-            start_ns=1000000000,
-            end_ns=2000000000,
-        )
+        return create_mock_process_records_result_from_metrics(records)
 
     async def _get_export_output(
         self, exporter: ConsoleUsageDiscrepancyExporter

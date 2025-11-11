@@ -27,6 +27,9 @@ from aiperf.post_processors.record_export_results_processor import (
 from aiperf.post_processors.server_metrics_export_results_processor import (
     ServerMetricsExportResultsProcessor,
 )
+from aiperf.post_processors.server_metrics_metadata_export_results_processor import (
+    ServerMetricsMetadataExportResultsProcessor,
+)
 from aiperf.post_processors.server_metrics_results_processor import (
     ServerMetricsResultsProcessor,
 )
@@ -48,6 +51,7 @@ __all__ = [
     "RawRecordWriterProcessor",
     "RecordExportResultsProcessor",
     "ServerMetricsExportResultsProcessor",
+    "ServerMetricsMetadataExportResultsProcessor",
     "ServerMetricsResultsProcessor",
     "TelemetryExportResultsProcessor",
     "TelemetryResultsProcessor",

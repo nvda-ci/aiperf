@@ -51,5 +51,9 @@ class ResultsProcessorType(CaseInsensitiveStrEnum):
     """Processor that exports per-record server metrics data to JSONL files.
     Writes each ServerMetricsRecord as it arrives from the ServerMetricsManager."""
 
+    SERVER_METRICS_METADATA_EXPORT = "server_metrics_metadata_export"
+    """Processor that exports server metrics metadata to JSONL files.
+    Writes static endpoint metadata once per collector when it starts collecting."""
+
     TIMESLICE = "timeslice"
     """Processor that processes metric results for each user-configurable time-slice."""

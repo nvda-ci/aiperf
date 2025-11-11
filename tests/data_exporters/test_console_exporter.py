@@ -7,7 +7,7 @@ from rich.console import Console
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.constants import NANOS_PER_MILLIS
 from aiperf.common.enums import EndpointType
-from aiperf.common.models import MetricResult, ProfileResults
+from aiperf.common.models import MetricResult
 from aiperf.exporters import ConsoleMetricsExporter, ExporterConfig, to_display_unit
 from aiperf.metrics.metric_registry import MetricRegistry
 from aiperf.metrics.types.benchmark_duration_metric import BenchmarkDurationMetric
@@ -17,6 +17,9 @@ from aiperf.metrics.types.inter_token_latency_metric import InterTokenLatencyMet
 from aiperf.metrics.types.output_token_count import OutputTokenCountMetric
 from aiperf.metrics.types.request_latency_metric import RequestLatencyMetric
 from aiperf.metrics.types.ttft_metric import TTFTMetric
+from tests.data_exporters.conftest import (
+    create_mock_process_records_result_from_metrics,
+)
 
 
 @pytest.fixture
@@ -77,12 +80,7 @@ def sample_records():
 def mock_exporter_config(sample_records, mock_endpoint_config):
     input_config = UserConfig(endpoint=mock_endpoint_config)
     return ExporterConfig(
-        results=ProfileResults(
-            records=sample_records,
-            start_ns=0,
-            end_ns=0,
-            completed=0,
-        ),
+        results=create_mock_process_records_result_from_metrics(sample_records),
         user_config=input_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
@@ -129,12 +127,7 @@ class TestConsoleExporter:
         user_config = UserConfig(endpoint=mock_endpoint_config)
         service_config = ServiceConfig()
         config = ExporterConfig(
-            results=ProfileResults(
-                records=[],
-                start_ns=0,
-                end_ns=0,
-                completed=0,
-            ),
+            results=create_mock_process_records_result_from_metrics([]),
             user_config=user_config,
             service_config=service_config,
             telemetry_results=None,

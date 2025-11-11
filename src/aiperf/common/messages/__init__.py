@@ -70,6 +70,7 @@ from aiperf.common.messages.progress_messages import (
 from aiperf.common.messages.server_metrics_messages import (
     ProcessServerMetricsResultMessage,
     RealtimeServerMetricsMessage,
+    ServerMetricsMetadataMessage,
     ServerMetricsRecordsMessage,
     ServerMetricsStatusMessage,
 )
@@ -143,6 +144,7 @@ __all__ = [
     "RegisterServiceCommand",
     "RegistrationMessage",
     "RequiresRequestNSMixin",
+    "ServerMetricsMetadataMessage",
     "ServerMetricsRecordsMessage",
     "ServerMetricsStatusMessage",
     "ShutdownCommand",

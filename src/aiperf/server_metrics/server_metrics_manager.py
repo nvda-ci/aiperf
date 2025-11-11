@@ -20,6 +20,7 @@ from aiperf.common.messages import (
     ProfileConfigureCommand,
 )
 from aiperf.common.messages.server_metrics_messages import (
+    ServerMetricsMetadataMessage,
     ServerMetricsRecordsMessage,
     ServerMetricsStatusMessage,
 )
@@ -28,7 +29,11 @@ from aiperf.common.metric_utils import (
     normalize_metrics_endpoint_url,
 )
 from aiperf.common.models import ErrorDetails
-from aiperf.common.models.server_metrics_models import ServerMetricsRecord
+from aiperf.common.models.server_metrics_models import (
+    MetricSchema,
+    ServerMetricsMetadata,
+    ServerMetricsRecord,
+)
 from aiperf.common.protocols import (
     PushClientProtocol,
     ServiceProtocol,
@@ -80,6 +85,9 @@ class ServerMetricsManager(BaseComponentService):
 
         self._collectors: dict[str, ServerMetricsDataCollector] = {}
         self._collector_id_to_url: dict[str, str] = {}
+        self._metadata_sent: set[str] = (
+            set()
+        )  # Track collectors that have sent metadata
 
         # Build list of endpoints to check: hostname-aware defaults
         # Extract inference endpoint port
@@ -135,6 +143,7 @@ class ServerMetricsManager(BaseComponentService):
         """
         self._collectors.clear()
         self._collector_id_to_url.clear()
+        self._metadata_sent.clear()
 
         for endpoint_url in self._server_metrics_endpoints:
             self.debug(f"Server Metrics: Testing reachability of {endpoint_url}")
@@ -271,7 +280,7 @@ class ServerMetricsManager(BaseComponentService):
     ) -> None:
         """Async callback for receiving server metrics records from collectors.
 
-        Sends ServerMetricsRecordsMessage to RecordsManager via message system.
+        Sends metadata ONCE per collector, then sends slim records without metadata.
         Empty record lists are ignored.
 
         Args:
@@ -282,12 +291,18 @@ class ServerMetricsManager(BaseComponentService):
             return
 
         try:
-            endpoint_url = self._collector_id_to_url.get(collector_id, "")
+            # Send metadata once per collector (on first records batch)
+            if collector_id not in self._metadata_sent:
+                await self._send_metadata_for_collector(records[0], collector_id)
+                self._metadata_sent.add(collector_id)
+
+            # Convert to slim records (without metadata)
+            slim_records = [record.to_slim() for record in records]
+
             message = ServerMetricsRecordsMessage(
                 service_id=self.service_id,
                 collector_id=collector_id,
-                endpoint_url=endpoint_url,
-                records=records,
+                records=slim_records,
                 error=None,
             )
 
@@ -297,11 +312,9 @@ class ServerMetricsManager(BaseComponentService):
             self.error(f"Failed to send server metrics records: {e}")
             # Send error message to RecordsManager to track the failure
             try:
-                endpoint_url = self._collector_id_to_url.get(collector_id, "")
                 error_message = ServerMetricsRecordsMessage(
                     service_id=self.service_id,
                     collector_id=collector_id,
-                    endpoint_url=endpoint_url,
                     records=[],
                     error=ErrorDetails.from_exception(e),
                 )
@@ -310,6 +323,77 @@ class ServerMetricsManager(BaseComponentService):
                 self.error(
                     f"Failed to send error message after record send failure: {nested_error}"
                 )
+
+    async def _send_metadata_for_collector(
+        self, first_record: ServerMetricsRecord, collector_id: str
+    ) -> None:
+        """Send metadata message for a collector (called once per collector).
+
+        Extracts metric schemas (type and help) from the first record to avoid
+        sending them in every subsequent record.
+
+        Args:
+            first_record: First record from collector containing metadata and schemas
+            collector_id: Unique identifier of the collector
+        """
+        try:
+            endpoint_url = first_record.endpoint_url
+            endpoint_display = endpoint_url.replace("http://", "").replace(
+                "https://", ""
+            )
+            if endpoint_display.endswith("/metrics"):
+                endpoint_display = endpoint_display[: -len("/metrics")]
+
+            # Extract metric schemas (type, help, bucket/quantile labels) from first record
+            metric_schemas = {}
+            for metric_name, family in first_record.metrics.items():
+                bucket_labels = None
+                quantile_labels = None
+
+                # Extract bucket/quantile labels from first sample (if any)
+                if family.samples:
+                    first_sample = family.samples[0]
+                    if first_sample.histogram:
+                        # Extract and sort bucket labels (le values)
+                        bucket_labels = sorted(
+                            first_sample.histogram.buckets.keys(),
+                            key=lambda x: float(x),
+                        )
+                    if first_sample.summary:
+                        # Extract and sort quantile labels
+                        quantile_labels = sorted(
+                            first_sample.summary.quantiles.keys(),
+                            key=lambda x: float(x),
+                        )
+
+                metric_schemas[metric_name] = MetricSchema(
+                    type=family.type,
+                    help=family.help,
+                    bucket_labels=bucket_labels,
+                    quantile_labels=quantile_labels,
+                )
+
+            metadata = ServerMetricsMetadata(
+                endpoint_url=endpoint_url,
+                endpoint_display=endpoint_display,
+                kubernetes_pod_info=first_record.kubernetes_pod_info,
+                metric_schemas=metric_schemas,
+            )
+
+            metadata_message = ServerMetricsMetadataMessage(
+                service_id=self.service_id,
+                collector_id=collector_id,
+                metadata=metadata,
+            )
+
+            await self.records_push_client.push(metadata_message)
+            self.debug(
+                f"Sent metadata for collector {collector_id} ({endpoint_url}) "
+                f"with {len(metric_schemas)} metric schemas"
+            )
+
+        except Exception as e:
+            self.error(f"Failed to send metadata for collector {collector_id}: {e}")
 
     async def _on_server_metrics_error(
         self, error: ErrorDetails, collector_id: str
@@ -324,11 +408,9 @@ class ServerMetricsManager(BaseComponentService):
             collector_id: Unique identifier of the collector that encountered the error
         """
         try:
-            endpoint_url = self._collector_id_to_url.get(collector_id, "")
             error_message = ServerMetricsRecordsMessage(
                 service_id=self.service_id,
                 collector_id=collector_id,
-                endpoint_url=endpoint_url,
                 records=[],
                 error=error,
             )

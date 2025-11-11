@@ -78,6 +78,9 @@ class OutputConfig(BaseConfig):
     _server_metrics_export_jsonl_file: Path = (
         OutputDefaults.SERVER_METRICS_EXPORT_JSONL_FILE
     )
+    _server_metrics_metadata_jsonl_file: Path = (
+        OutputDefaults.SERVER_METRICS_METADATA_JSONL_FILE
+    )
 
     @model_validator(mode="after")
     def set_export_filenames(self) -> Self:
@@ -112,6 +115,9 @@ class OutputConfig(BaseConfig):
         self._gpu_telemetry_export_jsonl_file = Path(f"{base_str}_gpu_telemetry.jsonl")
         self._server_metrics_export_jsonl_file = Path(
             f"{base_str}_server_metrics.jsonl"
+        )
+        self._server_metrics_metadata_jsonl_file = Path(
+            f"{base_str}_server_metrics_metadata.jsonl"
         )
 
         return self
@@ -158,3 +164,7 @@ class OutputConfig(BaseConfig):
     @property
     def server_metrics_export_jsonl_file(self) -> Path:
         return self.artifact_directory / self._server_metrics_export_jsonl_file
+
+    @property
+    def server_metrics_metadata_jsonl_file(self) -> Path:
+        return self.artifact_directory / self._server_metrics_metadata_jsonl_file

@@ -11,28 +11,43 @@ from aiperf.common.models import (
 )
 from aiperf.common.models.server_metrics_models import (
     ProcessServerMetricsResult,
-    ServerMetricsRecord,
+    ServerMetricsMetadata,
+    ServerMetricsSlimRecord,
 )
 from aiperf.common.types import MessageTypeT
 
 
+class ServerMetricsMetadataMessage(BaseServiceMessage):
+    """Message from the server metrics manager to the records manager containing static metadata.
+
+    This message is sent ONCE per collector when it starts collecting, to avoid
+    sending redundant metadata with every batch of records.
+    """
+
+    message_type: MessageTypeT = MessageType.SERVER_METRICS_METADATA
+
+    collector_id: str = Field(description="The ID of the server metrics data collector")
+    metadata: ServerMetricsMetadata = Field(
+        description="Static metadata for the collector's endpoint"
+    )
+
+
 class ServerMetricsRecordsMessage(BaseServiceMessage):
     """Message from the server metrics data collector to the records manager to notify it
-    of the server metrics records for a batch of server samples."""
+    of the server metrics records for a batch of server samples.
+
+    Uses slim records (without redundant metadata) to reduce message size.
+    Metadata is sent separately via ServerMetricsMetadataMessage.
+    """
 
     message_type: MessageTypeT = MessageType.SERVER_METRICS_RECORDS
 
     collector_id: str = Field(
-        ...,
-        description="The ID of the server metrics data collector that collected the records.",
+        description="The ID of the server metrics data collector that collected the records"
     )
-    endpoint_url: str = Field(
-        ...,
-        description="The Prometheus endpoint URL that was contacted (e.g., 'http://localhost:8081/metrics')",
-    )
-    records: list[ServerMetricsRecord] = Field(
+    records: list[ServerMetricsSlimRecord] = Field(
         default_factory=list,
-        description="The server metrics records collected from Prometheus endpoint",
+        description="The slim server metrics records (without redundant metadata)",
     )
     error: ErrorDetails | None = Field(
         default=None,

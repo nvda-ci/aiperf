@@ -8,8 +8,11 @@ import pytest
 from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, UserConfig
 from aiperf.common.enums import DataExporterType, EndpointType
 from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
-from aiperf.common.models import MetricResult, ProfileResults
+from aiperf.common.models import MetricResult
 from aiperf.exporters.exporter_manager import ExporterManager
+from tests.data_exporters.conftest import (
+    create_mock_process_records_result_from_metrics,
+)
 
 
 @pytest.fixture
@@ -66,14 +69,7 @@ class TestExporterManager:
             mock_exporter_classes,
         ):
             manager = ExporterManager(
-                results=ProfileResults(
-                    records=sample_records,
-                    start_ns=0,
-                    end_ns=0,
-                    completed=0,
-                    was_cancelled=False,
-                    error_summary=[],
-                ),
+                results=create_mock_process_records_result_from_metrics(sample_records),
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -112,14 +108,7 @@ class TestExporterManager:
             mock_exporter_classes,
         ):
             manager = ExporterManager(
-                results=ProfileResults(
-                    records=sample_records,
-                    start_ns=0,
-                    end_ns=0,
-                    completed=0,
-                    was_cancelled=False,
-                    error_summary=[],
-                ),
+                results=create_mock_process_records_result_from_metrics(sample_records),
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,

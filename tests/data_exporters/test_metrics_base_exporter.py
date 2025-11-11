@@ -10,8 +10,13 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import EndpointType
+from aiperf.common.enums import EndpointType, ResultsProcessorType
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import MetricSummaryResult
+from aiperf.common.models.record_models import (
+    ProcessRecordsResult,
+    ProfileResultSummary,
+)
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
 from aiperf.metrics.metric_registry import MetricRegistry
@@ -43,24 +48,28 @@ def mock_user_config():
 @pytest.fixture
 def mock_results():
     """Create mock results with basic metrics."""
-
-    class MockResults:
-        def __init__(self):
-            self.records = [
-                MetricResult(
-                    tag="time_to_first_token",
-                    header="Time to First Token",
-                    unit="ms",
-                    avg=45.2,
-                )
-            ]
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = True
-            self.was_cancelled = False
-            self.error_summary = []
-
-    return MockResults()
+    records = [
+        MetricResult(
+            tag="time_to_first_token",
+            header="Time to First Token",
+            unit="ms",
+            avg=45.2,
+        )
+    ]
+    metric_summary = MetricSummaryResult(results=records)
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=0,
+        end_ns=0,
+        was_cancelled=False,
+        error_summary=[],
+    )
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.METRIC_RESULTS: metric_summary},
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 @pytest.fixture
@@ -92,7 +101,7 @@ class TestMetricsBaseExporterInitialization:
 
             exporter = ConcreteExporter(config)
 
-            assert exporter._results is mock_results
+            assert exporter._process_records_result is mock_results
             assert exporter._telemetry_results is None
             assert exporter._user_config is mock_user_config
             assert exporter._metric_registry is MetricRegistry

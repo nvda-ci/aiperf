@@ -10,7 +10,13 @@ from unittest.mock import Mock
 import pytest
 
 from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import CreditPhase, EndpointType, ExportLevel, MessageType
+from aiperf.common.enums import (
+    CreditPhase,
+    EndpointType,
+    ExportLevel,
+    MessageType,
+    ResultsProcessorType,
+)
 from aiperf.common.enums.metric_enums import MetricValueTypeT
 from aiperf.common.messages import MetricRecordsMessage
 from aiperf.common.mixins import AIPerfLifecycleMixin
@@ -21,9 +27,11 @@ from aiperf.common.models import (
     RequestRecord,
     TextResponse,
 )
+from aiperf.common.models.processor_summary_results import MetricSummaryResult
 from aiperf.common.models.record_models import (
     MetricRecordMetadata,
-    ProfileResults,
+    ProcessRecordsResult,
+    ProfileResultSummary,
 )
 from aiperf.common.types import MetricTagT
 from aiperf.exporters.exporter_config import ExporterConfig
@@ -208,15 +216,24 @@ def error_parsed_record() -> ParsedResponseRecord:
 
 def create_exporter_config(user_config: UserConfig) -> ExporterConfig:
     """Helper to create standard ExporterConfig for aggregator tests."""
+    metric_summary = MetricSummaryResult(results=[])
+    profile_summary = ProfileResultSummary(
+        total_expected=0,
+        completed=0,
+        start_ns=DEFAULT_START_TIME_NS,
+        end_ns=DEFAULT_LAST_RESPONSE_NS,
+        was_cancelled=False,
+        error_summary=[],
+    )
+    results = ProcessRecordsResult(
+        summary_results={ResultsProcessorType.METRIC_RESULTS: metric_summary},
+        profile_summary=profile_summary,
+        errors=[],
+    )
     return ExporterConfig(
         user_config=user_config,
         service_config=ServiceConfig(),
-        results=ProfileResults(
-            records=None,
-            completed=0,
-            start_ns=DEFAULT_START_TIME_NS,
-            end_ns=DEFAULT_LAST_RESPONSE_NS,
-        ),
+        results=results,
         telemetry_results=None,
     )
 

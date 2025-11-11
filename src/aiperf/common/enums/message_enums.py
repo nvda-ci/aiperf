@@ -48,6 +48,7 @@ class MessageType(CaseInsensitiveStrEnum):
     TELEMETRY_RECORDS = "telemetry_records"
     TELEMETRY_STATUS = "telemetry_status"
     SERVER_METRICS_RECORDS = "server_metrics_records"
+    SERVER_METRICS_METADATA = "server_metrics_metadata"
     SERVER_METRICS_STATUS = "server_metrics_status"
     PROCESS_SERVER_METRICS_RESULT = "process_server_metrics_result"
     REALTIME_SERVER_METRICS = "realtime_server_metrics"

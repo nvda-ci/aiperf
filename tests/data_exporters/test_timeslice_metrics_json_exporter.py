@@ -11,15 +11,42 @@ from unittest.mock import patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import EndpointType
+from aiperf.common.enums import EndpointType, ResultsProcessorType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import MetricResult
 from aiperf.common.models.export_models import TimesliceCollectionExportData
+from aiperf.common.models.processor_summary_results import TimesliceSummaryResult
+from aiperf.common.models.record_models import (
+    ProcessRecordsResult,
+    ProfileResultSummary,
+)
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_json_exporter import MetricsJsonExporter
 from aiperf.exporters.timeslice_metrics_json_exporter import (
     TimesliceMetricsJsonExporter,
 )
+
+
+def create_mock_process_records_result(timeslice_metric_results):
+    """Helper to create ProcessRecordsResult with timeslice data."""
+    timeslice_result = TimesliceSummaryResult(
+        timeslice_results=timeslice_metric_results
+    )
+
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
+
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.TIMESLICE: timeslice_result},
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 @pytest.fixture
@@ -96,35 +123,43 @@ def sample_timeslice_metric_results():
 @pytest.fixture
 def mock_results_with_timeslices(sample_timeslice_metric_results):
     """Create mock results with timeslice data."""
+    timeslice_result = TimesliceSummaryResult(
+        timeslice_results=sample_timeslice_metric_results
+    )
 
-    class MockResultsWithTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = sample_timeslice_metric_results
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = True
-            self.was_cancelled = False
-            self.error_summary = []
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=100,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
 
-    return MockResultsWithTimeslices()
+    return ProcessRecordsResult(
+        summary_results={ResultsProcessorType.TIMESLICE: timeslice_result},
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 @pytest.fixture
 def mock_results_without_timeslices():
     """Create mock results without timeslice data."""
+    profile_summary = ProfileResultSummary(
+        total_expected=100,
+        completed=0,
+        start_ns=1000000000,
+        end_ns=2000000000,
+        was_cancelled=False,
+        error_summary=[],
+    )
 
-    class MockResultsNoTimeslices:
-        def __init__(self):
-            self.timeslice_metric_results = None
-            self.records = []
-            self.start_ns = None
-            self.end_ns = None
-            self.has_results = False
-            self.was_cancelled = False
-            self.error_summary = []
-
-    return MockResultsNoTimeslices()
+    return ProcessRecordsResult(
+        summary_results={},  # No timeslice results
+        profile_summary=profile_summary,
+        errors=[],
+    )
 
 
 class TestTimesliceMetricsJsonExporterInitialization:
@@ -259,21 +294,13 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             for i in range(3)
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -316,21 +343,13 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -370,21 +389,13 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ]
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -424,21 +435,13 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ],
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,
@@ -597,21 +600,13 @@ class TestTimesliceMetricsJsonExporterIntegration:
             for i in range(50)
         }
 
-        class MockResults:
-            def __init__(self):
-                self.timeslice_metric_results = timeslice_results
-                self.records = []
-                self.start_ns = None
-                self.end_ns = None
-                self.has_results = True
-                self.was_cancelled = False
-                self.error_summary = []
+        mock_results = create_mock_process_records_result(timeslice_results)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
 
             config = ExporterConfig(
-                results=MockResults(),
+                results=mock_results,
                 user_config=mock_user_config,
                 service_config=ServiceConfig(),
                 telemetry_results=None,

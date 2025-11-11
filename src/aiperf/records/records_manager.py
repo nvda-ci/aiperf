@@ -43,7 +43,10 @@ from aiperf.common.messages import (
 from aiperf.common.messages.command_messages import RealtimeMetricsCommand
 from aiperf.common.messages.credit_messages import CreditPhaseSendingCompleteMessage
 from aiperf.common.messages.inference_messages import MetricRecordsData
-from aiperf.common.messages.server_metrics_messages import ServerMetricsRecordsMessage
+from aiperf.common.messages.server_metrics_messages import (
+    ServerMetricsMetadataMessage,
+    ServerMetricsRecordsMessage,
+)
 from aiperf.common.mixins import PullClientMixin
 from aiperf.common.models import (
     ErrorDetails,
@@ -61,6 +64,13 @@ from aiperf.common.models.processor_summary_results import (
     TimesliceSummaryResult,
 )
 from aiperf.common.models.record_models import MetricResult
+from aiperf.common.models.server_metrics_models import (
+    HistogramData,
+    MetricFamily,
+    MetricSample,
+    ServerMetricsMetadata,
+    SummaryData,
+)
 from aiperf.common.models.telemetry_models import TelemetryRecord
 from aiperf.common.protocols import (
     ResultsProcessorProtocol,
@@ -177,6 +187,9 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._metric_state = MetricTrackingState()
         self._telemetry_enable_event = asyncio.Event()
         self._server_metrics_enable_event = asyncio.Event()
+
+        # Store metadata per collector to reconstruct full records from slim records
+        self._server_metrics_metadata: dict[str, ServerMetricsMetadata] = {}
 
         self._metric_results_processors: list[ResultsProcessorProtocol] = []
         self._telemetry_results_processors: list[TelemetryResultsProcessorProtocol] = []
@@ -312,20 +325,122 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 async with self._telemetry_state.error_counts_lock:
                     self._telemetry_state.error_counts[message.error] += 1
 
+    @on_pull_message(MessageType.SERVER_METRICS_METADATA)
+    async def _on_server_metrics_metadata(
+        self, message: ServerMetricsMetadataMessage
+    ) -> None:
+        """Handle server metrics metadata message from Server Metrics Manager.
+
+        Stores metadata for a collector so it can reconstruct full records from slim records.
+        Forwards metadata to all server metrics results processors for processing.
+        This message is sent ONCE per collector when it starts collecting.
+
+        Args:
+            message: Metadata message containing endpoint info for a collector
+        """
+        self._server_metrics_metadata[message.collector_id] = message.metadata
+        self.debug(
+            f"Stored metadata for collector {message.collector_id} "
+            f"({message.metadata.endpoint_url})"
+        )
+
+        # Forward metadata to all server metrics results processors
+        await self._send_server_metrics_metadata_to_results_processors(
+            message.collector_id, message.metadata
+        )
+
     @on_pull_message(MessageType.SERVER_METRICS_RECORDS)
     async def _on_server_metrics_records(
         self, message: ServerMetricsRecordsMessage
     ) -> None:
         """Handle server metrics records message from Server Metrics Manager.
-        The RecordsManager acts as the central hub for all record processing,
-        including server metrics from Prometheus endpoints.
+
+        Reconstructs full records from slim records using stored metadata,
+        then forwards to results processors.
 
         Args:
-            message: Batch of server metrics records from a Prometheus collector
+            message: Batch of slim server metrics records from a Prometheus collector
         """
         if message.valid:
-            for record in message.records:
-                await self._send_server_metrics_to_results_processors(record)
+            # Get metadata for this collector
+            metadata = self._server_metrics_metadata.get(message.collector_id)
+            if not metadata:
+                self.warning(
+                    f"Received records from collector {message.collector_id} "
+                    f"but no metadata found. Skipping records."
+                )
+                return
+
+            # Reconstruct full records from slim records + metadata schemas
+            for slim_record in message.records:
+                # Reconstruct full MetricFamily objects by combining slim samples with schemas
+                full_metrics = {}
+                for metric_name, slim_samples in slim_record.metrics.items():
+                    schema = metadata.metric_schemas.get(metric_name)
+                    if not schema:
+                        # If schema not found, log warning and skip metric
+                        self.warning(
+                            f"No schema found for metric {metric_name} from collector {message.collector_id}"
+                        )
+                        continue
+
+                    # Convert slim samples to full samples
+                    full_samples = []
+                    for slim_sample in slim_samples:
+                        # Reconstruct histogram data from array format + schema bucket labels
+                        full_histogram = None
+                        if slim_sample.histogram and schema.bucket_labels:
+                            buckets = dict(
+                                zip(
+                                    schema.bucket_labels,
+                                    slim_sample.histogram,
+                                    strict=True,
+                                )
+                            )
+                            full_histogram = HistogramData(
+                                buckets=buckets,
+                                sum=slim_sample.sum,
+                                count=slim_sample.count,
+                            )
+
+                        # Reconstruct summary data from array format + schema quantile labels
+                        full_summary = None
+                        if slim_sample.summary and schema.quantile_labels:
+                            quantiles = dict(
+                                zip(
+                                    schema.quantile_labels,
+                                    slim_sample.summary,
+                                    strict=True,
+                                )
+                            )
+                            full_summary = SummaryData(
+                                quantiles=quantiles,
+                                sum=slim_sample.sum,
+                                count=slim_sample.count,
+                            )
+
+                        full_samples.append(
+                            MetricSample(
+                                labels=slim_sample.labels,
+                                value=slim_sample.value,
+                                histogram=full_histogram,
+                                summary=full_summary,
+                            )
+                        )
+
+                    full_metrics[metric_name] = MetricFamily(
+                        type=schema.type,
+                        help=schema.help,
+                        samples=full_samples,
+                    )
+
+                full_record = ServerMetricsRecord(
+                    timestamp_ns=slim_record.timestamp_ns,
+                    endpoint_url=metadata.endpoint_url,
+                    metrics=full_metrics,
+                    kubernetes_pod_info=metadata.kubernetes_pod_info,
+                )
+                await self._send_server_metrics_to_results_processors(full_record)
         else:
             if message.error:
                 async with self._server_metrics_state.error_counts_lock:
@@ -472,6 +587,30 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         for error in errors:
             if isinstance(error, BaseException):
                 self.exception(f"Failed to process server metrics record: {error!r}")
+                async with self._server_metrics_state.error_counts_lock:
+                    self._server_metrics_state.error_counts[
+                        ErrorDetails.from_exception(error)
+                    ] += 1
+
+    async def _send_server_metrics_metadata_to_results_processors(
+        self, collector_id: str, metadata: "ServerMetricsMetadata"
+    ) -> None:
+        """Send server metrics metadata to server metrics results processors.
+
+        Args:
+            collector_id: Unique identifier for the server metrics data collector
+            metadata: ServerMetricsMetadata containing static endpoint information
+        """
+        errors = await asyncio.gather(
+            *[
+                processor.process_server_metrics_metadata(collector_id, metadata)
+                for processor in self._server_metrics_results_processors
+            ],
+            return_exceptions=True,
+        )
+        for error in errors:
+            if isinstance(error, BaseException):
+                self.exception(f"Failed to process server metrics metadata: {error!r}")
                 async with self._server_metrics_state.error_counts_lock:
                     self._server_metrics_state.error_counts[
                         ErrorDetails.from_exception(error)

@@ -26,18 +26,16 @@ Example:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from pydantic import Field
 
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetailsCount
+from aiperf.common.models.metric_result_models import MetricResult
 from aiperf.common.models.server_metrics_models import ServerMetricsHierarchy
 from aiperf.common.models.telemetry_models import TelemetryHierarchy
-
-if TYPE_CHECKING:
-    from aiperf.common.models.record_models import MetricResult
 
 
 class ProcessorSummaryResult(AIPerfBaseModel):
@@ -76,7 +74,7 @@ class MetricSummaryResult(ProcessorSummaryResult):
 
     processor_type: ResultsProcessorType = ResultsProcessorType.METRIC_RESULTS
 
-    results: list["MetricResult"] = Field(
+    results: list[MetricResult] = Field(
         ..., description="List of computed metric results with aggregated statistics"
     )
 
@@ -94,7 +92,7 @@ class TimesliceSummaryResult(ProcessorSummaryResult):
 
     processor_type: ResultsProcessorType = ResultsProcessorType.TIMESLICE
 
-    timeslice_results: dict[int, list["MetricResult"]] = Field(
+    timeslice_results: dict[int, list[MetricResult]] = Field(
         ...,
         description="Metric results grouped by timeslice index (0-based sequential)",
     )

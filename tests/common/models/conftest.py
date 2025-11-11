@@ -27,12 +27,11 @@ def error_details():
 def process_records_result():
     """Minimal valid ProcessRecordsResult data."""
     return {
-        "results": {
-            "records": [],
-            "completed": True,
+        "summary_results": {},
+        "profile_summary": {
+            "completed": 0,
             "start_ns": 0,
             "end_ns": 1000,
-            "profile_results": {},
         },
         "errors": [],
     }

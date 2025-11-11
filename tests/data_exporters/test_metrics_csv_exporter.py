@@ -10,10 +10,17 @@ import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
-from aiperf.common.enums import EndpointType
+from aiperf.common.enums import EndpointType, ResultsProcessorType
 from aiperf.common.models import MetricResult
+from aiperf.common.models.processor_summary_results import MetricSummaryResult
+from aiperf.common.models.record_models import (
+    ProfileResultSummary,
+)
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_csv_exporter import MetricsCsvExporter
+from tests.data_exporters.conftest import (
+    create_mock_process_records_result_from_metrics,
+)
 
 
 @pytest.fixture
@@ -32,6 +39,17 @@ class _MockResults:
         self._records_list = records_list
         self.start_ns = None
         self.end_ns = None
+        # Create summary_results with MetricSummaryResult
+        metric_summary = MetricSummaryResult(results=records_list)
+        self.summary_results = {ResultsProcessorType.METRIC_RESULTS: metric_summary}
+        self.profile_summary = ProfileResultSummary(
+            total_expected=100,
+            completed=100,
+            start_ns=0,
+            end_ns=0,
+            was_cancelled=False,
+            error_summary=[],
+        )
 
     @property
     def records(self):
@@ -393,7 +411,7 @@ async def test_format_number_various_types(mock_user_config, value, expected):
     - Boolean values as their string representation
     """
     cfg = ExporterConfig(
-        results=None,
+        results=create_mock_process_records_result_from_metrics([]),
         user_config=mock_user_config,
         service_config=ServiceConfig(),
         telemetry_results=None,
@@ -410,24 +428,20 @@ class TestMetricsCsvExporterTelemetry:
         self, mock_user_config, sample_telemetry_results
     ):
         """Test that CSV export includes telemetry data section."""
-        from aiperf.common.models import ProfileResults
 
         with tempfile.TemporaryDirectory() as tmp:
             outdir = Path(tmp)
             mock_user_config.output.artifact_directory = outdir
 
-            results = ProfileResults(
-                records=[
+            results = create_mock_process_records_result_from_metrics(
+                [
                     MetricResult(
                         tag="time_to_first_token",
                         header="Time to First Token",
                         unit="ms",
                         avg=120.5,
                     )
-                ],
-                start_ns=0,
-                end_ns=0,
-                completed=0,
+                ]
             )
 
             cfg = ExporterConfig(
@@ -453,24 +467,20 @@ class TestMetricsCsvExporterTelemetry:
     @pytest.mark.asyncio
     async def test_csv_export_without_telemetry_data(self, mock_user_config):
         """Test that CSV export works when telemetry_results is None."""
-        from aiperf.common.models import ProfileResults
 
         with tempfile.TemporaryDirectory() as tmp:
             outdir = Path(tmp)
             mock_user_config.output.artifact_directory = outdir
 
-            results = ProfileResults(
-                records=[
+            results = create_mock_process_records_result_from_metrics(
+                [
                     MetricResult(
                         tag="time_to_first_token",
                         header="Time to First Token",
                         unit="ms",
                         avg=120.5,
                     )
-                ],
-                start_ns=0,
-                end_ns=0,
-                completed=0,
+                ]
             )
 
             cfg = ExporterConfig(
@@ -496,13 +506,12 @@ class TestMetricsCsvExporterTelemetry:
         self, mock_user_config, sample_telemetry_results
     ):
         """Test that CSV export includes data for multiple GPUs."""
-        from aiperf.common.models import ProfileResults
 
         with tempfile.TemporaryDirectory() as tmp:
             outdir = Path(tmp)
             mock_user_config.output.artifact_directory = outdir
 
-            results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+            results = create_mock_process_records_result_from_metrics([])
 
             cfg = ExporterConfig(
                 results=results,
@@ -530,7 +539,6 @@ class TestMetricsCsvExporterTelemetry:
         from aiperf.common.models import (
             GpuMetadata,
             GpuTelemetryData,
-            ProfileResults,
             TelemetryHierarchy,
             TelemetryResults,
         )
@@ -563,7 +571,7 @@ class TestMetricsCsvExporterTelemetry:
                 endpoints_successful=["http://localhost:9400/metrics"],
             )
 
-            results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+            results = create_mock_process_records_result_from_metrics([])
 
             cfg = ExporterConfig(
                 results=results,
@@ -588,10 +596,9 @@ class TestMetricsCsvExporterTelemetry:
             GpuMetadata,
             GpuTelemetryData,
             MetricResult,
-            ProfileResults,
         )
 
-        results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+        results = create_mock_process_records_result_from_metrics([])
 
         cfg = ExporterConfig(
             results=results,
@@ -634,7 +641,6 @@ class TestMetricsCsvExporterTelemetry:
         from aiperf.common.models import (
             GpuMetadata,
             GpuTelemetryData,
-            ProfileResults,
             TelemetryHierarchy,
             TelemetryResults,
         )
@@ -701,7 +707,7 @@ class TestMetricsCsvExporterTelemetry:
                 ],
             )
 
-            results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+            results = create_mock_process_records_result_from_metrics([])
 
             cfg = ExporterConfig(
                 results=results,
@@ -729,7 +735,6 @@ class TestMetricsCsvExporterTelemetry:
         from aiperf.common.models import (
             GpuMetadata,
             GpuTelemetryData,
-            ProfileResults,
             TelemetryHierarchy,
             TelemetryResults,
         )
@@ -761,7 +766,7 @@ class TestMetricsCsvExporterTelemetry:
                 endpoints_successful=["http://localhost:9400/metrics"],
             )
 
-            results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+            results = create_mock_process_records_result_from_metrics([])
 
             cfg = ExporterConfig(
                 results=results,
@@ -785,9 +790,7 @@ class TestMetricsCsvExporterTelemetry:
     @pytest.mark.asyncio
     async def test_csv_format_number_small_values(self, mock_user_config):
         """Test _format_number with very small values."""
-        from aiperf.common.models import ProfileResults
-
-        results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+        results = create_mock_process_records_result_from_metrics([])
         cfg = ExporterConfig(
             results=results,
             user_config=mock_user_config,
@@ -810,9 +813,7 @@ class TestMetricsCsvExporterTelemetry:
         """Test _format_number with Decimal type."""
         from decimal import Decimal
 
-        from aiperf.common.models import ProfileResults
-
-        results = ProfileResults(records=[], start_ns=0, end_ns=0, completed=0)
+        results = create_mock_process_records_result_from_metrics([])
         cfg = ExporterConfig(
             results=results,
             user_config=mock_user_config,
@@ -879,7 +880,6 @@ def test_metrics_csv_exporter_generate_content_uses_instance_data_members(
     mock_user_config,
 ):
     """Verify _generate_content() uses instance data members."""
-    from aiperf.common.models import ProfileResults
 
     # Create mock records
     mock_records = [
@@ -891,7 +891,7 @@ def test_metrics_csv_exporter_generate_content_uses_instance_data_members(
         )
     ]
 
-    results = ProfileResults(records=mock_records, start_ns=0, end_ns=0, completed=0)
+    results = create_mock_process_records_result_from_metrics(mock_records)
     cfg = ExporterConfig(
         results=results,
         user_config=mock_user_config,

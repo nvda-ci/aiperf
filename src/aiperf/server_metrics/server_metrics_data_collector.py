@@ -127,9 +127,8 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
                             key.startswith("app")
                             or key.startswith("k8s_")
                             or key in ["version", "component", "tier", "release"]
-                        ):
-                            if key not in additional_labels:
-                                additional_labels[key] = value
+                        ) and key not in additional_labels:
+                            additional_labels[key] = value
 
                     # If we've found pod info, we can break early
                     if k8s_labels["pod"] and k8s_labels["namespace"]:
