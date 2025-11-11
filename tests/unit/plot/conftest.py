@@ -25,8 +25,6 @@ logging.getLogger("kaleido").setLevel(logging.WARNING)
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 QWEN_CONCURRENCY1_DIR = FIXTURES_DIR / "qwen_concurrency1"
 QWEN_CONCURRENCY4_DIR = FIXTURES_DIR / "qwen_concurrency4"
-LLAMA_CONCURRENCY1_DIR = FIXTURES_DIR / "llama_concurrency1"
-LLAMA_CONCURRENCY4_DIR = FIXTURES_DIR / "llama_concurrency4"
 
 
 @pytest.fixture
@@ -375,28 +373,6 @@ def real_qwen_concurrency4_dir() -> Path:
 
 
 @pytest.fixture
-def real_llama_concurrency1_dir() -> Path:
-    """
-    Path to real Llama run directory with concurrency=1.
-
-    Returns:
-        Path to the Llama concurrency 1 fixture directory.
-    """
-    return LLAMA_CONCURRENCY1_DIR
-
-
-@pytest.fixture
-def real_llama_concurrency4_dir() -> Path:
-    """
-    Path to real Llama run directory with concurrency=4.
-
-    Returns:
-        Path to the Llama concurrency 4 fixture directory.
-    """
-    return LLAMA_CONCURRENCY4_DIR
-
-
-@pytest.fixture
 def real_qwen_sweep_dirs() -> list[Path]:
     """
     Paths to Qwen concurrency sweep run directories for comparison testing.
@@ -405,17 +381,6 @@ def real_qwen_sweep_dirs() -> list[Path]:
         List of paths to Qwen run fixture directories with different concurrency.
     """
     return [QWEN_CONCURRENCY1_DIR, QWEN_CONCURRENCY4_DIR]
-
-
-@pytest.fixture
-def real_llama_sweep_dirs() -> list[Path]:
-    """
-    Paths to Llama concurrency sweep run directories for comparison testing.
-
-    Returns:
-        List of paths to Llama run fixture directories with different concurrency.
-    """
-    return [LLAMA_CONCURRENCY1_DIR, LLAMA_CONCURRENCY4_DIR]
 
 
 @pytest.fixture
@@ -469,17 +434,3 @@ def real_qwen_aggregated_data() -> Path:
     if not agg_file.exists():
         pytest.skip(f"Aggregated file not found: {agg_file}")
     return agg_file
-
-
-@pytest.fixture
-def qwen_concurrency8_dir() -> Path:
-    """
-    Path to Qwen concurrency 8 run directory for higher concurrency testing.
-
-    Returns:
-        Path to the Qwen concurrency 8 fixture directory.
-    """
-    qwen_c8_dir = FIXTURES_DIR / "qwen_concurrency8"
-    if not qwen_c8_dir.exists():
-        pytest.skip(f"Qwen concurrency 8 fixture not found: {qwen_c8_dir}")
-    return qwen_c8_dir
