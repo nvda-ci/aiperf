@@ -12,6 +12,7 @@ import pytest
 
 from aiperf.common.config import UserConfig
 from aiperf.common.models.server_metrics_models import (
+    KubernetesPodInfo,
     MetricFamily,
     MetricSample,
     ServerMetricsRecord,
@@ -335,6 +336,196 @@ async def test_results_processor_hierarchy_isolation(user_config):
 
     assert len(hierarchy1.endpoints) == 1
     assert len(hierarchy2.endpoints) == 0
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_pod_info_creation():
+    """Test KubernetesPodInfo model creation with valid data."""
+    pod_info = KubernetesPodInfo(
+        pod_name="test-pod-123",
+        namespace="default",
+        node_name="worker-node-1",
+        container_name="inference-server",
+        service_name="inference-service",
+        pod_ip="10.244.0.5",
+        labels={"app": "inference", "version": "v1.0"},
+    )
+
+    assert pod_info.pod_name == "test-pod-123"
+    assert pod_info.namespace == "default"
+    assert pod_info.node_name == "worker-node-1"
+    assert pod_info.container_name == "inference-server"
+    assert pod_info.service_name == "inference-service"
+    assert pod_info.pod_ip == "10.244.0.5"
+    assert pod_info.labels["app"] == "inference"
+    assert pod_info.labels["version"] == "v1.0"
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_pod_info_partial_data():
+    """Test KubernetesPodInfo with partial data (optional fields)."""
+    pod_info = KubernetesPodInfo(
+        pod_name="test-pod-456",
+        namespace="production",
+    )
+
+    assert pod_info.pod_name == "test-pod-456"
+    assert pod_info.namespace == "production"
+    assert pod_info.node_name is None
+    assert pod_info.container_name is None
+    assert pod_info.service_name is None
+    assert pod_info.pod_ip is None
+    assert pod_info.labels == {}
+
+
+@pytest.mark.asyncio
+async def test_record_with_kubernetes_pod_info(user_config):
+    """Test ServerMetricsRecord with Kubernetes POD information."""
+    pod_info = KubernetesPodInfo(
+        pod_name="vllm-server-abc123",
+        namespace="ai-workloads",
+        node_name="gpu-node-1",
+        container_name="vllm",
+        labels={"app": "vllm", "tier": "backend"},
+    )
+
+    sample = MetricSample(labels={"method": "GET"}, value=100.0)
+    family = MetricFamily(type="counter", help="Test metric", samples=[sample])
+
+    record = ServerMetricsRecord(
+        timestamp_ns=1000000000,
+        endpoint_url="http://vllm-server:8000/metrics",
+        metrics={"test_metric": family},
+        kubernetes_pod_info=pod_info,
+    )
+
+    assert record.kubernetes_pod_info is not None
+    assert record.kubernetes_pod_info.pod_name == "vllm-server-abc123"
+    assert record.kubernetes_pod_info.namespace == "ai-workloads"
+    assert record.kubernetes_pod_info.node_name == "gpu-node-1"
+
+
+@pytest.mark.asyncio
+async def test_processor_preserves_kubernetes_pod_info(user_config):
+    """Test that processor preserves Kubernetes POD info in hierarchy."""
+    processor = ServerMetricsResultsProcessor(user_config=user_config)
+
+    pod_info = KubernetesPodInfo(
+        pod_name="inference-pod",
+        namespace="ml-serving",
+        node_name="gpu-node-2",
+        service_name="inference-svc",
+        pod_ip="10.1.2.3",
+    )
+
+    sample = MetricSample(labels={}, value=200.0)
+    family = MetricFamily(type="gauge", help="Memory", samples=[sample])
+
+    record = ServerMetricsRecord(
+        timestamp_ns=2000000000,
+        endpoint_url="http://inference-pod:8081/metrics",
+        metrics={"memory": family},
+        kubernetes_pod_info=pod_info,
+    )
+
+    await processor.process_server_metrics_record(record)
+
+    hierarchy = processor.get_server_metrics_hierarchy()
+    endpoint_data = hierarchy.endpoints["http://inference-pod:8081/metrics"]
+
+    assert endpoint_data.metadata.kubernetes_pod_info is not None
+    assert endpoint_data.metadata.kubernetes_pod_info.pod_name == "inference-pod"
+    assert endpoint_data.metadata.kubernetes_pod_info.namespace == "ml-serving"
+    assert endpoint_data.metadata.kubernetes_pod_info.node_name == "gpu-node-2"
+    assert endpoint_data.metadata.kubernetes_pod_info.service_name == "inference-svc"
+    assert endpoint_data.metadata.kubernetes_pod_info.pod_ip == "10.1.2.3"
+
+
+@pytest.mark.asyncio
+async def test_export_processor_includes_kubernetes_pod_info(user_config):
+    """Test export processor includes Kubernetes POD info in JSONL output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_file = Path(tmpdir) / "test_k8s_export.jsonl"
+
+        processor = ServerMetricsExportResultsProcessor(user_config=user_config)
+        processor.output_file = output_file
+
+        await processor.initialize()
+
+        pod_info = KubernetesPodInfo(
+            pod_name="triton-server-xyz",
+            namespace="inference",
+            node_name="k8s-worker-3",
+            container_name="triton",
+            labels={"app": "triton", "component": "inference"},
+        )
+
+        sample = MetricSample(labels={"model": "gpt"}, value=5.0)
+        family = MetricFamily(type="gauge", help="Active requests", samples=[sample])
+
+        record = ServerMetricsRecord(
+            timestamp_ns=3000000000,
+            endpoint_url="http://triton-server:8002/metrics",
+            metrics={"active_requests": family},
+            kubernetes_pod_info=pod_info,
+        )
+
+        await processor.process_server_metrics_record(record)
+        await processor.stop()
+
+        # Verify kubernetes_pod_info in exported JSON
+        content = output_file.read_text()
+        data = orjson.loads(content)
+
+        assert "kubernetes_pod_info" in data
+        assert data["kubernetes_pod_info"]["pod_name"] == "triton-server-xyz"
+        assert data["kubernetes_pod_info"]["namespace"] == "inference"
+        assert data["kubernetes_pod_info"]["node_name"] == "k8s-worker-3"
+        assert data["kubernetes_pod_info"]["container_name"] == "triton"
+        assert data["kubernetes_pod_info"]["labels"]["app"] == "triton"
+
+
+@pytest.mark.asyncio
+async def test_hierarchy_updates_pod_info_when_available(user_config):
+    """Test that hierarchy updates POD info when it becomes available."""
+    processor = ServerMetricsResultsProcessor(user_config=user_config)
+
+    sample = MetricSample(labels={}, value=1.0)
+    family = MetricFamily(type="counter", help="Test", samples=[sample])
+
+    # First record without POD info
+    record1 = ServerMetricsRecord(
+        timestamp_ns=1000000000,
+        endpoint_url="http://server:8000/metrics",
+        metrics={"metric1": family},
+        kubernetes_pod_info=None,
+    )
+
+    await processor.process_server_metrics_record(record1)
+
+    hierarchy = processor.get_server_metrics_hierarchy()
+    endpoint_data = hierarchy.endpoints["http://server:8000/metrics"]
+    assert endpoint_data.metadata.kubernetes_pod_info is None
+
+    # Second record with POD info
+    pod_info = KubernetesPodInfo(
+        pod_name="server-pod",
+        namespace="default",
+    )
+
+    record2 = ServerMetricsRecord(
+        timestamp_ns=2000000000,
+        endpoint_url="http://server:8000/metrics",
+        metrics={"metric1": family},
+        kubernetes_pod_info=pod_info,
+    )
+
+    await processor.process_server_metrics_record(record2)
+
+    # Verify POD info is now present
+    endpoint_data = hierarchy.endpoints["http://server:8000/metrics"]
+    assert endpoint_data.metadata.kubernetes_pod_info is not None
+    assert endpoint_data.metadata.kubernetes_pod_info.pod_name == "server-pod"
 
 
 if __name__ == "__main__":

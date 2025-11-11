@@ -119,6 +119,7 @@ from aiperf.common.models.sequence_distribution import (
 )
 from aiperf.common.models.server_metrics_models import (
     HistogramData,
+    KubernetesPodInfo,
     MetricFamily,
     MetricSample,
     ProcessServerMetricsResult,
@@ -186,6 +187,7 @@ __all__ = [
     "InputsFile",
     "JsonExportData",
     "JsonMetricResult",
+    "KubernetesPodInfo",
     "Media",
     "MetricFamily",
     "MetricRecordInfo",

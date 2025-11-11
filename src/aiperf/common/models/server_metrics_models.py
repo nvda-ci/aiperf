@@ -81,6 +81,37 @@ class ServerMetricsRecord(AIPerfBaseModel):
     metrics: dict[str, MetricFamily] = Field(
         description="Metrics grouped by family name"
     )
+    kubernetes_pod_info: KubernetesPodInfo | None = Field(
+        default=None,
+        description="Kubernetes POD information extracted from metric labels",
+    )
+
+
+class KubernetesPodInfo(AIPerfBaseModel):
+    """Kubernetes POD information extracted from Prometheus labels."""
+
+    pod_name: str | None = Field(
+        default=None, description="Kubernetes pod name from 'pod' label"
+    )
+    namespace: str | None = Field(
+        default=None, description="Kubernetes namespace from 'namespace' label"
+    )
+    node_name: str | None = Field(
+        default=None, description="Kubernetes node name from 'node' label"
+    )
+    container_name: str | None = Field(
+        default=None, description="Container name from 'container' label"
+    )
+    service_name: str | None = Field(
+        default=None, description="Kubernetes service name from 'service' label"
+    )
+    pod_ip: str | None = Field(
+        default=None, description="Pod IP address from 'pod_ip' label"
+    )
+    labels: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional Kubernetes labels (e.g., app, version, component)",
+    )
 
 
 class ServerMetricsMetadata(AIPerfBaseModel):
@@ -88,6 +119,10 @@ class ServerMetricsMetadata(AIPerfBaseModel):
 
     endpoint_url: str = Field(description="Prometheus metrics endpoint URL")
     endpoint_display: str = Field(description="Human-readable endpoint display name")
+    kubernetes_pod_info: KubernetesPodInfo | None = Field(
+        default=None,
+        description="Kubernetes POD information if endpoint is discovered from Kubernetes",
+    )
 
 
 class ServerMetricsSnapshotTimeSeries(AIPerfBaseModel):
@@ -595,8 +630,17 @@ class ServerMetricsHierarchy(AIPerfBaseModel):
             metadata = ServerMetricsMetadata(
                 endpoint_url=record.endpoint_url,
                 endpoint_display=self._normalize_endpoint_display(record.endpoint_url),
+                kubernetes_pod_info=record.kubernetes_pod_info,
             )
             self.endpoints[record.endpoint_url] = ServerMetricsData(metadata=metadata)
+        elif (
+            record.kubernetes_pod_info is not None
+            and self.endpoints[record.endpoint_url].metadata.kubernetes_pod_info is None
+        ):
+            # Update metadata with kubernetes_pod_info if it wasn't available before
+            self.endpoints[
+                record.endpoint_url
+            ].metadata.kubernetes_pod_info = record.kubernetes_pod_info
 
         self.endpoints[record.endpoint_url].add_record(record)
 

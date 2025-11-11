@@ -13,6 +13,7 @@ from aiperf.common.mixins import BaseMetricsCollectorMixin
 from aiperf.common.models import ErrorDetails
 from aiperf.common.models.server_metrics_models import (
     HistogramData,
+    KubernetesPodInfo,
     MetricFamily,
     MetricSample,
     ServerMetricsRecord,
@@ -82,6 +83,77 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
         records = self._parse_metrics_to_records(metrics_data)
         await self._send_records_via_callback(records)
 
+    def _extract_kubernetes_pod_info(
+        self, metrics_data: str
+    ) -> KubernetesPodInfo | None:
+        """Extract Kubernetes POD information from Prometheus metric labels.
+
+        Scans all metrics for common Kubernetes labels (pod, namespace, node, etc.)
+        and extracts them into a KubernetesPodInfo object.
+
+        Args:
+            metrics_data: Raw metrics text from Prometheus endpoint
+
+        Returns:
+            KubernetesPodInfo if any Kubernetes labels are found, None otherwise
+        """
+        k8s_labels = {
+            "pod": None,
+            "namespace": None,
+            "node": None,
+            "container": None,
+            "service": None,
+            "pod_ip": None,
+        }
+        additional_labels = {}
+
+        try:
+            for family in text_string_to_metric_families(metrics_data):
+                for sample in family.samples:
+                    labels = sample.labels
+
+                    # Extract standard Kubernetes labels
+                    for k8s_key in ["pod", "namespace", "node", "container", "service"]:
+                        if k8s_key in labels and k8s_labels[k8s_key] is None:
+                            k8s_labels[k8s_key] = labels[k8s_key]
+
+                    # Check for pod_ip (sometimes exposed as pod_ip or instance)
+                    if "pod_ip" in labels and k8s_labels["pod_ip"] is None:
+                        k8s_labels["pod_ip"] = labels["pod_ip"]
+
+                    # Collect additional Kubernetes-specific labels
+                    for key, value in labels.items():
+                        if (
+                            key.startswith("app")
+                            or key.startswith("k8s_")
+                            or key in ["version", "component", "tier", "release"]
+                        ):
+                            if key not in additional_labels:
+                                additional_labels[key] = value
+
+                    # If we've found pod info, we can break early
+                    if k8s_labels["pod"] and k8s_labels["namespace"]:
+                        break
+                if k8s_labels["pod"] and k8s_labels["namespace"]:
+                    break
+        except (ValueError, AttributeError):
+            # Failed to parse metrics or extract labels
+            return None
+
+        # Only return KubernetesPodInfo if we found at least a pod name or namespace
+        if k8s_labels["pod"] or k8s_labels["namespace"]:
+            return KubernetesPodInfo(
+                pod_name=k8s_labels["pod"],
+                namespace=k8s_labels["namespace"],
+                node_name=k8s_labels["node"],
+                container_name=k8s_labels["container"],
+                service_name=k8s_labels["service"],
+                pod_ip=k8s_labels["pod_ip"],
+                labels=additional_labels,
+            )
+
+        return None
+
     def _parse_metrics_to_records(self, metrics_data: str) -> list[ServerMetricsRecord]:
         """Parse Prometheus metrics text into ServerMetricsRecord objects.
 
@@ -90,6 +162,7 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
         2. Groups metrics by type (counter, gauge, histogram, summary)
         3. De-duplicates by label combination (last value wins)
         4. Structures histogram and summary data
+        5. Extracts Kubernetes POD information from labels if available
 
         Args:
             metrics_data: Raw metrics text from Prometheus endpoint in Prometheus format
@@ -103,6 +176,9 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
 
         current_timestamp_ns = time.time_ns()
         metrics_dict: dict[str, MetricFamily] = {}
+
+        # Extract Kubernetes POD info from labels (only on first parse or when needed)
+        kubernetes_pod_info = self._extract_kubernetes_pod_info(metrics_data)
 
         try:
             for family in text_string_to_metric_families(metrics_data):
@@ -146,6 +222,7 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
             timestamp_ns=current_timestamp_ns,
             endpoint_url=self._endpoint_url,
             metrics=metrics_dict,
+            kubernetes_pod_info=kubernetes_pod_info,
         )
 
         return [record]

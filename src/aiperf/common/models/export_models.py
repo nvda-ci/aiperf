@@ -163,6 +163,10 @@ class ServerMetricsEndpointData(AIPerfBaseModel):
     endpoint_url: str = Field(
         description="Source Prometheus metrics endpoint URL (e.g., 'http://localhost:8081/metrics')"
     )
+    kubernetes_pod_info: dict[str, str | dict[str, str]] | None = Field(
+        default=None,
+        description="Kubernetes POD information (pod_name, namespace, node_name, etc.)",
+    )
     metrics: dict[str, AggregatedMetricFamily] = Field(
         description="Metrics organized by metric name with their statistics, "
         "preserving label structure similar to raw snapshot data. Structure: metric_name -> AggregatedMetricFamily"

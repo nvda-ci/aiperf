@@ -347,9 +347,23 @@ class MetricsJsonExporter(MetricsBaseExporter):
                 )
                 final_families[metric_name] = family
 
+            # Convert KubernetesPodInfo to dict for JSON serialization
+            k8s_pod_info_dict = None
+            if endpoint_data.metadata.kubernetes_pod_info:
+                k8s_info = endpoint_data.metadata.kubernetes_pod_info
+                k8s_pod_info_dict = {
+                    "pod_name": k8s_info.pod_name,
+                    "namespace": k8s_info.namespace,
+                    "node_name": k8s_info.node_name,
+                    "container_name": k8s_info.container_name,
+                    "service_name": k8s_info.service_name,
+                    "pod_ip": k8s_info.pod_ip,
+                    "labels": k8s_info.labels,
+                }
+
             server_endpoint_data = ServerMetricsEndpointData(
                 endpoint_url=endpoint_url,
-                endpoint_display=endpoint_display,
+                kubernetes_pod_info=k8s_pod_info_dict,
                 metrics=final_families,
             )
             summary[endpoint_display] = server_endpoint_data
