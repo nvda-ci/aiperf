@@ -351,3 +351,165 @@ class TestFileContentEdgeCases:
 
         # Mode detection doesn't validate content
         assert mode_detector._is_run_directory(run_dir)
+
+
+class TestVeryDeepNesting:
+    """Tests for very deep nesting scenarios."""
+
+    def test_very_deep_nesting_11_levels(
+        self, mode_detector: ModeDetector, tmp_path: Path
+    ) -> None:
+        """Test handling of very deep nesting (11 levels)."""
+        # Create 11 levels of nested run directories
+        current_dir = tmp_path
+        for i in range(11):
+            level_dir = current_dir / f"level{i}"
+            level_dir.mkdir()
+            (level_dir / "profile_export.jsonl").write_text(
+                f'{{"level": {i}, "test": "data"}}\n'
+            )
+            (level_dir / "profile_export_aiperf.json").write_text(
+                f'{{"level": {i}, "test": "data"}}'
+            )
+            current_dir = level_dir
+
+        # Should find all 11 levels
+        runs = mode_detector.find_run_directories([tmp_path])
+        assert len(runs) == 11
+
+    def test_very_deep_nesting_15_levels(
+        self, mode_detector: ModeDetector, tmp_path: Path
+    ) -> None:
+        """Test handling of extremely deep nesting (15 levels)."""
+        # Create 15 levels of nested run directories
+        current_dir = tmp_path
+        for i in range(15):
+            level_dir = current_dir / f"level{i}"
+            level_dir.mkdir()
+            (level_dir / "profile_export.jsonl").write_text(
+                f'{{"level": {i}, "test": "data"}}\n'
+            )
+            (level_dir / "profile_export_aiperf.json").write_text(
+                f'{{"level": {i}, "test": "data"}}'
+            )
+            current_dir = level_dir
+
+        # Should find all 15 levels
+        runs = mode_detector.find_run_directories([tmp_path])
+        assert len(runs) == 15
+
+    def test_mixed_depth_nesting(
+        self, mode_detector: ModeDetector, tmp_path: Path
+    ) -> None:
+        """Test mixed depth nesting with runs at various levels."""
+        # Create shallow run
+        shallow = tmp_path / "shallow_run"
+        shallow.mkdir()
+        (shallow / "profile_export.jsonl").write_text('{"test": "shallow"}\n')
+        (shallow / "profile_export_aiperf.json").write_text('{"test": "shallow"}')
+
+        # Create medium depth run (5 levels deep)
+        current_dir = tmp_path / "medium"
+        current_dir.mkdir()
+        for i in range(5):
+            level_dir = current_dir / f"level{i}"
+            level_dir.mkdir()
+            current_dir = level_dir
+
+        (current_dir / "profile_export.jsonl").write_text('{"test": "medium"}\n')
+        (current_dir / "profile_export_aiperf.json").write_text('{"test": "medium"}')
+
+        # Create deep run (12 levels deep)
+        current_dir = tmp_path / "deep"
+        current_dir.mkdir()
+        for i in range(12):
+            level_dir = current_dir / f"level{i}"
+            level_dir.mkdir()
+            current_dir = level_dir
+
+        (current_dir / "profile_export.jsonl").write_text('{"test": "deep"}\n')
+        (current_dir / "profile_export_aiperf.json").write_text('{"test": "deep"}')
+
+        # Should find all 3 runs at different depths
+        runs = mode_detector.find_run_directories([tmp_path])
+        assert len(runs) == 3
+
+
+class TestSymlinkEdgeCases:
+    """Tests for additional symlink edge cases."""
+
+    def test_broken_symlink_to_file(
+        self, mode_detector: ModeDetector, tmp_path: Path
+    ) -> None:
+        """Test broken symlink pointing to a file (not directory)."""
+        # Create a symlink to a non-existent file
+        symlink = tmp_path / "broken_file_symlink"
+        target = tmp_path / "nonexistent_file.txt"
+        symlink.symlink_to(target)
+
+        # Should handle gracefully - broken file symlinks should be ignored
+        with pytest.raises(ModeDetectionError):
+            mode_detector.find_run_directories([tmp_path])
+
+    def test_symlink_chain_to_run(
+        self,
+        mode_detector: ModeDetector,
+        tmp_path: Path,
+        sample_jsonl_data,
+        sample_aggregated_data,
+    ) -> None:
+        """Test chain of symlinks pointing to a run directory."""
+        # Create actual run directory
+        actual_run = tmp_path / "actual_run"
+        actual_run.mkdir()
+        jsonl_file = actual_run / "profile_export.jsonl"
+        with open(jsonl_file, "w") as f:
+            for record in sample_jsonl_data:
+                f.write(f"{json.dumps(record)}\n")
+        json_file = actual_run / "profile_export_aiperf.json"
+        with open(json_file, "w") as f:
+            json.dump(sample_aggregated_data, f)
+
+        # Create chain of symlinks: symlink1 -> symlink2 -> actual_run
+        symlink2 = tmp_path / "symlink2"
+        symlink2.symlink_to(actual_run, target_is_directory=True)
+
+        symlink1 = tmp_path / "symlink1"
+        symlink1.symlink_to(symlink2, target_is_directory=True)
+
+        # Should resolve the chain and find the run
+        runs = mode_detector.find_run_directories([symlink1])
+        assert len(runs) == 1
+        # Should resolve to the actual directory
+        assert runs[0].resolve() == actual_run.resolve()
+
+    def test_symlink_to_parent_directory_containing_runs(
+        self,
+        mode_detector: ModeDetector,
+        tmp_path: Path,
+        sample_jsonl_data,
+        sample_aggregated_data,
+    ) -> None:
+        """Test symlink pointing to parent directory containing multiple runs."""
+        # Create parent directory with multiple runs
+        parent = tmp_path / "parent"
+        parent.mkdir()
+
+        for i in range(3):
+            run_dir = parent / f"run{i}"
+            run_dir.mkdir()
+            jsonl_file = run_dir / "profile_export.jsonl"
+            with open(jsonl_file, "w") as f:
+                for record in sample_jsonl_data:
+                    f.write(f"{json.dumps(record)}\n")
+            json_file = run_dir / "profile_export_aiperf.json"
+            with open(json_file, "w") as f:
+                json.dump(sample_aggregated_data, f)
+
+        # Create symlink to parent
+        parent_symlink = tmp_path / "parent_link"
+        parent_symlink.symlink_to(parent, target_is_directory=True)
+
+        # Should find all 3 runs through symlink
+        runs = mode_detector.find_run_directories([parent_symlink])
+        assert len(runs) == 3

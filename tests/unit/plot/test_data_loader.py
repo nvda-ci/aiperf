@@ -466,3 +466,648 @@ class TestDataLoaderDurationCalculation:
         metadata = loader._extract_metadata(run_path, requests_df, {})
 
         assert metadata.duration_seconds is None
+
+
+class TestDataLoaderExtractTelemetry:
+    """Tests for DataLoader.extract_telemetry_data method."""
+
+    def test_extract_telemetry_with_valid_data(self) -> None:
+        """Test extracting telemetry data from valid aggregated data."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {
+                    "start_time": "2025-01-01T00:00:00",
+                    "end_time": "2025-01-01T01:00:00",
+                },
+                "endpoints": {
+                    "endpoint1": {"gpus": {"0": {}, "1": {}}},
+                },
+            }
+        }
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is not None
+        assert "summary" in result
+        assert "endpoints" in result
+        assert len(result["endpoints"]) == 1
+
+    def test_extract_telemetry_missing_data(self) -> None:
+        """Test extracting telemetry when data is missing."""
+        loader = DataLoader()
+        aggregated = {"other_field": "value"}
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is None
+
+    def test_extract_telemetry_empty_aggregated(self) -> None:
+        """Test extracting telemetry from empty aggregated dict."""
+        loader = DataLoader()
+        aggregated = {}
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is None
+
+    def test_extract_telemetry_wrong_structure(self) -> None:
+        """Test extracting telemetry with wrong data structure."""
+        loader = DataLoader()
+        aggregated = {"telemetry_data": "not a dict"}
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is None
+
+    def test_extract_telemetry_missing_summary_key(self) -> None:
+        """Test extracting telemetry when summary key is missing."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "endpoints": {"endpoint1": {}},
+            }
+        }
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is None
+
+    def test_extract_telemetry_missing_endpoints_key(self) -> None:
+        """Test extracting telemetry when endpoints key is missing."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {"start_time": "2025-01-01T00:00:00"},
+            }
+        }
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        assert result is None
+
+    def test_extract_telemetry_empty_endpoints(self) -> None:
+        """Test extracting telemetry with empty endpoints dict."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {"start_time": "2025-01-01T00:00:00"},
+                "endpoints": {},
+            }
+        }
+
+        result = loader.extract_telemetry_data(aggregated)
+
+        # Should be valid even with empty endpoints
+        assert result is not None
+        assert result["endpoints"] == {}
+
+
+class TestDataLoaderGetTelemetrySummary:
+    """Tests for DataLoader.get_telemetry_summary method."""
+
+    def test_get_telemetry_summary_valid(self) -> None:
+        """Test getting telemetry summary from valid data."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {
+                    "start_time": "2025-01-01T00:00:00",
+                    "end_time": "2025-01-01T01:00:00",
+                    "endpoints_configured": 2,
+                    "endpoints_successful": 2,
+                },
+                "endpoints": {},
+            }
+        }
+
+        result = loader.get_telemetry_summary(aggregated)
+
+        assert result is not None
+        assert result["start_time"] == "2025-01-01T00:00:00"
+        assert result["end_time"] == "2025-01-01T01:00:00"
+
+    def test_get_telemetry_summary_no_telemetry(self) -> None:
+        """Test getting telemetry summary when no telemetry data exists."""
+        loader = DataLoader()
+        aggregated = {}
+
+        result = loader.get_telemetry_summary(aggregated)
+
+        assert result is None
+
+
+class TestDataLoaderCalculateGPUCount:
+    """Tests for DataLoader.calculate_gpu_count_from_telemetry method."""
+
+    def test_calculate_gpu_count_single_endpoint(self) -> None:
+        """Test calculating GPU count from single endpoint."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {
+                        "gpus": {
+                            "0": {"gpu_index": 0},
+                            "1": {"gpu_index": 1},
+                            "2": {"gpu_index": 2},
+                        }
+                    },
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result == 3
+
+    def test_calculate_gpu_count_multiple_endpoints(self) -> None:
+        """Test calculating GPU count from multiple endpoints."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {
+                        "gpus": {
+                            "0": {},
+                            "1": {},
+                        }
+                    },
+                    "endpoint2": {
+                        "gpus": {
+                            "0": {},
+                            "1": {},
+                            "2": {},
+                        }
+                    },
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result == 5
+
+    def test_calculate_gpu_count_no_telemetry(self) -> None:
+        """Test calculating GPU count when no telemetry data exists."""
+        loader = DataLoader()
+        aggregated = {}
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result is None
+
+    def test_calculate_gpu_count_zero_gpus(self) -> None:
+        """Test calculating GPU count when endpoints have no GPUs."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {"gpus": {}},
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result is None
+
+    def test_calculate_gpu_count_invalid_endpoints_structure(self) -> None:
+        """Test calculating GPU count with invalid endpoints structure."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": "not a dict",
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result is None
+
+    def test_calculate_gpu_count_invalid_endpoint_data(self) -> None:
+        """Test calculating GPU count when endpoint data is not a dict."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": "not a dict",
+                    "endpoint2": {"gpus": {"0": {}, "1": {}}},
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        # Should count GPUs from valid endpoint only
+        assert result == 2
+
+    def test_calculate_gpu_count_missing_gpus_key(self) -> None:
+        """Test calculating GPU count when gpus key is missing."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {"other_field": "value"},
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result is None
+
+    def test_calculate_gpu_count_gpus_not_dict(self) -> None:
+        """Test calculating GPU count when gpus field is not a dict."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {"gpus": "not a dict"},
+                },
+            }
+        }
+
+        result = loader.calculate_gpu_count_from_telemetry(aggregated)
+
+        assert result is None
+
+
+class TestDataLoaderAddDerivedMetrics:
+    """Tests for DataLoader._add_all_derived_metrics method."""
+
+    def test_add_derived_metrics_with_telemetry(self) -> None:
+        """Test adding derived metrics when telemetry data is available."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {
+                        "gpus": {"0": {}, "1": {}},
+                    }
+                },
+            },
+            "output_token_throughput": {"value": 1000.0, "unit": "tokens/s"},
+        }
+
+        loader._add_all_derived_metrics(aggregated)
+
+        # Should have added per-GPU metric
+        assert "output_token_throughput_per_gpu" in aggregated
+        assert aggregated["output_token_throughput_per_gpu"]["value"] == 500.0
+        assert aggregated["output_token_throughput_per_gpu"]["unit"] == "tokens/sec/gpu"
+
+    def test_add_derived_metrics_no_telemetry(self) -> None:
+        """Test adding derived metrics when no telemetry data exists."""
+        loader = DataLoader()
+        aggregated = {
+            "output_token_throughput": {"value": 1000.0, "unit": "tokens/s"},
+        }
+
+        loader._add_all_derived_metrics(aggregated)
+
+        # Should not add per-GPU metrics without telemetry
+        assert "output_token_throughput_per_gpu" not in aggregated
+
+    def test_add_derived_metrics_zero_gpus(self) -> None:
+        """Test adding derived metrics when GPU count is zero."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {"gpus": {}},
+                },
+            },
+            "output_token_throughput": {"value": 1000.0, "unit": "tokens/s"},
+        }
+
+        loader._add_all_derived_metrics(aggregated)
+
+        # Should not add per-GPU metrics with zero GPUs
+        assert "output_token_throughput_per_gpu" not in aggregated
+
+    def test_add_derived_metrics_missing_base_metric(self) -> None:
+        """Test adding derived metrics when base metric is missing."""
+        loader = DataLoader()
+        aggregated = {
+            "telemetry_data": {
+                "summary": {},
+                "endpoints": {
+                    "endpoint1": {"gpus": {"0": {}, "1": {}}},
+                },
+            },
+            # Missing output_token_throughput
+        }
+
+        loader._add_all_derived_metrics(aggregated)
+
+        # Should handle gracefully - derived metric won't be added
+        assert "output_token_throughput_per_gpu" not in aggregated
+
+
+class TestDataLoaderGetAvailableMetrics:
+    """Tests for DataLoader.get_available_metrics method."""
+
+    def test_get_available_metrics_with_data(self, tmp_path: Path) -> None:
+        """Test getting available metrics from loaded run."""
+        loader = DataLoader()
+        aggregated = {
+            "time_to_first_token": {"value": 45.0, "unit": "ms"},
+            "inter_token_latency": {"value": 20.0, "unit": "ms"},
+            "request_latency": {"value": 500.0, "unit": "ms"},
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        result = loader.get_available_metrics(run_data)
+
+        assert "display_names" in result
+        assert "units" in result
+        assert len(result["display_names"]) == 3
+        assert len(result["units"]) == 3
+        assert "time_to_first_token" in result["display_names"]
+        assert result["units"]["time_to_first_token"] == "ms"
+
+    def test_get_available_metrics_no_aggregated_data(self, tmp_path: Path) -> None:
+        """Test getting available metrics when no aggregated data exists."""
+        loader = DataLoader()
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated={},
+        )
+
+        result = loader.get_available_metrics(run_data)
+
+        assert result["display_names"] == {}
+        assert result["units"] == {}
+
+    def test_get_available_metrics_filters_non_metrics(self, tmp_path: Path) -> None:
+        """Test that non-metric keys are filtered out."""
+        loader = DataLoader()
+        aggregated = {
+            "time_to_first_token": {"value": 45.0, "unit": "ms"},
+            "input_config": {"some": "config"},  # Should be filtered
+            "was_cancelled": False,  # Should be filtered
+            "error_summary": [],  # Should be filtered
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        result = loader.get_available_metrics(run_data)
+
+        assert "time_to_first_token" in result["display_names"]
+        assert "input_config" not in result["display_names"]
+        assert "was_cancelled" not in result["display_names"]
+        assert "error_summary" not in result["display_names"]
+
+    def test_get_available_metrics_handles_non_dict_values(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that non-dict values are skipped."""
+        loader = DataLoader()
+        aggregated = {
+            "time_to_first_token": {"value": 45.0, "unit": "ms"},
+            "some_string": "value",
+            "some_number": 123,
+            "some_list": [1, 2, 3],
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        result = loader.get_available_metrics(run_data)
+
+        assert "time_to_first_token" in result["display_names"]
+        assert "some_string" not in result["display_names"]
+        assert "some_number" not in result["display_names"]
+        assert "some_list" not in result["display_names"]
+
+    def test_get_available_metrics_requires_unit_field(self, tmp_path: Path) -> None:
+        """Test that metrics without unit field are skipped."""
+        loader = DataLoader()
+        aggregated = {
+            "time_to_first_token": {"value": 45.0, "unit": "ms"},
+            "metric_without_unit": {"value": 100.0},
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        result = loader.get_available_metrics(run_data)
+
+        assert "time_to_first_token" in result["display_names"]
+        assert "metric_without_unit" not in result["display_names"]
+
+
+class TestDataLoaderLoadGPUTelemetryJSONL:
+    """Tests for DataLoader._load_gpu_telemetry_jsonl method."""
+
+    def test_load_gpu_telemetry_with_relative_timestamps(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry with relative timestamp conversion."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+
+        run_start_time_ns = 1000000000000
+        telemetry_data = [
+            {
+                "timestamp_ns": 1000000100000,
+                "gpu_index": 0,
+                "telemetry_data": {
+                    "gpu_utilization": 80.5,
+                    "memory_used_gb": 12.3,
+                },
+            },
+            {
+                "timestamp_ns": 1000000200000,
+                "gpu_index": 1,
+                "telemetry_data": {
+                    "gpu_utilization": 75.2,
+                    "memory_used_gb": 10.1,
+                },
+            },
+        ]
+
+        with open(jsonl_path, "w") as f:
+            for record in telemetry_data:
+                f.write(json.dumps(record) + "\n")
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path, run_start_time_ns)
+
+        assert df is not None
+        assert len(df) == 2
+        assert "timestamp_s" in df.columns
+        assert "gpu_utilization" in df.columns
+        assert "memory_used_gb" in df.columns
+        # Check relative timestamp conversion
+        assert df["timestamp_s"].iloc[0] == pytest.approx(0.0001, abs=1e-6)
+
+    def test_load_gpu_telemetry_with_absolute_timestamps(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry with absolute timestamps (no run start time)."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+
+        telemetry_data = [
+            {
+                "timestamp_ns": 1000000000000,
+                "gpu_index": 0,
+                "telemetry_data": {"gpu_utilization": 80.5},
+            },
+        ]
+
+        with open(jsonl_path, "w") as f:
+            for record in telemetry_data:
+                f.write(json.dumps(record) + "\n")
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path, run_start_time_ns=None)
+
+        assert df is not None
+        assert len(df) == 1
+        assert "timestamp_s" in df.columns
+        # Check absolute timestamp in seconds
+        assert df["timestamp_s"].iloc[0] == pytest.approx(1000.0, abs=0.1)
+
+    def test_load_gpu_telemetry_missing_file(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry when file doesn't exist."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "nonexistent.jsonl"
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path)
+
+        assert df is None
+
+    def test_load_gpu_telemetry_corrupted_lines(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry with corrupted lines."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+
+        with open(jsonl_path, "w") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "timestamp_ns": 1000000000000,
+                        "gpu_index": 0,
+                        "telemetry_data": {"gpu_utilization": 80.5},
+                    }
+                )
+                + "\n"
+            )
+            f.write("{ invalid json }\n")
+            f.write(
+                json.dumps(
+                    {
+                        "timestamp_ns": 1000000100000,
+                        "gpu_index": 1,
+                        "telemetry_data": {"gpu_utilization": 75.0},
+                    }
+                )
+                + "\n"
+            )
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path)
+
+        # Should load 2 valid records, skip 1 corrupted
+        assert df is not None
+        assert len(df) == 2
+
+    def test_load_gpu_telemetry_empty_file(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry from empty file."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+        jsonl_path.write_text("")
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path)
+
+        assert df is None
+
+    def test_load_gpu_telemetry_missing_timestamp_field(self, tmp_path: Path) -> None:
+        """Test loading GPU telemetry when timestamp_ns field is missing."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+
+        telemetry_data = [
+            {
+                "gpu_index": 0,
+                "telemetry_data": {"gpu_utilization": 80.5},
+                # Missing timestamp_ns
+            },
+        ]
+
+        with open(jsonl_path, "w") as f:
+            for record in telemetry_data:
+                f.write(json.dumps(record) + "\n")
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path)
+
+        # Should still load, but timestamp_s won't be present
+        assert df is not None
+        assert len(df) == 1
+        assert "gpu_index" in df.columns
+
+    def test_load_gpu_telemetry_flattens_nested_data(self, tmp_path: Path) -> None:
+        """Test that telemetry_data dict is flattened into main record."""
+        loader = DataLoader()
+        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+
+        telemetry_data = [
+            {
+                "timestamp_ns": 1000000000000,
+                "gpu_index": 0,
+                "endpoint": "endpoint1",
+                "telemetry_data": {
+                    "gpu_utilization": 80.5,
+                    "memory_used_gb": 12.3,
+                    "temperature_c": 65.0,
+                },
+            },
+        ]
+
+        with open(jsonl_path, "w") as f:
+            for record in telemetry_data:
+                f.write(json.dumps(record) + "\n")
+
+        df = loader._load_gpu_telemetry_jsonl(jsonl_path)
+
+        assert df is not None
+        assert len(df) == 1
+        # All fields should be at top level
+        assert "gpu_utilization" in df.columns
+        assert "memory_used_gb" in df.columns
+        assert "temperature_c" in df.columns
+        assert "gpu_index" in df.columns
+        assert "endpoint" in df.columns
+        # telemetry_data should not be a column
+        assert "telemetry_data" not in df.columns
