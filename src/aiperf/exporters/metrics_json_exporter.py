@@ -84,7 +84,7 @@ class MetricsJsonExporter(MetricsBaseExporter):
             )
 
         export_data = JsonExportData(
-            input_config=self._user_config,
+            input_config=self._user_config.model_dump(exclude_unset=True),
             was_cancelled=self._results.was_cancelled,
             error_summary=self._results.error_summary,
             start_time=start_time,

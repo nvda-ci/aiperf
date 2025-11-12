@@ -13,6 +13,7 @@ from aiperf.common.messages import (
     TelemetryRecordsMessage,
     TelemetryStatusMessage,
 )
+from aiperf.common.metric_utils import normalize_metrics_endpoint_url
 from aiperf.common.models import ErrorDetails
 from aiperf.gpu_telemetry.telemetry_data_collector import TelemetryDataCollector
 from aiperf.gpu_telemetry.telemetry_manager import TelemetryManager
@@ -148,36 +149,36 @@ class TestTelemetryManagerInitialization:
 
 
 class TestUrlNormalization:
-    """Test _normalize_dcgm_url static method."""
+    """Test normalize_metrics_endpoint_url utility function."""
 
     def test_normalize_adds_metrics_suffix(self):
         """Test normalization adds /metrics suffix when missing."""
         url = "http://localhost:9401"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_preserves_metrics_suffix(self):
         """Test normalization preserves existing /metrics suffix."""
         url = "http://localhost:9401/metrics"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_removes_trailing_slash(self):
         """Test normalization removes trailing slash."""
         url = "http://localhost:9401/"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_trailing_slash_with_metrics(self):
         """Test normalization handles trailing slash after /metrics."""
         url = "http://localhost:9401/metrics/"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://localhost:9401/metrics"
 
     def test_normalize_complex_path(self):
         """Test normalization with complex URL paths."""
         url = "http://node1:9401/dcgm"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://node1:9401/dcgm/metrics"
 
 
@@ -553,10 +554,10 @@ class TestEdgeCases:
 
     def test_normalize_url_preserves_valid_structure(self):
         """Test URL normalization only works with properly structured URLs."""
-        # normalize_dcgm_url is a simple string operation that assumes valid input
+        # normalize_metrics_endpoint_url is a simple string operation that assumes valid input
         # Invalid inputs are filtered before normalization in __init__
         url = "http://localhost:9401"
-        normalized = TelemetryManager._normalize_dcgm_url(url)
+        normalized = normalize_metrics_endpoint_url(url)
         assert normalized == "http://localhost:9401/metrics"
 
 

@@ -14,6 +14,7 @@ from aiperf.common.models import (
     ParsedResponseRecord,
     RequestInfo,
     RequestRecord,
+    ServerMetricsRecord,
     ServiceRunInfo,
     TelemetryRecord,
 )
@@ -499,7 +500,7 @@ class ResultsProcessorProtocol(AIPerfLifecycleProtocol, Protocol):
 
     async def process_result(self, record_data: "MetricRecordsData") -> None: ...
 
-    async def summarize(self) -> list["MetricResult"]: ...
+    async def summarize(self) -> Any: ...
 
 
 @runtime_checkable
@@ -523,8 +524,39 @@ class TelemetryResultsProcessorProtocol(Protocol):
         """Generate MetricResult list with hierarchical tags for telemetry data.
 
         Returns:
-            List of MetricResult objects with hierarchical tags that preserve
-            dcgm_url -> gpu_uuid grouping structure for dashboard filtering.
+                List of MetricResult objects with hierarchical tags that preserve
+                dcgm_url -> gpu_uuid grouping structure for dashboard filtering.
+        """
+        ...
+
+
+@runtime_checkable
+class ServerMetricsResultsProcessorProtocol(Protocol):
+    """Protocol for server metrics results processors that handle ServerMetricsRecord objects.
+
+    This protocol is separate from ResultsProcessorProtocol because server metrics data
+    has fundamentally different structure (hierarchical Prometheus snapshots) compared
+    to inference metrics (flat key-value pairs).
+
+    Processors implementing this protocol can handle both server metrics records
+    (time-varying data) and metadata messages (static endpoint information).
+    """
+
+    async def process_server_metrics_record(
+        self, record: "ServerMetricsRecord"
+    ) -> None:
+        """Process individual server metrics record with complete Prometheus snapshot.
+
+        Args:
+            record: ServerMetricsRecord containing Prometheus metrics snapshot and metadata
+        """
+        ...
+
+    async def summarize(self) -> list["MetricResult"]:
+        """Generate list of MetricResult for server metrics data.
+
+        Returns:
+            list of MetricResult containing the server metrics data and hierarchy.
         """
         ...
 

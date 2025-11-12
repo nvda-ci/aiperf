@@ -20,6 +20,7 @@ from aiperf.common.messages import (
     TelemetryRecordsMessage,
     TelemetryStatusMessage,
 )
+from aiperf.common.metric_utils import normalize_metrics_endpoint_url
 from aiperf.common.models import ErrorDetails, TelemetryRecord
 from aiperf.common.protocols import (
     PushClientProtocol,
@@ -79,7 +80,9 @@ class TelemetryManager(BaseComponentService):
         if isinstance(user_endpoints, str):
             user_endpoints = [user_endpoints]
 
-        valid_endpoints = [self._normalize_dcgm_url(url) for url in user_endpoints]
+        valid_endpoints = [
+            normalize_metrics_endpoint_url(url) for url in user_endpoints
+        ]
 
         # Store user-provided endpoints separately for display filtering (excluding auto-inserted defaults)
         self._user_provided_endpoints = [
@@ -97,21 +100,6 @@ class TelemetryManager(BaseComponentService):
         )
 
         self._collection_interval = Environment.GPU.COLLECTION_INTERVAL
-
-    @staticmethod
-    def _normalize_dcgm_url(url: str) -> str:
-        """Ensure DCGM URL ends with /metrics endpoint.
-
-        Args:
-            url: Base URL or full metrics URL
-
-        Returns:
-            str: URL ending with /metrics
-        """
-        url = url.rstrip("/")
-        if not url.endswith("/metrics"):
-            url = f"{url}/metrics"
-        return url
 
     def _compute_endpoints_for_display(
         self, reachable_defaults: list[str]

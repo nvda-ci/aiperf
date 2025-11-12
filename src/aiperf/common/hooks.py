@@ -355,7 +355,7 @@ def on_realtime_telemetry_metrics(func: Callable) -> Callable:
 
     Example:
     ```python
-    class MyPlugin(RealtimeMetricsMixin):
+    class MyPlugin(RealtimeTelemetryMetricsMixin):
         @on_realtime_telemetry_metrics
         def _on_realtime_telemetry_metrics(self, metrics: list[MetricResult]) -> None:
             pass

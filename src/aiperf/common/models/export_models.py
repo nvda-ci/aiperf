@@ -1,13 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
-from aiperf.common.config import UserConfig
+from aiperf.common.enums.prometheus_enums import PrometheusMetricType
 from aiperf.common.models import ErrorDetailsCount
 from aiperf.common.models.base_models import AIPerfBaseModel
+from aiperf.common.models.server_metrics_models import HistogramData, SummaryData
 
 
 class JsonMetricResult(AIPerfBaseModel):
@@ -86,7 +90,75 @@ class TimesliceCollectionExportData(AIPerfBaseModel):
     """
 
     timeslices: list[TimesliceData]
-    input_config: UserConfig | None = None
+    input_config: dict[str, Any] | None = None
+
+
+class AggregatedMetricSample(AIPerfBaseModel):
+    """Aggregated data for a single metric sample with specific labels.
+
+    For histograms: Contains bucket deltas over the time period
+    For summaries: Contains quantiles, sum, count deltas over the time period
+    For counters: Contains delta value
+    For gauges: Contains statistics (avg, min, max, percentiles)
+    """
+
+    labels: dict[str, str] = Field(
+        default_factory=dict, description="Label key-value pairs for this sample"
+    )
+    value: float | None = Field(
+        default=None, description="Delta value for counters, or single value for gauges"
+    )
+    histogram: HistogramData | None = Field(
+        default=None,
+        description="Histogram bucket deltas over time period",
+    )
+    summary: SummaryData | None = Field(
+        default=None,
+        description="Summary quantiles and deltas over time period",
+    )
+    statistics: JsonMetricResult | None = Field(
+        default=None,
+        description="Aggregated statistics for gauges (avg, min, max, percentiles)",
+    )
+
+
+class AggregatedMetricFamily(AIPerfBaseModel):
+    """Aggregated metric family with data for each label combination.
+
+    Similar structure to raw MetricFamily but with aggregated data over time period:
+    - Histograms: bucket deltas (delta between first and last snapshot)
+    - Counters: delta value (increase over time period)
+    - Gauges: computed statistics (avg, min, max, percentiles)
+    """
+
+    type: PrometheusMetricType = Field(
+        description="Metric type as defined in the Prometheus exposition format"
+    )
+    help: str | None = Field(default=None, description="Help text for this metric")
+    unit: str | None = Field(default=None, description="Unit of measurement")
+    samples: list[AggregatedMetricSample] = Field(
+        description="List of samples with different label combinations and aggregated data over time period"
+    )
+
+
+class ServerMetricsEndpointData(AIPerfBaseModel):
+    """Server metrics data for a single endpoint.
+
+    Contains metrics organized by metric name with their statistics,
+    preserving label structure similar to raw snapshot data.
+    """
+
+    endpoint_url: str = Field(
+        description="Source Prometheus metrics endpoint URL (e.g., 'http://localhost:8081/metrics')"
+    )
+    kubernetes_pod_info: dict[str, str | dict[str, str]] | None = Field(
+        default=None,
+        description="Kubernetes POD information (pod_name, namespace, node_name, etc.)",
+    )
+    metrics: dict[str, AggregatedMetricFamily] = Field(
+        description="Metrics organized by metric name with their statistics, "
+        "preserving label structure similar to raw snapshot data. Structure: metric_name -> AggregatedMetricFamily"
+    )
 
 
 class JsonExportData(AIPerfBaseModel):
@@ -129,7 +201,7 @@ class JsonExportData(AIPerfBaseModel):
     error_isl: JsonMetricResult | None = None
     total_error_isl: JsonMetricResult | None = None
     telemetry_data: TelemetryExportData | None = None
-    input_config: UserConfig | None = None
+    input_config: dict[str, Any] | None = None
     was_cancelled: bool | None = None
     error_summary: list[ErrorDetailsCount] | None = None
     start_time: datetime | None = None

@@ -111,7 +111,7 @@ class TestMetricsJsonExporter:
             assert data.time_to_first_token.p1 == 101.0
 
             assert data.input_config is not None
-            assert isinstance(data.input_config, UserConfig)
+            assert isinstance(data.input_config, dict)
             # TODO: Uncomment this once we have expanded the output config to include all important fields
             # assert "output" in data["input_config"]
             # assert data["input_config"]["output"]["artifact_directory"] == str(

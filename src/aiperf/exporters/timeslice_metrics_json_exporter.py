@@ -81,7 +81,7 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
         # Create collection with metadata
         export_data = TimesliceCollectionExportData(
             timeslices=timeslices_list,
-            input_config=self._user_config,
+            input_config=self._user_config.model_dump(exclude_unset=True),
         )
 
         return export_data.model_dump_json(indent=2, exclude_unset=True)
