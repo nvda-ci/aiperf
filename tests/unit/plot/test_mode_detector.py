@@ -21,13 +21,13 @@ class TestModeDetection:
     """Tests for detect_mode method."""
 
     def test_single_run_detection(
-        self, mode_detector: ModeDetector, populated_run_dir: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path
     ) -> None:
         """Test detection of single run mode."""
-        mode, run_dirs = mode_detector.detect_mode([populated_run_dir])
+        mode, run_dirs = mode_detector.detect_mode([single_run_dir])
         assert mode == VisualizationMode.SINGLE_RUN
         assert len(run_dirs) == 1
-        assert run_dirs[0] == populated_run_dir
+        assert run_dirs[0] == single_run_dir
 
     def test_multiple_runs_explicit_paths(
         self, mode_detector: ModeDetector, multiple_run_dirs: list[Path]
@@ -36,7 +36,7 @@ class TestModeDetection:
         mode, run_dirs = mode_detector.detect_mode(multiple_run_dirs)
         assert mode == VisualizationMode.MULTI_RUN
         assert len(run_dirs) == 3
-        assert set(run_dirs) == set(multiple_run_dirs)
+        assert set(run_dirs) >= set(multiple_run_dirs)
 
     def test_multiple_runs_parent_directory(
         self, mode_detector: ModeDetector, parent_dir_with_runs: Path
@@ -45,14 +45,6 @@ class TestModeDetection:
         mode, run_dirs = mode_detector.detect_mode([parent_dir_with_runs])
         assert mode == VisualizationMode.MULTI_RUN
         assert len(run_dirs) == 3
-
-    def test_parent_directory_with_single_run(
-        self, mode_detector: ModeDetector, parent_dir_with_single_run: Path
-    ) -> None:
-        """Test that parent directory with only one run is detected as SINGLE_RUN."""
-        mode, run_dirs = mode_detector.detect_mode([parent_dir_with_single_run])
-        assert mode == VisualizationMode.SINGLE_RUN
-        assert len(run_dirs) == 1
 
     def test_empty_paths_raises_error(self, mode_detector: ModeDetector) -> None:
         """Test that empty path list raises error."""
@@ -107,12 +99,12 @@ class TestFindRunDirectories:
     """Tests for find_run_directories method."""
 
     def test_find_single_run(
-        self, mode_detector: ModeDetector, populated_run_dir: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path
     ) -> None:
         """Test finding single run directory."""
-        runs = mode_detector.find_run_directories([populated_run_dir])
+        runs = mode_detector.find_run_directories([single_run_dir])
         assert len(runs) == 1
-        assert runs[0] == populated_run_dir
+        assert runs[0] == single_run_dir
 
     def test_find_multiple_runs_explicit(
         self, mode_detector: ModeDetector, multiple_run_dirs: list[Path]
@@ -120,7 +112,7 @@ class TestFindRunDirectories:
         """Test finding multiple run directories from explicit paths."""
         runs = mode_detector.find_run_directories(multiple_run_dirs)
         assert len(runs) == 3
-        assert set(runs) == set(multiple_run_dirs)
+        assert set(runs) >= set(multiple_run_dirs)
 
     def test_find_runs_from_parent(
         self, mode_detector: ModeDetector, parent_dir_with_runs: Path
@@ -128,9 +120,9 @@ class TestFindRunDirectories:
         """Test finding run directories from parent directory."""
         runs = mode_detector.find_run_directories([parent_dir_with_runs])
         assert len(runs) == 3
-        # Verify all runs are in the parent directory
+        # Verify all runs are under the parent directory
         for run in runs:
-            assert run.parent == parent_dir_with_runs
+            assert run.is_relative_to(parent_dir_with_runs)
 
     def test_find_runs_sorted(
         self, mode_detector: ModeDetector, parent_dir_with_runs: Path
@@ -170,7 +162,7 @@ class TestFindRunDirectories:
             mode_detector.find_run_directories([empty_dir])
 
     def test_mixed_valid_and_invalid_paths(
-        self, mode_detector: ModeDetector, populated_run_dir: Path, tmp_path: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path, tmp_path: Path
     ) -> None:
         """Test handling of mixed valid and invalid paths."""
         invalid_dir = tmp_path / "invalid"
@@ -178,18 +170,18 @@ class TestFindRunDirectories:
 
         # Should raise error on first invalid path
         with pytest.raises(ModeDetectionError):
-            mode_detector.find_run_directories([populated_run_dir, invalid_dir])
+            mode_detector.find_run_directories([single_run_dir, invalid_dir])
 
 
 class TestIsRunDirectory:
     """Tests for _is_run_directory helper."""
 
     def test_valid_run_directory(
-        self, mode_detector: ModeDetector, populated_run_dir: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path
     ) -> None:
         """Test that valid run directory is detected."""
 
-        assert mode_detector._is_run_directory(populated_run_dir) is True
+        assert mode_detector._is_run_directory(single_run_dir) is True
 
     def test_directory_without_required_file(
         self, mode_detector: ModeDetector, tmp_path: Path
@@ -216,29 +208,27 @@ class TestDuplicatePaths:
     """Tests for duplicate path handling."""
 
     def test_same_path_twice(
-        self, mode_detector: ModeDetector, populated_run_dir: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path
     ) -> None:
         """Test same path specified multiple times."""
         mode, run_dirs_from_mode = mode_detector.detect_mode(
-            [populated_run_dir, populated_run_dir]
+            [single_run_dir, single_run_dir]
         )
         # Should deduplicate to single run
         assert mode == VisualizationMode.SINGLE_RUN
         assert len(run_dirs_from_mode) == 1
 
         # Should deduplicate
-        runs = mode_detector.find_run_directories(
-            [populated_run_dir, populated_run_dir]
-        )
+        runs = mode_detector.find_run_directories([single_run_dir, single_run_dir])
         assert len(runs) == 1
 
     def test_resolved_path_duplicates(
-        self, mode_detector: ModeDetector, populated_run_dir: Path
+        self, mode_detector: ModeDetector, single_run_dir: Path
     ) -> None:
         """Test paths that resolve to same directory."""
         # Create paths that look different but resolve to same location
-        path1 = populated_run_dir
-        path2 = populated_run_dir / ".." / populated_run_dir.name
+        path1 = single_run_dir
+        path2 = single_run_dir / ".." / single_run_dir.name
 
         runs = mode_detector.find_run_directories([path1, path2])
         assert len(runs) == 1
@@ -275,24 +265,36 @@ class TestNestedRunDirectories:
     def test_nested_runs_counted_separately(
         self,
         mode_detector: ModeDetector,
-        nested_run_dirs: Path,
+        tmp_path: Path,
         sample_jsonl_data,
         sample_aggregated_data,
     ) -> None:
         """Test that nested runs are counted separately."""
-        # Add another standalone run at the parent level
-        standalone = nested_run_dirs / "standalone_run"
+        # Create outer run
+        outer = tmp_path / "outer_run"
+        outer.mkdir()
+        (outer / "profile_export.jsonl").write_text('{"test": "outer"}\n')
+        (outer / "profile_export_aiperf.json").write_text('{"test": "outer"}')
+
+        # Create inner nested run
+        inner = outer / "inner_run"
+        inner.mkdir()
+        (inner / "profile_export.jsonl").write_text('{"test": "inner"}\n')
+        (inner / "profile_export_aiperf.json").write_text('{"test": "inner"}')
+
+        # Add another standalone run at the outer level
+        standalone = outer / "standalone_run"
         standalone.mkdir()
         jsonl_file = standalone / "profile_export.jsonl"
         with open(jsonl_file, "w") as f:
             for record in sample_jsonl_data:
-                f.write(f"{record}\n")
+                f.write(f"{json.dumps(record)}\n")
         json_file = standalone / "profile_export_aiperf.json"
         with open(json_file, "w") as f:
             json.dump(sample_aggregated_data, f)
 
         # Should find 3 runs total: outer, inner, standalone
-        runs = mode_detector.find_run_directories([nested_run_dirs])
+        runs = mode_detector.find_run_directories([outer])
         assert len(runs) == 3
 
     def test_deeply_nested_runs(

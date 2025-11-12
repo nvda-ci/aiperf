@@ -19,10 +19,10 @@ from aiperf.plot.exceptions import DataLoadError
 class TestDataLoaderLoadRun:
     """Tests for DataLoader.load_run method."""
 
-    def test_load_single_run_success(self, populated_run_dir: Path) -> None:
+    def test_load_single_run_success(self, single_run_dir: Path) -> None:
         """Test successfully loading a single run."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir)
+        run = loader.load_run(single_run_dir)
 
         assert isinstance(run, RunData)
         assert isinstance(run.metadata, RunMetadata)
@@ -30,7 +30,7 @@ class TestDataLoaderLoadRun:
         assert isinstance(run.aggregated, dict)
 
         # Check that requests were loaded
-        assert len(run.requests) == 2
+        assert len(run.requests) == 10
         assert "time_to_first_token" in run.requests.columns
         assert "request_latency" in run.requests.columns
 
@@ -60,22 +60,22 @@ class TestDataLoaderLoadRun:
         with pytest.raises(DataLoadError, match="JSONL file not found"):
             loader.load_run(run_dir)
 
-    def test_metadata_extraction(self, populated_run_dir: Path) -> None:
+    def test_metadata_extraction(self, single_run_dir: Path) -> None:
         """Test that metadata is correctly extracted."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir)
+        run = loader.load_run(single_run_dir)
 
-        assert run.metadata.run_name == populated_run_dir.name
-        assert run.metadata.run_path == populated_run_dir
-        assert run.metadata.model == "test-model"
-        assert run.metadata.concurrency == 4
-        assert run.metadata.request_count == 100
+        assert run.metadata.run_name == single_run_dir.name
+        assert run.metadata.run_path == single_run_dir
+        assert run.metadata.model == "Qwen/Qwen3-0.6B"
+        assert run.metadata.concurrency == 1
+        assert run.metadata.request_count == 64
         assert run.metadata.endpoint_type == "chat"
 
-    def test_timestamp_conversion_to_utc(self, populated_run_dir: Path) -> None:
+    def test_timestamp_conversion_to_utc(self, single_run_dir: Path) -> None:
         """Test that timestamps are converted to UTC datetime."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir)
+        run = loader.load_run(single_run_dir)
 
         # Check that timestamp columns are datetime with UTC timezone
         assert pd.api.types.is_datetime64_any_dtype(run.requests["request_start_ns"])
@@ -90,7 +90,7 @@ class TestDataLoaderLoadMultipleRuns:
         loader = DataLoader()
         runs = loader.load_multiple_runs(multiple_run_dirs)
 
-        assert len(runs) == 3
+        assert len(runs) == 2
         assert all(isinstance(r, RunData) for r in runs)
 
     def test_load_empty_list_raises_error(self) -> None:
@@ -101,7 +101,7 @@ class TestDataLoaderLoadMultipleRuns:
             loader.load_multiple_runs([])
 
     def test_load_with_invalid_run_raises_error(
-        self, populated_run_dir: Path, tmp_path: Path
+        self, single_run_dir: Path, tmp_path: Path
     ) -> None:
         """Test that invalid run in list raises error."""
         loader = DataLoader()
@@ -109,20 +109,20 @@ class TestDataLoaderLoadMultipleRuns:
         invalid_dir.mkdir()
 
         with pytest.raises(DataLoadError):
-            loader.load_multiple_runs([populated_run_dir, invalid_dir])
+            loader.load_multiple_runs([single_run_dir, invalid_dir])
 
 
 class TestDataLoaderLoadJsonl:
     """Tests for DataLoader._load_jsonl method."""
 
-    def test_load_valid_jsonl(self, populated_run_dir: Path) -> None:
+    def test_load_valid_jsonl(self, single_run_dir: Path) -> None:
         """Test loading valid JSONL file."""
         loader = DataLoader()
-        jsonl_path = populated_run_dir / "profile_export.jsonl"
+        jsonl_path = single_run_dir / "profile_export.jsonl"
         df = loader._load_jsonl(jsonl_path)
 
         assert isinstance(df, pd.DataFrame)
-        assert len(df) == 2
+        assert len(df) == 10
         assert "time_to_first_token" in df.columns
         assert "session_num" in df.columns
 
@@ -256,10 +256,10 @@ class TestDataLoaderComputeInterChunkLatencyStats:
 class TestDataLoaderLoadAggregatedJson:
     """Tests for DataLoader._load_aggregated_json method."""
 
-    def test_load_valid_aggregated_json(self, populated_run_dir: Path) -> None:
+    def test_load_valid_aggregated_json(self, single_run_dir: Path) -> None:
         """Test loading valid aggregated JSON."""
         loader = DataLoader()
-        json_path = populated_run_dir / "profile_export_aiperf.json"
+        json_path = single_run_dir / "profile_export_aiperf.json"
         data = loader._load_aggregated_json(json_path)
 
         assert isinstance(data, dict)
@@ -286,10 +286,10 @@ class TestDataLoaderLoadAggregatedJson:
 class TestDataLoaderLoadInputConfig:
     """Tests for DataLoader._load_input_config method."""
 
-    def test_load_valid_input_config(self, populated_run_dir: Path) -> None:
+    def test_load_valid_input_config(self, single_run_dir: Path) -> None:
         """Test loading valid inputs.json."""
         loader = DataLoader()
-        inputs_path = populated_run_dir / "inputs.json"
+        inputs_path = single_run_dir / "inputs.json"
         data = loader._load_input_config(inputs_path)
 
         assert isinstance(data, dict)
@@ -352,14 +352,14 @@ class TestDataLoaderExtractMetadata:
 class TestDataLoaderReloadWithDetails:
     """Tests for DataLoader.reload_with_details method."""
 
-    def test_reload_adds_per_request_data(self, populated_run_dir: Path) -> None:
+    def test_reload_adds_per_request_data(self, single_run_dir: Path) -> None:
         """Test that reload_with_details loads per-request data."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir, load_per_request_data=False)
+        run = loader.load_run(single_run_dir, load_per_request_data=False)
 
         assert run.requests is None
 
-        reloaded_run = loader.reload_with_details(populated_run_dir)
+        reloaded_run = loader.reload_with_details(single_run_dir)
 
         assert reloaded_run.requests is not None
         assert not reloaded_run.requests.empty
@@ -380,19 +380,19 @@ class TestDataLoaderReloadWithDetails:
 class TestDataLoaderLoadPerRequestData:
     """Tests for DataLoader.load_run with load_per_request_data parameter."""
 
-    def test_load_run_without_per_request_data(self, populated_run_dir: Path) -> None:
+    def test_load_run_without_per_request_data(self, single_run_dir: Path) -> None:
         """Test loading run without per-request data."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir, load_per_request_data=False)
+        run = loader.load_run(single_run_dir, load_per_request_data=False)
 
         assert run.metadata is not None
         assert run.aggregated is not None
         assert run.requests is None
 
-    def test_load_run_with_per_request_data(self, populated_run_dir: Path) -> None:
+    def test_load_run_with_per_request_data(self, single_run_dir: Path) -> None:
         """Test loading run with per-request data."""
         loader = DataLoader()
-        run = loader.load_run(populated_run_dir, load_per_request_data=True)
+        run = loader.load_run(single_run_dir, load_per_request_data=True)
 
         assert run.metadata is not None
         assert run.aggregated is not None

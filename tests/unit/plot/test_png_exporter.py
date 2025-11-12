@@ -1300,7 +1300,7 @@ class TestDualAxisHandler:
         dual_axis_handler,
         data_loader,
         available_metrics,
-        real_qwen_concurrency1_dir,
+        single_run_dir,
     ):
         """Test that the original GPU utilization plot still works."""
         from aiperf.plot.core.plot_specs import (
@@ -1310,15 +1310,21 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         spec = PlotSpec(
             name="gpu_utilization_and_throughput_over_time",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Output Token Throughput with GPU Utilization",
             primary_mode="lines",
@@ -1340,7 +1346,7 @@ class TestDualAxisHandler:
         dual_axis_handler,
         data_loader,
         available_metrics,
-        real_qwen_concurrency1_dir,
+        single_run_dir,
     ):
         """Test that a dual-axis plot with a different name works (not hardcoded)."""
         from aiperf.plot.core.plot_specs import (
@@ -1350,15 +1356,21 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         spec = PlotSpec(
             name="my_custom_dual_axis_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Custom Dual-Axis Plot",
             primary_mode="lines",
@@ -1379,7 +1391,7 @@ class TestDualAxisHandler:
         dual_axis_handler,
         data_loader,
         available_metrics,
-        real_qwen_concurrency1_dir,
+        single_run_dir,
     ):
         """Test that custom styling parameters are applied."""
         from aiperf.plot.core.plot_specs import (
@@ -1389,15 +1401,21 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         spec = PlotSpec(
             name="styled_dual_axis_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Custom Styled Plot",
             primary_mode="markers",
@@ -1417,7 +1435,7 @@ class TestDualAxisHandler:
         dual_axis_handler,
         data_loader,
         available_metrics,
-        real_qwen_concurrency1_dir,
+        single_run_dir,
     ):
         """Test that missing x metric defaults to timestamp_s."""
         from aiperf.plot.core.plot_specs import (
@@ -1427,14 +1445,20 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         spec = PlotSpec(
             name="no_x_metric_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Plot Without X Metric",
         )
@@ -1470,8 +1494,14 @@ class TestDualAxisHandler:
             name="test_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Test Plot",
         )
@@ -1483,7 +1513,7 @@ class TestDualAxisHandler:
         dual_axis_handler,
         data_loader,
         available_metrics,
-        real_qwen_concurrency1_dir,
+        single_run_dir,
     ):
         """Test that empty primary data raises an appropriate error."""
         from aiperf.plot.core.plot_specs import (
@@ -1493,14 +1523,18 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         spec = PlotSpec(
             name="invalid_metric_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("nonexistent_metric", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(
+                    name="nonexistent_metric", source=DataSource.REQUESTS, axis="y"
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Invalid Metric Plot",
         )
@@ -1519,7 +1553,7 @@ class TestDualAxisHandler:
         assert callable(dual_axis_handler.METRIC_PREP_FUNCTIONS["gpu_utilization"])
 
     def test_axis_labels_from_available_metrics(
-        self, dual_axis_handler, data_loader, real_qwen_concurrency1_dir
+        self, dual_axis_handler, data_loader, single_run_dir
     ):
         """Test that axis labels are derived from available_metrics."""
         from aiperf.plot.core.plot_specs import (
@@ -1529,7 +1563,7 @@ class TestDualAxisHandler:
             PlotType,
         )
 
-        run_data = data_loader.load_run(real_qwen_concurrency1_dir)
+        run_data = data_loader.load_run(single_run_dir)
 
         custom_metrics = {
             "throughput_tokens_per_sec": {
@@ -1546,9 +1580,15 @@ class TestDualAxisHandler:
             name="custom_labels_plot",
             plot_type=PlotType.DUAL_AXIS,
             metrics=[
-                MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-                MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-                MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+                MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+                MetricSpec(
+                    name="throughput_tokens_per_sec",
+                    source=DataSource.REQUESTS,
+                    axis="y",
+                ),
+                MetricSpec(
+                    name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+                ),
             ],
             title="Custom Labels Plot",
         )

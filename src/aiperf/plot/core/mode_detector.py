@@ -65,21 +65,6 @@ class ModeDetector(AIPerfLoggerMixin):
 
         Raises:
             ModeDetectionError: If mode cannot be determined or paths are invalid.
-
-        Examples:
-            >>> # Single run
-            >>> mode, runs = detect_mode([Path("results/run1")])
-            >>> mode
-            VisualizationMode.SINGLE_RUN
-            >>> len(runs)
-            1
-
-            >>> # Multiple runs (explicit paths)
-            >>> mode, runs = detect_mode([Path("results/run1"), Path("results/run2")])
-            >>> mode
-            VisualizationMode.MULTI_RUN
-            >>> len(runs)
-            2
         """
         if not paths:
             raise ModeDetectionError("No paths provided")
@@ -111,19 +96,6 @@ class ModeDetector(AIPerfLoggerMixin):
 
         Raises:
             ModeDetectionError: If no valid run directories are found.
-
-        Examples:
-            >>> # Explicit run directories
-            >>> find_run_directories([Path("results/run1"), Path("results/run2")])
-            [Path("results/run1"), Path("results/run2")]
-
-            >>> # Parent directory with subdirectories
-            >>> find_run_directories([Path("results")])
-            [Path("results/run1"), Path("results/run2")]
-
-            >>> # Nested run directories
-            >>> find_run_directories([Path("results")])
-            [Path("results/run1"), Path("results/run1/nested_run")]
         """
         all_run_dirs = []
         seen_resolved = set()
@@ -135,7 +107,6 @@ class ModeDetector(AIPerfLoggerMixin):
             if not path.is_dir():
                 raise ModeDetectionError(f"Path is not a directory: {path}")
 
-            # Find all run directories recursively
             run_dirs = self._find_all_run_directories_recursive(path)
 
             if not run_dirs:
@@ -143,19 +114,20 @@ class ModeDetector(AIPerfLoggerMixin):
                     f"Path does not contain any valid run directories: {path}"
                 )
 
-            # Deduplicate based on resolved paths
             for run_dir in run_dirs:
                 try:
                     resolved = run_dir.resolve(strict=True)
-                    if resolved not in seen_resolved:
-                        all_run_dirs.append(run_dir)
-                        seen_resolved.add(resolved)
-                    else:
-                        self.debug(f"Skipping duplicate run directory: {run_dir}")
-                except (OSError, RuntimeError):
-                    # If we can't resolve, include it if not seen by path equality
-                    if run_dir not in all_run_dirs:
-                        all_run_dirs.append(run_dir)
+                except (OSError, RuntimeError) as e:
+                    self.warning(
+                        f"Cannot resolve run directory {run_dir}, skipping: {e}"
+                    )
+                    continue
+
+                if resolved not in seen_resolved:
+                    all_run_dirs.append(run_dir)
+                    seen_resolved.add(resolved)
+                else:
+                    self.debug(f"Skipping duplicate run directory: {run_dir}")
 
         if not all_run_dirs:
             raise ModeDetectionError("No valid run directories found")

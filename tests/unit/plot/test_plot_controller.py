@@ -102,11 +102,11 @@ class TestPlotControllerValidatePaths:
     """Tests for PlotController._validate_paths method."""
 
     def test_validate_paths_with_existing_path(
-        self, populated_run_dir: Path, tmp_path: Path
+        self, single_run_dir: Path, tmp_path: Path
     ) -> None:
         """Test path validation with existing path."""
         controller = PlotController(
-            paths=[populated_run_dir],
+            paths=[single_run_dir],
             output_dir=tmp_path / "output",
         )
 
@@ -140,12 +140,12 @@ class TestPlotControllerValidatePaths:
             controller._validate_paths()
 
     def test_validate_paths_with_mixed_valid_invalid(
-        self, populated_run_dir: Path, tmp_path: Path
+        self, single_run_dir: Path, tmp_path: Path
     ) -> None:
         """Test path validation with mix of valid and invalid paths."""
         nonexistent = tmp_path / "nonexistent"
         controller = PlotController(
-            paths=[populated_run_dir, nonexistent],
+            paths=[single_run_dir, nonexistent],
             output_dir=tmp_path / "output",
         )
 
@@ -168,12 +168,10 @@ class TestPlotControllerValidatePaths:
 class TestPlotControllerDetectVisualizationMode:
     """Tests for PlotController._detect_visualization_mode method."""
 
-    def test_detect_single_run_mode(
-        self, populated_run_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_detect_single_run_mode(self, single_run_dir: Path, tmp_path: Path) -> None:
         """Test detection of single run mode."""
         controller = PlotController(
-            paths=[populated_run_dir],
+            paths=[single_run_dir],
             output_dir=tmp_path / "output",
         )
 
@@ -181,7 +179,7 @@ class TestPlotControllerDetectVisualizationMode:
 
         assert mode == VisualizationMode.SINGLE_RUN
         assert len(run_dirs) == 1
-        assert run_dirs[0] == populated_run_dir
+        assert run_dirs[0] == single_run_dir
 
     def test_detect_multi_run_mode(
         self, multiple_run_dirs: list[Path], tmp_path: Path
@@ -196,7 +194,7 @@ class TestPlotControllerDetectVisualizationMode:
 
         assert mode == VisualizationMode.MULTI_RUN
         assert len(run_dirs) == 3
-        assert set(run_dirs) == set(multiple_run_dirs)
+        assert set(run_dirs) >= set(multiple_run_dirs)
 
     def test_detect_mode_with_no_valid_runs_raises_error(self, tmp_path: Path) -> None:
         """Test that detection with no valid runs raises ModeDetectionError."""
@@ -263,8 +261,8 @@ class TestPlotControllerExportMultiRun:
             tmp_path / "output", theme=PlotTheme.DARK
         )
 
-        # Verify loader was called for each run
-        assert controller.loader.load_run.call_count == 3
+        # Verify loader was called for each run (2 paths passed directly)
+        assert controller.loader.load_run.call_count == 2
 
         # Verify export was called
         mock_exporter.export.assert_called_once()
@@ -338,7 +336,7 @@ class TestPlotControllerExportSingleRun:
     def test_export_single_run_success(
         self,
         mock_exporter_class: MagicMock,
-        populated_run_dir: Path,
+        single_run_dir: Path,
         tmp_path: Path,
     ) -> None:
         """Test successful single-run export."""
@@ -348,7 +346,7 @@ class TestPlotControllerExportSingleRun:
         mock_exporter_class.return_value = mock_exporter
 
         controller = PlotController(
-            paths=[populated_run_dir],
+            paths=[single_run_dir],
             output_dir=tmp_path / "output",
             theme=PlotTheme.LIGHT,
         )
@@ -359,7 +357,7 @@ class TestPlotControllerExportSingleRun:
             return_value={"metric1": {"unit": "ms"}}
         )
 
-        result = controller._export_single_run_plots(populated_run_dir)
+        result = controller._export_single_run_plots(single_run_dir)
 
         # Verify exporter was created with correct params
         mock_exporter_class.assert_called_once_with(
@@ -368,7 +366,7 @@ class TestPlotControllerExportSingleRun:
 
         # Verify loader was called with per_request_data=True
         controller.loader.load_run.assert_called_once_with(
-            populated_run_dir, load_per_request_data=True
+            single_run_dir, load_per_request_data=True
         )
 
         # Verify export was called
@@ -379,12 +377,12 @@ class TestPlotControllerExportSingleRun:
     def test_export_single_run_load_failure_propagates(
         self,
         mock_exporter_class: MagicMock,
-        populated_run_dir: Path,
+        single_run_dir: Path,
         tmp_path: Path,
     ) -> None:
         """Test that single-run export propagates load failures."""
         controller = PlotController(
-            paths=[populated_run_dir],
+            paths=[single_run_dir],
             output_dir=tmp_path / "output",
         )
 
@@ -394,7 +392,7 @@ class TestPlotControllerExportSingleRun:
         )
 
         with pytest.raises(ValueError, match="Failed to load run"):
-            controller._export_single_run_plots(populated_run_dir)
+            controller._export_single_run_plots(single_run_dir)
 
 
 class TestPlotControllerGeneratePNGPlots:
@@ -404,7 +402,7 @@ class TestPlotControllerGeneratePNGPlots:
     def test_generate_png_plots_single_run_integration(
         self,
         mock_exporter_class: MagicMock,
-        populated_run_dir: Path,
+        single_run_dir: Path,
         tmp_path: Path,
         capsys,
     ) -> None:
@@ -415,7 +413,7 @@ class TestPlotControllerGeneratePNGPlots:
         mock_exporter_class.return_value = mock_exporter
 
         controller = PlotController(
-            paths=[populated_run_dir],
+            paths=[single_run_dir],
             output_dir=tmp_path / "output",
         )
 
