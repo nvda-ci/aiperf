@@ -22,6 +22,7 @@ from aiperf.plot.core.data_preparation import (
 from aiperf.plot.core.plot_generator import PlotGenerator
 from aiperf.plot.core.plot_specs import (
     DataSource,
+    MetricSpec,
     PlotSpec,
     PlotType,
     TimeSlicePlotSpec,
@@ -47,7 +48,7 @@ class BaseSingleRunHandler:
         self.plot_generator = plot_generator
         self.logger = logger
 
-    def _get_axis_label(self, metric_spec, available_metrics: dict) -> str:
+    def _get_axis_label(self, metric_spec: MetricSpec, available_metrics: dict) -> str:
         """
         Get axis label for a metric.
 

@@ -158,31 +158,25 @@ class ModeDetector(AIPerfLoggerMixin):
         if not path.is_dir():
             return False
 
-        # Check for required files
         jsonl_file = path / PROFILE_EXPORT_JSONL
         aiperf_json_file = path / PROFILE_EXPORT_AIPERF_JSON
 
-        # Check for broken symlinks and missing files (with permission error handling)
         try:
-            # Check if the jsonl file is a broken symlink
             if jsonl_file.is_symlink() and not jsonl_file.exists():
                 self.warning(
                     f"Directory {path} contains broken symlink for {jsonl_file}"
                 )
                 return False
 
-            # Check if the required jsonl file exists
             if not jsonl_file.exists():
                 return False
 
-            # Check if the aiperf json file is a broken symlink
             if aiperf_json_file.is_symlink() and not aiperf_json_file.exists():
                 self.warning(
                     f"Directory {path} contains broken symlink for {aiperf_json_file}"
                 )
                 return False
 
-            # Check if the required aiperf json file exists
             if not aiperf_json_file.exists():
                 return False
 
@@ -217,25 +211,21 @@ class ModeDetector(AIPerfLoggerMixin):
         if not path.is_dir():
             return run_dirs
 
-        # Resolve path to detect circular symlinks
         try:
             resolved_path = path.resolve(strict=True)
         except (OSError, RuntimeError) as e:
             self.warning(f"Cannot resolve path {path}: {e}")
             return run_dirs
 
-        # Check for circular symlinks
         if resolved_path in visited:
             self.debug(f"Skipping already visited path: {path}")
             return run_dirs
 
         visited.add(resolved_path)
 
-        # Check if current path is a run directory
         if self._is_run_directory(path):
             run_dirs.append(path)
 
-        # Recursively search subdirectories
         try:
             for subdir in path.iterdir():
                 if subdir.is_dir():

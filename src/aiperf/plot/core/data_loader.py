@@ -10,14 +10,15 @@ formats suitable for visualization and analysis.
 """
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from aiperf.common.mixins import AIPerfLoggerMixin
+from aiperf.common.models import AIPerfBaseModel
 from aiperf.common.models.record_models import MetricRecordInfo, MetricResult
 from aiperf.plot.constants import (
     PROFILE_EXPORT_AIPERF_JSON,
@@ -28,58 +29,59 @@ from aiperf.plot.constants import (
 from aiperf.plot.exceptions import DataLoadError
 
 
-@dataclass
-class RunMetadata:
-    """
-    Metadata for a single profiling run.
+class RunMetadata(AIPerfBaseModel):
+    """Metadata for a single profiling run."""
 
-    Args:
-        run_name: Name of the run (typically directory name).
-        run_path: Path to the run directory.
-        model: Model name used in the run.
-        concurrency: Concurrency level used.
-        request_count: Total number of requests.
-        duration_seconds: Duration of the run in seconds.
-        endpoint_type: Type of endpoint (e.g., "chat", "completions").
-        start_time: ISO timestamp when the profiling run started.
-        end_time: ISO timestamp when the profiling run ended.
-        was_cancelled: Whether the profiling run was cancelled early.
-    """
-
-    run_name: str
-    run_path: Path
-    model: str | None = None
-    concurrency: int | None = None
-    request_count: int | None = None
-    duration_seconds: float | None = None
-    endpoint_type: str | None = None
-    start_time: str | None = None
-    end_time: str | None = None
-    was_cancelled: bool = False
+    run_name: str = Field(description="Name of the run (typically directory name)")
+    run_path: Path = Field(description="Path to the run directory")
+    model: str | None = Field(default=None, description="Model name used in the run")
+    concurrency: int | None = Field(default=None, description="Concurrency level used")
+    request_count: int | None = Field(
+        default=None, description="Total number of requests"
+    )
+    duration_seconds: float | None = Field(
+        default=None, description="Duration of the run in seconds"
+    )
+    endpoint_type: str | None = Field(
+        default=None, description="Type of endpoint (e.g., 'chat', 'completions')"
+    )
+    start_time: str | None = Field(
+        default=None, description="ISO timestamp when the profiling run started"
+    )
+    end_time: str | None = Field(
+        default=None, description="ISO timestamp when the profiling run ended"
+    )
+    was_cancelled: bool = Field(
+        default=False, description="Whether the profiling run was cancelled early"
+    )
 
 
-@dataclass
-class RunData:
-    """
-    Complete data for a single profiling run.
+class RunData(AIPerfBaseModel):
+    """Complete data for a single profiling run."""
 
-    Args:
-        metadata: Metadata for the run.
-        requests: DataFrame containing per-request data, or None if not loaded.
-        aggregated: Dictionary containing aggregated statistics. The "metrics" key
-            contains a dict mapping metric tags to MetricResult objects.
-        timeslices: DataFrame containing timeslice data in tidy format with columns:
-            [Timeslice, Metric, Unit, Stat, Value], or None if not loaded.
-        slice_duration: Duration of each time slice in seconds, or None if not available.
-        gpu_telemetry: DataFrame containing GPU telemetry time series data, or None if not loaded.
-    """
+    model_config = {"arbitrary_types_allowed": True}
 
-    metadata: RunMetadata
-    requests: pd.DataFrame | None
-    aggregated: dict[str, Any]
-    timeslices: pd.DataFrame | None = None
-    slice_duration: float | None = None
-    gpu_telemetry: pd.DataFrame | None = None
+    metadata: RunMetadata = Field(description="Metadata for the run")
+    requests: pd.DataFrame | None = Field(
+        description="DataFrame containing per-request data, or None if not loaded"
+    )
+    aggregated: dict[str, Any] = Field(
+        description="Dictionary containing aggregated statistics. The 'metrics' key "
+        "contains a dict mapping metric tags to MetricResult objects"
+    )
+    timeslices: pd.DataFrame | None = Field(
+        default=None,
+        description="DataFrame containing timeslice data in tidy format with columns: "
+        "[Timeslice, Metric, Unit, Stat, Value], or None if not loaded",
+    )
+    slice_duration: float | None = Field(
+        default=None,
+        description="Duration of each time slice in seconds, or None if not available",
+    )
+    gpu_telemetry: pd.DataFrame | None = Field(
+        default=None,
+        description="DataFrame containing GPU telemetry time series data, or None if not loaded",
+    )
 
 
 class DerivedMetricCalculator:
@@ -123,7 +125,6 @@ class DerivedMetricCalculator:
         return per_gpu_data
 
 
-# Registry mapping metric names to their calculator functions
 DERIVED_METRICS_REGISTRY: dict[str, callable] = {
     "output_token_throughput_per_gpu": DerivedMetricCalculator.per_gpu_throughput,
 }
@@ -135,16 +136,6 @@ class DataLoader(AIPerfLoggerMixin):
 
     This class provides methods to load profiling data from various files
     and parse them into structured formats for visualization.
-
-    Examples:
-        >>> loader = DataLoader()
-        >>> run_data = loader.load_run(Path("results/run1"))
-        >>> print(run_data.metadata.model)
-        'my-model'
-
-        >>> runs = loader.load_multiple_runs([Path("run1"), Path("run2")])
-        >>> for run in runs:
-        ...     print(run.metadata.run_name)
     """
 
     def __init__(self):
@@ -179,16 +170,12 @@ class DataLoader(AIPerfLoggerMixin):
         if not jsonl_path.exists():
             raise DataLoadError("Required JSONL file not found", path=str(jsonl_path))
 
-        # Load JSONL per-request data (conditionally)
         requests_df = self._load_jsonl(jsonl_path) if load_per_request_data else None
 
-        # Load aggregated JSON
         aggregated = self._load_aggregated_json(run_path / PROFILE_EXPORT_AIPERF_JSON)
 
-        # Add derived metrics
         self._add_all_derived_metrics(aggregated)
 
-        # Load timeslices CSV (optional - may not exist for all runs)
         timeslices_path = run_path / PROFILE_EXPORT_TIMESLICES_CSV
         timeslices_df = None
         slice_duration = None
@@ -199,21 +186,17 @@ class DataLoader(AIPerfLoggerMixin):
             except DataLoadError as e:
                 self.warning(f"Failed to load timeslice CSV data: {e}")
 
-        # Extract slice_duration from aggregated JSON's input_config
         if "input_config" in aggregated:
             input_config = aggregated["input_config"]
             if "output" in input_config and "slice_duration" in input_config["output"]:
                 slice_duration = input_config["output"]["slice_duration"]
                 self.info(f"Extracted slice_duration: {slice_duration}s")
 
-        # Extract metadata
         metadata = self._extract_metadata(run_path, requests_df, aggregated)
 
-        # Load GPU telemetry data (optional - may not exist for all runs)
         gpu_telemetry_path = run_path / PROFILE_EXPORT_GPU_TELEMETRY_JSONL
         gpu_telemetry_df = None
 
-        # Calculate run start time for relative timestamps
         run_start_time_ns = None
         if (
             requests_df is not None
@@ -222,7 +205,6 @@ class DataLoader(AIPerfLoggerMixin):
         ):
             start_times = requests_df["request_start_ns"].dropna()
             if not start_times.empty:
-                # Convert datetime to int nanoseconds if needed
                 first_start = start_times.min()
                 if isinstance(first_start, pd.Timestamp):
                     run_start_time_ns = int(first_start.value)
@@ -267,7 +249,6 @@ class DataLoader(AIPerfLoggerMixin):
         if not run_paths:
             raise DataLoadError("No run paths provided")
 
-        # Load all runs with only aggregated summary data, not per-request data
         runs = []
         for path in run_paths:
             try:
@@ -276,8 +257,6 @@ class DataLoader(AIPerfLoggerMixin):
             except DataLoadError as e:
                 self.error(f"Failed to load run from {path}: {e}")
                 raise
-
-        # Note: swept parameter detection removed until configuration system is implemented
 
         return runs
 
@@ -297,14 +276,6 @@ class DataLoader(AIPerfLoggerMixin):
 
         Raises:
             DataLoadError: If data cannot be loaded from the run directory.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> runs = loader.load_multiple_runs([Path("run1"), Path("run2")])
-            >>> # User selects run1 for detailed analysis
-            >>> detailed_run = loader.reload_with_details(Path("run1"))
-            >>> print(detailed_run.requests.shape)
-            (100, 15)
         """
         return self.load_run(run_path, load_per_request_data=True)
 
@@ -320,14 +291,6 @@ class DataLoader(AIPerfLoggerMixin):
         Returns:
             Telemetry data dictionary with 'summary' and 'endpoints' keys, or None if
             telemetry data is not available.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/run1"))
-            >>> telemetry = loader.extract_telemetry_data(run.aggregated)
-            >>> if telemetry:
-            ...     print(telemetry['summary']['start_time'])
-            ...     print(telemetry['endpoints'].keys())
         """
         if not aggregated or "telemetry_data" not in aggregated:
             self.debug("No telemetry data found in aggregated statistics")
@@ -360,14 +323,6 @@ class DataLoader(AIPerfLoggerMixin):
         Returns:
             Dictionary with keys: start_time, end_time, endpoints_configured,
             endpoints_successful, or None if not available.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/run1"))
-            >>> summary = loader.get_telemetry_summary(run.aggregated)
-            >>> if summary:
-            ...     print(f"Started: {summary['start_time']}")
-            ...     print(f"Ended: {summary['end_time']}")
         """
         telemetry = self.extract_telemetry_data(aggregated)
         return telemetry.get("summary") if telemetry else None
@@ -386,13 +341,6 @@ class DataLoader(AIPerfLoggerMixin):
         Returns:
             Total GPU count across all endpoints, or None if telemetry data is not
             available.
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/run1"))
-            >>> gpu_count = loader.calculate_gpu_count_from_telemetry(run.aggregated)
-            >>> if gpu_count:
-            ...     print(f"Total GPUs: {gpu_count}")
         """
         telemetry = self.extract_telemetry_data(aggregated)
         if not telemetry:
@@ -429,13 +377,6 @@ class DataLoader(AIPerfLoggerMixin):
 
         Args:
             aggregated: The aggregated data dictionary (will be modified in-place)
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/run1"))
-            >>> # Derived metrics are automatically added during load_run()
-            >>> if "output_token_throughput_per_gpu" in run.aggregated:
-            ...     print("GPU metric available")
         """
         gpu_count = self.calculate_gpu_count_from_telemetry(aggregated)
 
@@ -445,7 +386,6 @@ class DataLoader(AIPerfLoggerMixin):
             )
             return
 
-        # Iterate through registry and apply each calculator
         metrics_added = []
         for metric_name, calculator_func in DERIVED_METRICS_REGISTRY.items():
             try:
@@ -476,13 +416,6 @@ class DataLoader(AIPerfLoggerMixin):
             Dictionary with two keys:
                 - "display_names": dict mapping metric tag to display name
                 - "units": dict mapping metric tag to unit string
-
-        Examples:
-            >>> loader = DataLoader()
-            >>> run = loader.load_run(Path("results/run1"))
-            >>> available = loader.get_available_metrics(run)
-            >>> print(available["display_names"])
-            {'time_to_first_token': 'Time to First Token', 'inter_token_latency': 'Inter Token Latency'}
         """
         from aiperf.plot.constants import NON_METRIC_KEYS
         from aiperf.plot.metric_names import get_metric_display_name
@@ -494,15 +427,11 @@ class DataLoader(AIPerfLoggerMixin):
         display_names = {}
         units = {}
 
-        # Iterate through top-level keys in aggregated data
         for key, value in run_data.aggregated.items():
-            # Skip known non-metric keys
             if key in NON_METRIC_KEYS:
                 continue
 
-            # Check if this looks like a metric (has unit field)
             if isinstance(value, dict) and "unit" in value and value is not None:
-                # Get display name from MetricRegistry/GPU telemetry config
                 display_names[key] = get_metric_display_name(key)
                 units[key] = value["unit"]
 
@@ -542,9 +471,7 @@ class DataLoader(AIPerfLoggerMixin):
                         continue
 
                     try:
-                        # Parse using Pydantic model for type safety and validation
                         metric_record = MetricRecordInfo.model_validate_json(line)
-                        # Convert to flat dict for DataFrame
                         flat_record = self._convert_to_flat_dict(metric_record)
                         records.append(flat_record)
                     except (json.JSONDecodeError, Exception) as e:
@@ -566,7 +493,6 @@ class DataLoader(AIPerfLoggerMixin):
 
             df = pd.DataFrame(records)
 
-            # Convert timestamp columns to UTC datetime
             timestamp_columns = [col for col in df.columns if col.endswith("_ns")]
             for col in timestamp_columns:
                 if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
@@ -621,19 +547,15 @@ class DataLoader(AIPerfLoggerMixin):
         """
         flat = {}
 
-        # Flatten metadata (Pydantic model -> dict)
         flat.update(record.metadata.model_dump())
 
-        # Flatten metrics (extract values from MetricValue objects)
         for key, metric_value in record.metrics.items():
-            # Compute per-request statistics for inter_chunk_latency (stream health/jitter)
             if key == "inter_chunk_latency" and isinstance(metric_value.value, list):
                 stats = self._compute_inter_chunk_latency_stats(metric_value.value)
                 flat.update(stats)
                 continue
             flat[key] = metric_value.value
 
-        # Include error field if present
         if record.error:
             flat["error"] = record.error.model_dump()
 
@@ -663,7 +585,6 @@ class DataLoader(AIPerfLoggerMixin):
             with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Parse metrics into MetricResult objects
             if "metrics" in data and isinstance(data["metrics"], dict):
                 parsed_metrics = {}
                 for tag, metric_data in data["metrics"].items():
@@ -671,7 +592,6 @@ class DataLoader(AIPerfLoggerMixin):
                         parsed_metrics[tag] = MetricResult(**metric_data)
                     except Exception as e:
                         self.warning(f"Failed to parse metric {tag}: {e}")
-                        # Keep raw dict as fallback
                         parsed_metrics[tag] = metric_data
                 data["metrics"] = parsed_metrics
 
@@ -763,11 +683,9 @@ class DataLoader(AIPerfLoggerMixin):
                     try:
                         data = json.loads(line)
 
-                        # Flatten the telemetry_data dict into the main record
                         telemetry_data = data.pop("telemetry_data", {})
                         flat_record = {**data, **telemetry_data}
 
-                        # Convert timestamp to seconds relative to run start if available
                         if "timestamp_ns" in flat_record:
                             timestamp_ns = flat_record["timestamp_ns"]
                             if run_start_time_ns:
@@ -775,7 +693,6 @@ class DataLoader(AIPerfLoggerMixin):
                                     timestamp_ns - run_start_time_ns
                                 ) / 1e9
                             else:
-                                # Keep absolute timestamp in seconds
                                 flat_record["timestamp_s"] = timestamp_ns / 1e9
 
                         records.append(flat_record)
@@ -857,8 +774,6 @@ class DataLoader(AIPerfLoggerMixin):
             RunMetadata object with extracted information.
         """
         run_name = run_path.name
-
-        # Extract from aggregated data (preferred source)
         model = None
         concurrency = None
         request_count = None
@@ -870,31 +785,25 @@ class DataLoader(AIPerfLoggerMixin):
         if aggregated and "input_config" in aggregated:
             config = aggregated["input_config"]
 
-            # Extract model
             if "endpoint" in config and "model_names" in config["endpoint"]:
                 models = config["endpoint"]["model_names"]
                 if models:
                     model = models[0]
 
-            # Extract concurrency
             if "loadgen" in config and "concurrency" in config["loadgen"]:
                 concurrency = config["loadgen"]["concurrency"]
 
-            # Extract request count
             if "loadgen" in config and "request_count" in config["loadgen"]:
                 request_count = config["loadgen"]["request_count"]
 
-            # Extract endpoint type
             if "endpoint" in config and "type" in config["endpoint"]:
                 endpoint_type = config["endpoint"]["type"]
 
-        # Extract run timing information from top-level keys
         if aggregated:
             start_time = aggregated.get("start_time")
             end_time = aggregated.get("end_time")
             was_cancelled = aggregated.get("was_cancelled", False)
 
-        # Calculate duration from requests (if available)
         duration_seconds = None
         if (
             requests_df is not None
@@ -906,7 +815,6 @@ class DataLoader(AIPerfLoggerMixin):
             end_times = requests_df["request_end_ns"].dropna()
             if not start_times.empty and not end_times.empty:
                 duration = end_times.max() - start_times.min()
-                # Handle both Timedelta (from datetime subtraction) and int/float (from ns values)
                 if isinstance(duration, pd.Timedelta):
                     duration_seconds = duration.total_seconds()
                 else:

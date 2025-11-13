@@ -9,6 +9,8 @@ Provides PNG export methods using kaleido for static image generation.
 
 from pathlib import Path
 
+import plotly.graph_objects as go
+
 from aiperf.plot.constants import (
     DEFAULT_PLOT_DPI,
     DEFAULT_PLOT_HEIGHT,
@@ -25,7 +27,7 @@ class BasePNGExporter(BaseExporter):
     and summary file generation.
     """
 
-    def _export_figure(self, fig, path: Path) -> None:
+    def _export_figure(self, fig: go.Figure, path: Path) -> None:
         """
         Export a Plotly figure to PNG file using kaleido.
 

@@ -251,7 +251,6 @@ class PlotGenerator:
         if y_label is None:
             y_label = y_metric.replace("_", " ").title()
 
-        # Prepare groups and colors
         groups, group_colors = self._prepare_groups(df_sorted, group_by)
 
         for group in groups:

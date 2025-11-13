@@ -266,7 +266,6 @@ def prepare_timeslice_metrics(
     if run.timeslices is None or run.timeslices.empty:
         return pd.DataFrame()
 
-    # Filter for specific metric and stat
     metric_data = run.timeslices[
         (run.timeslices["Metric"] == metric_name) & (run.timeslices["Stat"] == stat)
     ].copy()
@@ -274,7 +273,6 @@ def prepare_timeslice_metrics(
     if metric_data.empty:
         raise ValueError(f"No timeslice data for {metric_name} ({stat})")
 
-    # Prepare data for plotting
     plot_df = metric_data[["Timeslice", "Value"]].copy()
     plot_df = plot_df.rename(columns={"Value": stat})
 
@@ -321,10 +319,8 @@ def flatten_config(config: dict, parent_key: str = "") -> dict[str, Any]:
         new_key = f"{parent_key}.{key}" if parent_key else key
 
         if isinstance(value, dict) and not _is_leaf_config(value):
-            # Recursively flatten nested dicts
             items.update(flatten_config(value, new_key))
         elif isinstance(value, list) and len(value) == 1:
-            # Unwrap single-item lists
             items[new_key] = value[0]
         else:
             items[new_key] = value

@@ -1,24 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025 NVIDIA CORPORATION & AFFILIATES
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 """Plot specifications for configurable plot generation."""
 
-from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
+
+from pydantic import Field
+
+from aiperf.common.models import AIPerfBaseModel
 
 
 class DataSource(Enum):
@@ -44,71 +34,77 @@ class PlotType(Enum):
     SCATTER_WITH_PERCENTILES = "scatter_with_percentiles"
 
 
-@dataclass
-class MetricSpec:
-    """Specification for a single metric in a plot.
+class MetricSpec(AIPerfBaseModel):
+    """Specification for a single metric in a plot."""
 
-    Args:
-        name: Name of the metric (column name in DataFrame)
-        source: Data source where the metric comes from
-        axis: Which axis the metric should be plotted on
-        stat: Optional statistic to filter/extract (e.g., "avg", "p50", "p95")
-              Applies to timeslices, aggregated data, and any source with stats
-    """
-
-    name: str
-    source: DataSource
-    axis: Literal["x", "y", "y2"]
-    stat: str | None = None
+    name: str = Field(description="Name of the metric (column name in DataFrame)")
+    source: DataSource = Field(description="Data source where the metric comes from")
+    axis: Literal["x", "y", "y2"] = Field(
+        description="Which axis the metric should be plotted on"
+    )
+    stat: str | None = Field(
+        default=None,
+        description="Optional statistic to filter/extract (e.g., 'avg', 'p50', 'p95'). "
+        "Applies to timeslices, aggregated data, and any source with stats",
+    )
 
 
-@dataclass
-class PlotSpec:
-    """Base specification for a plot.
+class PlotSpec(AIPerfBaseModel):
+    """Base specification for a plot."""
 
-    Args:
-        name: Unique identifier for the plot
-        plot_type: Type of plot to generate
-        metrics: List of metrics to plot
-        title: Plot title (auto-generated if None)
-        filename: Output filename (auto-generated from name if None)
-        label_by: Column to use for labeling points (for multi-series plots)
-        group_by: Column to use for grouping data (for multi-series plots)
-        primary_mode: Visualization mode for primary (y) axis ("lines", "markers", "lines+markers")
-        primary_line_shape: Line shape for primary axis ("linear", "hv", "spline", None)
-        primary_fill: Fill mode for primary axis ("tozeroy", "tonexty", None)
-        secondary_mode: Visualization mode for secondary (y2) axis
-        secondary_line_shape: Line shape for secondary axis
-        secondary_fill: Fill mode for secondary axis
-        supplementary_col: Optional supplementary column name (e.g., "active_requests")
-    """
+    name: str = Field(description="Unique identifier for the plot")
+    plot_type: PlotType = Field(description="Type of plot to generate")
+    metrics: list[MetricSpec] = Field(description="List of metrics to plot")
+    title: str | None = Field(
+        default=None, description="Plot title (auto-generated if None)"
+    )
+    filename: str | None = Field(
+        default=None, description="Output filename (auto-generated from name if None)"
+    )
+    label_by: str | None = Field(
+        default=None,
+        description="Column to use for labeling points (for multi-series plots)",
+    )
+    group_by: str | None = Field(
+        default=None,
+        description="Column to use for grouping data (for multi-series plots)",
+    )
+    primary_mode: str = Field(
+        default="lines",
+        description="Visualization mode for primary (y) axis ('lines', 'markers', 'lines+markers')",
+    )
+    primary_line_shape: str | None = Field(
+        default=None,
+        description="Line shape for primary axis ('linear', 'hv', 'spline', None)",
+    )
+    primary_fill: str | None = Field(
+        default=None,
+        description="Fill mode for primary axis ('tozeroy', 'tonexty', None)",
+    )
+    secondary_mode: str = Field(
+        default="lines",
+        description="Visualization mode for secondary (y2) axis",
+    )
+    secondary_line_shape: str | None = Field(
+        default=None, description="Line shape for secondary axis"
+    )
+    secondary_fill: str | None = Field(
+        default=None, description="Fill mode for secondary axis"
+    )
+    supplementary_col: str | None = Field(
+        default=None,
+        description="Optional supplementary column name (e.g., 'active_requests')",
+    )
 
-    name: str
-    plot_type: PlotType
-    metrics: list[MetricSpec]
-    title: str | None = None
-    filename: str | None = None
-    label_by: str | None = None
-    group_by: str | None = None
-    primary_mode: str = "lines"
-    primary_line_shape: str | None = None
-    primary_fill: str | None = None
-    secondary_mode: str = "lines"
-    secondary_line_shape: str | None = None
-    secondary_fill: str | None = None
-    supplementary_col: str | None = None
 
-
-@dataclass
 class TimeSlicePlotSpec(PlotSpec):
-    """Specification for timeslice histogram plots.
+    """Specification for timeslice histogram plots."""
 
-    Args:
-        use_slice_duration: Whether to pass slice_duration to the plot generator
-                           for proper time-based x-axis formatting
-    """
-
-    use_slice_duration: bool = True
+    use_slice_duration: bool = Field(
+        default=True,
+        description="Whether to pass slice_duration to the plot generator "
+        "for proper time-based x-axis formatting",
+    )
 
 
 # Single-run plot specifications
@@ -117,8 +113,10 @@ SINGLE_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="ttft_over_time",
         plot_type=PlotType.SCATTER,
         metrics=[
-            MetricSpec("request_number", DataSource.REQUESTS, "x"),
-            MetricSpec("time_to_first_token", DataSource.REQUESTS, "y"),
+            MetricSpec(name="request_number", source=DataSource.REQUESTS, axis="x"),
+            MetricSpec(
+                name="time_to_first_token", source=DataSource.REQUESTS, axis="y"
+            ),
         ],
         title="TTFT Per Request Over Time",
         filename="ttft_over_time.png",
@@ -127,8 +125,10 @@ SINGLE_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="itl_over_time",
         plot_type=PlotType.SCATTER,
         metrics=[
-            MetricSpec("request_number", DataSource.REQUESTS, "x"),
-            MetricSpec("inter_token_latency", DataSource.REQUESTS, "y"),
+            MetricSpec(name="request_number", source=DataSource.REQUESTS, axis="x"),
+            MetricSpec(
+                name="inter_token_latency", source=DataSource.REQUESTS, axis="y"
+            ),
         ],
         title="Inter-Token Latency Per Request Over Time",
         filename="itl_over_time.png",
@@ -137,8 +137,8 @@ SINGLE_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="latency_over_time",
         plot_type=PlotType.SCATTER_WITH_PERCENTILES,
         metrics=[
-            MetricSpec("timestamp", DataSource.REQUESTS, "x"),
-            MetricSpec("request_latency", DataSource.REQUESTS, "y"),
+            MetricSpec(name="timestamp", source=DataSource.REQUESTS, axis="x"),
+            MetricSpec(name="request_latency", source=DataSource.REQUESTS, axis="y"),
         ],
         title="Request Latency Over Time with Percentiles",
         filename="latency_over_time.png",
@@ -147,8 +147,10 @@ SINGLE_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="dispersed_throughput_over_time",
         plot_type=PlotType.AREA,
         metrics=[
-            MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-            MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
+            MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+            MetricSpec(
+                name="throughput_tokens_per_sec", source=DataSource.REQUESTS, axis="y"
+            ),
         ],
         title="Dispersed Output Token Throughput Over Time",
         filename="dispersed_throughput_over_time.png",
@@ -162,8 +164,13 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
         name="timeslices_ttft",
         plot_type=PlotType.HISTOGRAM,
         metrics=[
-            MetricSpec("Timeslice", DataSource.TIMESLICES, "x"),
-            MetricSpec("Time to First Token", DataSource.TIMESLICES, "y", stat="avg"),
+            MetricSpec(name="Timeslice", source=DataSource.TIMESLICES, axis="x"),
+            MetricSpec(
+                name="Time to First Token",
+                source=DataSource.TIMESLICES,
+                axis="y",
+                stat="avg",
+            ),
         ],
         title="Time to First Token Across Time Slices",
         filename="timeslices_ttft.png",
@@ -173,8 +180,13 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
         name="timeslices_itl",
         plot_type=PlotType.HISTOGRAM,
         metrics=[
-            MetricSpec("Timeslice", DataSource.TIMESLICES, "x"),
-            MetricSpec("Inter Token Latency", DataSource.TIMESLICES, "y", stat="avg"),
+            MetricSpec(name="Timeslice", source=DataSource.TIMESLICES, axis="x"),
+            MetricSpec(
+                name="Inter Token Latency",
+                source=DataSource.TIMESLICES,
+                axis="y",
+                stat="avg",
+            ),
         ],
         title="Inter Token Latency Across Time Slices",
         filename="timeslices_itl.png",
@@ -184,8 +196,13 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
         name="timeslices_throughput",
         plot_type=PlotType.HISTOGRAM,
         metrics=[
-            MetricSpec("Timeslice", DataSource.TIMESLICES, "x"),
-            MetricSpec("Request Throughput", DataSource.TIMESLICES, "y", stat="avg"),
+            MetricSpec(name="Timeslice", source=DataSource.TIMESLICES, axis="x"),
+            MetricSpec(
+                name="Request Throughput",
+                source=DataSource.TIMESLICES,
+                axis="y",
+                stat="avg",
+            ),
         ],
         title="Request Throughput Across Time Slices",
         filename="timeslices_throughput.png",
@@ -195,8 +212,13 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
         name="timeslices_latency",
         plot_type=PlotType.HISTOGRAM,
         metrics=[
-            MetricSpec("Timeslice", DataSource.TIMESLICES, "x"),
-            MetricSpec("Request Latency", DataSource.TIMESLICES, "y", stat="avg"),
+            MetricSpec(name="Timeslice", source=DataSource.TIMESLICES, axis="x"),
+            MetricSpec(
+                name="Request Latency",
+                source=DataSource.TIMESLICES,
+                axis="y",
+                stat="avg",
+            ),
         ],
         title="Request Latency Across Time Slices",
         filename="timeslices_latency.png",
@@ -211,9 +233,13 @@ GPU_PLOT_SPECS: list[PlotSpec] = [
         name="gpu_utilization_and_throughput_over_time",
         plot_type=PlotType.DUAL_AXIS,
         metrics=[
-            MetricSpec("timestamp_s", DataSource.REQUESTS, "x"),
-            MetricSpec("throughput_tokens_per_sec", DataSource.REQUESTS, "y"),
-            MetricSpec("gpu_utilization", DataSource.GPU_TELEMETRY, "y2"),
+            MetricSpec(name="timestamp_s", source=DataSource.REQUESTS, axis="x"),
+            MetricSpec(
+                name="throughput_tokens_per_sec", source=DataSource.REQUESTS, axis="y"
+            ),
+            MetricSpec(
+                name="gpu_utilization", source=DataSource.GPU_TELEMETRY, axis="y2"
+            ),
         ],
         title="Output Token Throughput with GPU Utilization",
         filename="gpu_utilization_and_throughput_over_time.png",
@@ -234,11 +260,16 @@ MULTI_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="pareto_curve_throughput_per_gpu_vs_latency",
         plot_type=PlotType.PARETO,
         metrics=[
-            MetricSpec("request_latency", DataSource.AGGREGATED, "x", stat="avg"),
             MetricSpec(
-                "output_token_throughput_per_gpu",
-                DataSource.AGGREGATED,
-                "y",
+                name="request_latency",
+                source=DataSource.AGGREGATED,
+                axis="x",
+                stat="avg",
+            ),
+            MetricSpec(
+                name="output_token_throughput_per_gpu",
+                source=DataSource.AGGREGATED,
+                axis="y",
                 stat="avg",
             ),
         ],
@@ -251,8 +282,18 @@ MULTI_RUN_PLOT_SPECS: list[PlotSpec] = [
         name="ttft_vs_throughput",
         plot_type=PlotType.SCATTER_LINE,
         metrics=[
-            MetricSpec("time_to_first_token", DataSource.AGGREGATED, "x", stat="p50"),
-            MetricSpec("request_throughput", DataSource.AGGREGATED, "y", stat="avg"),
+            MetricSpec(
+                name="time_to_first_token",
+                source=DataSource.AGGREGATED,
+                axis="x",
+                stat="p50",
+            ),
+            MetricSpec(
+                name="request_throughput",
+                source=DataSource.AGGREGATED,
+                axis="y",
+                stat="avg",
+            ),
         ],
         title="TTFT vs Throughput",
         filename="ttft_vs_throughput.png",
@@ -264,15 +305,15 @@ MULTI_RUN_PLOT_SPECS: list[PlotSpec] = [
         plot_type=PlotType.SCATTER_LINE,
         metrics=[
             MetricSpec(
-                "output_token_throughput_per_gpu",
-                DataSource.AGGREGATED,
-                "x",
+                name="output_token_throughput_per_gpu",
+                source=DataSource.AGGREGATED,
+                axis="x",
                 stat="avg",
             ),
             MetricSpec(
-                "output_token_throughput_per_user",
-                DataSource.AGGREGATED,
-                "y",
+                name="output_token_throughput_per_user",
+                source=DataSource.AGGREGATED,
+                axis="y",
                 stat="avg",
             ),
         ],
