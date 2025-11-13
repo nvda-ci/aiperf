@@ -421,7 +421,7 @@ class TestTimeSeriesHistogram:
         assert fig.layout.bargap == 0
 
     def test_histogram_with_annotations(self, plot_generator, timeslice_df):
-        """Test that time range labels are annotated when slice_duration is provided."""
+        """Test that histogram with slice_duration has no annotations by default."""
         fig = plot_generator.create_time_series_histogram(
             df=timeslice_df,
             x_col="timeslice",
@@ -429,14 +429,8 @@ class TestTimeSeriesHistogram:
             slice_duration=10.0,
         )
 
-        assert fig.layout.annotations is not None
-        assert len(fig.layout.annotations) == len(timeslice_df)
-
-        for i, annotation in enumerate(fig.layout.annotations):
-            start_time = i * 10
-            end_time = (i + 1) * 10
-            expected_text = f"{start_time}s-{end_time}s"
-            assert annotation["text"] == expected_text
+        # Should have no annotations when slice_duration is provided (no labels by default)
+        assert fig.layout.annotations is None or len(fig.layout.annotations) == 0
 
     def test_histogram_with_warning_text(self, plot_generator, timeslice_df):
         """Test histogram with warning text annotation."""
@@ -449,9 +443,10 @@ class TestTimeSeriesHistogram:
             warning_text=warning_text,
         )
 
-        assert len(fig.layout.annotations) > len(timeslice_df)
+        # Should have exactly 1 annotation (the warning text)
+        assert len(fig.layout.annotations) == 1
 
-        warning_annotation = fig.layout.annotations[-1]
+        warning_annotation = fig.layout.annotations[0]
         assert warning_text in warning_annotation["text"]
         assert warning_annotation["yref"] == "paper"
         assert fig.layout.margin.b == 140

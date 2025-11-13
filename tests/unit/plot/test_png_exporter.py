@@ -479,13 +479,12 @@ class TestSingleRunPNGExporter:
         filenames = {f.name for f in generated_files}
         assert "timeslices_ttft.png" in filenames
 
-        # Validate that the timeslice plot has correct annotations for slice labels
+        # Validate that the timeslice plot was created successfully
         ttft_data = sample_timeslice_data[
             sample_timeslice_data["Metric"] == "Time to First Token"
         ]
-        unique_slices = ttft_data["Timeslice"].unique()
 
-        # Create a figure to test annotation content
+        # Create a figure to verify basic structure
         plot_df = ttft_data[ttft_data["Stat"] == "avg"][["Timeslice", "Value"]]
         plot_df = plot_df.rename(columns={"Value": "avg"})
         fig = single_run_exporter.plot_generator.create_time_series_histogram(
@@ -498,30 +497,11 @@ class TestSingleRunPNGExporter:
             slice_duration=10.0,
         )
 
-        # Verify annotations exist
-        assert hasattr(fig.layout, "annotations"), "Figure should have annotations"
-        assert len(fig.layout.annotations) > 0, "Should have slice label annotations"
-
-        # Verify correct number of annotations (one per slice)
-        assert len(fig.layout.annotations) == len(unique_slices), (
-            f"Should have {len(unique_slices)} annotations"
-        )
-
-        # Verify annotation content (should be time ranges like "0s-10s")
-        annotation_texts = [ann.text for ann in fig.layout.annotations]
-        for slice_idx in unique_slices:
-            start_time = int(slice_idx * 10)
-            end_time = int((slice_idx + 1) * 10)
-            expected_text = f"{start_time}s-{end_time}s"
-            assert expected_text in annotation_texts, (
-                f"Should have annotation '{expected_text}'"
-            )
-
-        # Verify annotation positioning (should be in center of bars)
-        for ann in fig.layout.annotations:
-            assert ann.yref == "y", "Annotations should use data coordinates"
-            assert ann.y > 0, "Annotations should be at bar height (> 0)"
-            assert ann.yanchor == "middle", "Annotations should be centered vertically"
+        # Verify basic plot structure
+        assert fig.data is not None, "Figure should have data"
+        assert len(fig.data) > 0, "Figure should have at least one trace"
+        assert fig.layout.xaxis.title.text == "Time (s)"
+        assert fig.layout.yaxis.title.text == "TTFT (ms)"
 
     def test_timeslices_plot_handles_missing_data_gracefully(
         self,

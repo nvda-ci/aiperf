@@ -655,39 +655,6 @@ class PlotGenerator:
             layout["xaxis"]["tick0"] = 0
             layout["xaxis"]["range"] = [0, (max_slice + 1) * slice_duration]
 
-            # Add time range labels in the center of each bar
-            slice_centers = slice_indices * slice_duration + slice_duration / 2
-            bar_heights = df[y_col].values
-            annotations = []
-            for idx, center, height in zip(
-                slice_indices, slice_centers, bar_heights, strict=False
-            ):
-                # Calculate time range for this slice
-                start_time = int(idx * slice_duration)
-                end_time = int((idx + 1) * slice_duration)
-                time_range_text = f"{start_time}s-{end_time}s"
-
-                annotations.append(
-                    dict(
-                        x=center,
-                        y=height / 2,
-                        xref="x",
-                        yref="y",
-                        text=time_range_text,
-                        showarrow=False,
-                        font=dict(
-                            size=11,
-                            family=PLOT_FONT_FAMILY,
-                            color=self.colors["text"],
-                            weight="bold",
-                        ),
-                        xanchor="center",
-                        yanchor="middle",
-                    )
-                )
-
-            layout["annotations"] = annotations
-
         if warning_text:
             if "annotations" not in layout:
                 layout["annotations"] = []
