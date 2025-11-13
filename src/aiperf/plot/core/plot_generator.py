@@ -569,6 +569,7 @@ class PlotGenerator:
         y_label: str | None = None,
         slice_duration: float | None = None,
         warning_text: str | None = None,
+        request_counts: pd.Series | None = None,
     ) -> go.Figure:
         """Create a time series histogram/bar chart.
 
@@ -581,6 +582,7 @@ class PlotGenerator:
             y_label: Y-axis label (auto-generated if None)
             slice_duration: Duration of each slice in seconds (for time-based x-axis)
             warning_text: Optional warning text to display at bottom of plot
+            request_counts: Optional Series of request counts per timeslice
 
         Returns:
             Plotly Figure object with bar chart
@@ -688,20 +690,57 @@ class PlotGenerator:
                         yanchor="bottom",
                     )
                 )
+
+            # Add request count labels at the bottom of each bar if provided
+            if request_counts is not None and not request_counts.empty:
+                for idx, center in zip(slice_indices, slice_centers, strict=False):
+                    if idx in request_counts.index:
+                        count = int(request_counts.loc[idx])
+                        annotations.append(
+                            dict(
+                                x=center,
+                                y=0,
+                                yshift=8,
+                                xref="x",
+                                yref="y",
+                                text=str(count),
+                                showarrow=False,
+                                font=dict(
+                                    size=11,
+                                    family=PLOT_FONT_FAMILY,
+                                    color=self.colors["text"],
+                                ),
+                                xanchor="center",
+                                yanchor="bottom",
+                            )
+                        )
+
             layout["annotations"] = annotations
 
-            # Add legend entry explaining slice numbers
+            # Add legend entry explaining slice numbers and request counts
+            legend_text = "Top: slice index"
+            if request_counts is not None and not request_counts.empty:
+                legend_text += ", Bottom: requests completed"
+            else:
+                legend_text = "Bar numbers indicate time slice index"
+
             fig.add_trace(
                 go.Scatter(
                     x=[None],
                     y=[None],
                     mode="none",
                     showlegend=True,
-                    name="Bar numbers indicate time slice index",
+                    name=legend_text,
                     hoverinfo="skip",
                 )
             )
             layout["showlegend"] = True
+            layout["legend"] = dict(
+                x=1,
+                xanchor="right",
+                y=0.05,
+                yanchor="bottom",
+            )
 
         if warning_text:
             if "annotations" not in layout:
@@ -953,77 +992,6 @@ class PlotGenerator:
             )
 
         # Apply NVIDIA branding layout with unified hover
-        layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
-        fig.update_layout(layout)
-
-        return fig
-
-    def create_gpu_memory_stacked_area(
-        self,
-        df: pd.DataFrame,
-        x_col: str,
-        used_col: str,
-        free_col: str,
-        title: str | None = None,
-        x_label: str | None = None,
-        y_label: str | None = None,
-    ) -> go.Figure:
-        """
-        Create a stacked area plot showing GPU memory breakdown.
-
-        Args:
-            df: DataFrame containing the time series data
-            x_col: Column name for x-axis (e.g., "timestamp_s")
-            used_col: Column name for used memory
-            free_col: Column name for free memory
-            title: Plot title (auto-generated if None)
-            x_label: X-axis label (auto-generated if None)
-            y_label: Y-axis label (auto-generated if None)
-
-        Returns:
-            Plotly Figure object with stacked area plot
-        """
-        fig = go.Figure()
-
-        # Auto-generate labels if not provided
-        if title is None:
-            title = "GPU Memory Usage Over Time"
-        if x_label is None:
-            x_label = "Time (s)"
-        if y_label is None:
-            y_label = "Memory (GB)"
-
-        # Used memory (bottom layer)
-        fig.add_trace(
-            go.Scatter(
-                x=df[x_col],
-                y=df[used_col],
-                mode="lines",
-                line=dict(width=0),
-                fill="tozeroy",
-                fillcolor="rgba(118, 185, 0, 0.6)",
-                name="Used",
-                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>Used: %{{y:.2f}} GB<extra></extra>",
-                stackgroup="one",
-            )
-        )
-
-        # Free memory (top layer)
-        fig.add_trace(
-            go.Scatter(
-                x=df[x_col],
-                y=df[free_col],
-                mode="lines",
-                line=dict(width=0),
-                fill="tonexty",
-                fillcolor="rgba(153, 153, 153, 0.3)",
-                name="Free",
-                hovertemplate=f"{x_label}: %{{x:.1f}}s<br>Free: %{{y:.2f}} GB<extra></extra>",
-                stackgroup="one",
-            )
-        )
-
-        # Apply NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
         fig.update_layout(layout)
 

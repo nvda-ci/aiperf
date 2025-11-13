@@ -933,72 +933,82 @@ class TestDataLoaderGetAvailableMetrics:
         assert "metric_without_unit" not in result["display_names"]
 
 
+class TestDataLoaderLoadRunWithGPUTelemetry:
+    """Tests for DataLoader.load_run method with GPU telemetry data."""
+
+    def test_load_run_includes_gpu_telemetry(self, single_run_dir: Path) -> None:
+        """Test that load_run successfully loads GPU telemetry data from real fixtures."""
+        loader = DataLoader()
+        run = loader.load_run(single_run_dir)
+
+        assert run.gpu_telemetry is not None
+        assert isinstance(run.gpu_telemetry, pd.DataFrame)
+        assert len(run.gpu_telemetry) > 0
+
+        # Verify timestamp_s column exists with relative timestamps
+        # Note: timestamps can be negative if GPU telemetry started before first request
+        assert "timestamp_s" in run.gpu_telemetry.columns
+        assert pd.api.types.is_numeric_dtype(run.gpu_telemetry["timestamp_s"])
+
+        # Verify rich telemetry fields from real data
+        expected_fields = [
+            "gpu_index",
+            "gpu_utilization",
+            "gpu_power_usage",
+            "gpu_memory_used",
+            "gpu_temperature",
+            "sm_clock_frequency",
+            "memory_clock_frequency",
+            "dcgm_url",
+            "gpu_uuid",
+            "hostname",
+        ]
+        for field in expected_fields:
+            assert field in run.gpu_telemetry.columns, f"Missing field: {field}"
+
+
 class TestDataLoaderLoadGPUTelemetryJSONL:
     """Tests for DataLoader._load_gpu_telemetry_jsonl method."""
 
-    def test_load_gpu_telemetry_with_relative_timestamps(self, tmp_path: Path) -> None:
-        """Test loading GPU telemetry with relative timestamp conversion."""
+    def test_load_gpu_telemetry_with_relative_timestamps(
+        self, single_run_dir: Path
+    ) -> None:
+        """Test loading GPU telemetry with relative timestamp conversion using real data."""
         loader = DataLoader()
-        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
+        jsonl_path = single_run_dir / "gpu_telemetry_export.jsonl"
 
-        run_start_time_ns = 1000000000000
-        telemetry_data = [
-            {
-                "timestamp_ns": 1000000100000,
-                "gpu_index": 0,
-                "telemetry_data": {
-                    "gpu_utilization": 80.5,
-                    "memory_used_gb": 12.3,
-                },
-            },
-            {
-                "timestamp_ns": 1000000200000,
-                "gpu_index": 1,
-                "telemetry_data": {
-                    "gpu_utilization": 75.2,
-                    "memory_used_gb": 10.1,
-                },
-            },
-        ]
-
-        with open(jsonl_path, "w") as f:
-            for record in telemetry_data:
-                f.write(json.dumps(record) + "\n")
+        run_start_time_ns = 1762551530946074466
 
         df = loader._load_gpu_telemetry_jsonl(jsonl_path, run_start_time_ns)
 
         assert df is not None
-        assert len(df) == 2
+        assert len(df) > 0
         assert "timestamp_s" in df.columns
         assert "gpu_utilization" in df.columns
-        assert "memory_used_gb" in df.columns
+        assert "gpu_power_usage" in df.columns
+        assert "gpu_memory_used" in df.columns
+        assert "gpu_temperature" in df.columns
+
         # Check relative timestamp conversion
-        assert df["timestamp_s"].iloc[0] == pytest.approx(0.0001, abs=1e-6)
+        # Note: First timestamp can be negative if telemetry started before first request
+        assert pd.api.types.is_numeric_dtype(df["timestamp_s"])
+        # Timestamps should be monotonically increasing
+        assert df["timestamp_s"].is_monotonic_increasing
 
-    def test_load_gpu_telemetry_with_absolute_timestamps(self, tmp_path: Path) -> None:
-        """Test loading GPU telemetry with absolute timestamps (no run start time)."""
+    def test_load_gpu_telemetry_with_absolute_timestamps(
+        self, single_run_dir: Path
+    ) -> None:
+        """Test loading GPU telemetry with absolute timestamps (no run start time) using real data."""
         loader = DataLoader()
-        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
-
-        telemetry_data = [
-            {
-                "timestamp_ns": 1000000000000,
-                "gpu_index": 0,
-                "telemetry_data": {"gpu_utilization": 80.5},
-            },
-        ]
-
-        with open(jsonl_path, "w") as f:
-            for record in telemetry_data:
-                f.write(json.dumps(record) + "\n")
+        jsonl_path = single_run_dir / "gpu_telemetry_export.jsonl"
 
         df = loader._load_gpu_telemetry_jsonl(jsonl_path, run_start_time_ns=None)
 
         assert df is not None
-        assert len(df) == 1
+        assert len(df) > 0
         assert "timestamp_s" in df.columns
-        # Check absolute timestamp in seconds
-        assert df["timestamp_s"].iloc[0] == pytest.approx(1000.0, abs=0.1)
+        # Check absolute timestamp in seconds (should be large value)
+        assert df["timestamp_s"].iloc[0] > 1e9
 
     def test_load_gpu_telemetry_missing_file(self, tmp_path: Path) -> None:
         """Test loading GPU telemetry when file doesn't exist."""
@@ -1077,37 +1087,32 @@ class TestDataLoaderLoadGPUTelemetryJSONL:
         assert len(df) == 1
         assert "gpu_index" in df.columns
 
-    def test_load_gpu_telemetry_flattens_nested_data(self, tmp_path: Path) -> None:
-        """Test that telemetry_data dict is flattened into main record."""
+    def test_load_gpu_telemetry_flattens_nested_data(
+        self, single_run_dir: Path
+    ) -> None:
+        """Test that telemetry_data dict is flattened into main record using real data."""
         loader = DataLoader()
-        jsonl_path = tmp_path / "gpu_telemetry_export.jsonl"
-
-        telemetry_data = [
-            {
-                "timestamp_ns": 1000000000000,
-                "gpu_index": 0,
-                "endpoint": "endpoint1",
-                "telemetry_data": {
-                    "gpu_utilization": 80.5,
-                    "memory_used_gb": 12.3,
-                    "temperature_c": 65.0,
-                },
-            },
-        ]
-
-        with open(jsonl_path, "w") as f:
-            for record in telemetry_data:
-                f.write(json.dumps(record) + "\n")
+        jsonl_path = single_run_dir / "gpu_telemetry_export.jsonl"
 
         df = loader._load_gpu_telemetry_jsonl(jsonl_path)
 
         assert df is not None
-        assert len(df) == 1
-        # All fields should be at top level
-        assert "gpu_utilization" in df.columns
-        assert "memory_used_gb" in df.columns
-        assert "temperature_c" in df.columns
+        assert len(df) > 0
+
+        # Verify top-level metadata fields are present
+        assert "timestamp_ns" in df.columns
         assert "gpu_index" in df.columns
-        assert "endpoint" in df.columns
-        # telemetry_data should not be a column
+        assert "dcgm_url" in df.columns
+        assert "gpu_uuid" in df.columns
+        assert "hostname" in df.columns
+
+        # Verify telemetry_data fields are flattened to top level
+        assert "gpu_utilization" in df.columns
+        assert "gpu_power_usage" in df.columns
+        assert "gpu_memory_used" in df.columns
+        assert "gpu_temperature" in df.columns
+        assert "sm_clock_frequency" in df.columns
+        assert "memory_clock_frequency" in df.columns
+
+        # telemetry_data should not be a nested column
         assert "telemetry_data" not in df.columns

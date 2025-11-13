@@ -19,7 +19,7 @@ def run_plot_controller(
     Args:
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
         output: Directory to save generated plots. Defaults to <first_path>/plot_export if not specified.
-        mode: Output mode for plots (PNG, HTML, or SERVER). Defaults to PNG.
+        mode: Output mode for plots. Defaults to PNG.
         theme: Plot theme to use (LIGHT or DARK). Defaults to LIGHT.
     """
     input_paths = paths or ["./artifacts"]

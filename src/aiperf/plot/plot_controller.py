@@ -14,13 +14,13 @@ class PlotController:
     """Controller for generating plots from AIPerf profiling data.
 
     Orchestrates the plot generation pipeline: mode detection, data loading,
-    and export. Designed to support multiple output modes (PNG, HTML, server)
+    and export. Designed to support multiple output modes (PNG)
     in the future.
 
     Args:
         paths: List of paths to profiling run directories
         output_dir: Directory to save generated plots
-        mode: Output mode (PNG, HTML, or SERVER - currently only PNG supported)
+        mode: Output mode (currently only PNG supported)
         theme: Plot theme (LIGHT or DARK). Defaults to LIGHT.
     """
 
@@ -48,7 +48,7 @@ class PlotController:
             return self._generate_png_plots()
         else:
             raise ValueError(
-                f"Unsupported mode: {self.mode.value}. Currently only '{PlotMode.PNG.value}' is supported."
+                f"Unsupported mode: {self.mode}. Currently only '{PlotMode.PNG}' is supported."
             )
 
     def _validate_paths(self) -> None:

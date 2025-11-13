@@ -546,17 +546,6 @@ class TestDualAxisPlots:
             }
         )
 
-    @pytest.fixture
-    def gpu_memory_df(self):
-        """Create sample GPU memory DataFrame for testing."""
-        return pd.DataFrame(
-            {
-                "timestamp_s": [0.0, 1.0, 2.0, 3.0, 4.0],
-                "memory_used_gb": [2.5, 4.0, 5.5, 6.0, 5.0],
-                "memory_free_gb": [5.5, 4.0, 2.5, 2.0, 3.0],
-            }
-        )
-
     def test_gpu_dual_axis_plot_basic(self, plot_generator, gpu_metrics_df):
         """Test basic GPU dual-axis plot creation with separate DataFrames."""
         throughput_df = gpu_metrics_df[["timestamp_s", "throughput"]].copy()
@@ -718,83 +707,6 @@ class TestDualAxisPlots:
             secondary_mode="lines",
             secondary_line_shape=None,
             secondary_fill="tozeroy",
-        )
-
-        assert isinstance(fig, go.Figure)
-        assert len(fig.data) == 2
-
-    def test_gpu_memory_stacked_area_basic(self, plot_generator, gpu_memory_df):
-        """Test basic GPU memory stacked area plot creation."""
-        fig = plot_generator.create_gpu_memory_stacked_area(
-            df=gpu_memory_df,
-            x_col="timestamp_s",
-            used_col="memory_used_gb",
-            free_col="memory_free_gb",
-        )
-
-        assert isinstance(fig, go.Figure)
-        assert len(fig.data) == 2
-
-        assert fig.data[0].fill == "tozeroy"
-        assert fig.data[1].fill == "tonexty"
-        assert fig.data[0].stackgroup == "one"
-        assert fig.data[1].stackgroup == "one"
-
-    def test_gpu_memory_stacked_area_custom_labels(self, plot_generator, gpu_memory_df):
-        """Test GPU memory stacked area plot with custom labels."""
-        title = "Memory Usage"
-        x_label = "Time"
-        y_label = "Memory (GB)"
-
-        fig = plot_generator.create_gpu_memory_stacked_area(
-            df=gpu_memory_df,
-            x_col="timestamp_s",
-            used_col="memory_used_gb",
-            free_col="memory_free_gb",
-            title=title,
-            x_label=x_label,
-            y_label=y_label,
-        )
-
-        assert fig.layout.title.text == title
-        assert fig.layout.xaxis.title.text == x_label
-        assert fig.layout.yaxis.title.text == y_label
-
-    def test_gpu_memory_stacked_area_auto_labels(self, plot_generator, gpu_memory_df):
-        """Test GPU memory stacked area plot with auto-generated labels."""
-        fig = plot_generator.create_gpu_memory_stacked_area(
-            df=gpu_memory_df,
-            x_col="timestamp_s",
-            used_col="memory_used_gb",
-            free_col="memory_free_gb",
-        )
-
-        assert fig.layout.title.text == "GPU Memory Usage Over Time"
-        assert fig.layout.xaxis.title.text == "Time (s)"
-        assert fig.layout.yaxis.title.text == "Memory (GB)"
-
-    def test_gpu_memory_stacked_area_traces(self, plot_generator, gpu_memory_df):
-        """Test that stacked area has correct trace names and order."""
-        fig = plot_generator.create_gpu_memory_stacked_area(
-            df=gpu_memory_df,
-            x_col="timestamp_s",
-            used_col="memory_used_gb",
-            free_col="memory_free_gb",
-        )
-
-        assert fig.data[0].name == "Used"
-        assert fig.data[1].name == "Free"
-
-    def test_gpu_memory_stacked_area_with_empty_dataframe(self, plot_generator):
-        """Test GPU memory stacked area plot with empty DataFrame."""
-        empty_df = pd.DataFrame(
-            {"timestamp_s": [], "memory_used_gb": [], "memory_free_gb": []}
-        )
-        fig = plot_generator.create_gpu_memory_stacked_area(
-            df=empty_df,
-            x_col="timestamp_s",
-            used_col="memory_used_gb",
-            free_col="memory_free_gb",
         )
 
         assert isinstance(fig, go.Figure)

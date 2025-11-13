@@ -28,6 +28,7 @@ from aiperf.plot.core.plot_specs import (
     TimeSlicePlotSpec,
 )
 from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
+from aiperf.plot.exceptions import DataLoadError, PlotGenerationError
 
 
 class BaseSingleRunHandler:
@@ -116,7 +117,7 @@ class BaseSingleRunHandler:
         elif source == DataSource.GPU_TELEMETRY:
             return run.gpu_telemetry
         else:
-            raise ValueError(f"Unsupported data source: {source}")
+            raise PlotGenerationError(f"Unsupported data source: {source}")
 
 
 @PlotTypeHandlerFactory.register(PlotType.SCATTER)
@@ -208,7 +209,9 @@ class HistogramHandler(BaseSingleRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        plot_df = prepare_timeslice_metrics(data, y_metric.name, y_metric.stat)
+        plot_df, request_counts = prepare_timeslice_metrics(
+            data, y_metric.name, y_metric.stat, include_request_counts=True
+        )
 
         metric_data = data.timeslices[
             (data.timeslices["Metric"] == y_metric.name)
@@ -234,6 +237,7 @@ class HistogramHandler(BaseSingleRunHandler):
             y_label=y_label,
             slice_duration=data.slice_duration if use_slice_duration else None,
             warning_text=warning_message,
+            request_counts=request_counts,
         )
 
 
@@ -289,7 +293,9 @@ class DualAxisHandler(BaseSingleRunHandler):
         df_secondary = self._prepare_metric_data(y2_metric.name, y2_metric.source, data)
 
         if df_primary.empty:
-            raise ValueError(f"No data available for primary metric: {y1_metric.name}")
+            raise DataLoadError(
+                f"No data available for primary metric: {y1_metric.name}"
+            )
 
         x_col = x_metric.name if x_metric else "timestamp_s"
 

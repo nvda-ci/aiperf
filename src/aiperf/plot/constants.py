@@ -8,34 +8,34 @@ This module defines file patterns, default paths, plot settings, and other
 configuration constants used throughout the visualization functionality.
 """
 
-from enum import Enum
 from pathlib import Path
 
-# File patterns for AIPerf profiling output files
-PROFILE_EXPORT_JSONL = "profile_export.jsonl"
-PROFILE_EXPORT_AIPERF_JSON = "profile_export_aiperf.json"
-PROFILE_EXPORT_AIPERF_CSV = "profile_export_aiperf.csv"
-PROFILE_EXPORT_TIMESLICES_CSV = "profile_export_aiperf_timeslices.csv"
-PROFILE_EXPORT_TIMESLICES_JSON = "profile_export_aiperf_timeslices.json"
-PROFILE_EXPORT_GPU_TELEMETRY_JSONL = "gpu_telemetry_export.jsonl"
-INPUTS_JSON = "inputs.json"
+from aiperf.common.config.config_defaults import OutputDefaults
+from aiperf.common.enums.base_enums import CaseInsensitiveStrEnum
+
+# File patterns for AIPerf profiling output files. These reference the canonical definitions from OutputDefaults
+PROFILE_EXPORT_JSONL = OutputDefaults.PROFILE_EXPORT_JSONL_FILE.name
+PROFILE_EXPORT_AIPERF_JSON = OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE.name
+PROFILE_EXPORT_TIMESLICES_CSV = (
+    OutputDefaults.PROFILE_EXPORT_AIPERF_TIMESLICES_CSV_FILE.name
+)
+PROFILE_EXPORT_GPU_TELEMETRY_JSONL = (
+    OutputDefaults.PROFILE_EXPORT_GPU_TELEMETRY_JSONL_FILE.name
+)
 
 # Default output directory and filenames
 DEFAULT_OUTPUT_DIR = Path("plot_export")
 DEFAULT_PNG_OUTPUT_DIR = DEFAULT_OUTPUT_DIR / "png"
-DEFAULT_HTML_OUTPUT_DIR = DEFAULT_OUTPUT_DIR / "html"
 PLOT_LOG_FILE = "aiperf_plot.log"
 
 
-class PlotMode(str, Enum):
+class PlotMode(CaseInsensitiveStrEnum):
     """Available output modes for plot generation."""
 
     PNG = "png"
-    HTML = "html"
-    SERVER = "server"
 
 
-class PlotTheme(str, Enum):
+class PlotTheme(CaseInsensitiveStrEnum):
     """Available themes for plot styling."""
 
     LIGHT = "light"

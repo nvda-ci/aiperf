@@ -40,20 +40,6 @@ class DataLoadError(PlotError):
         self.path = path
 
 
-class ConfigError(PlotError):
-    """
-    Exception raised when configuration is invalid.
-
-    This exception is raised when configuration parameters are invalid,
-    missing, or incompatible with the requested operation.
-
-    Args:
-        message: A description of the configuration error.
-    """
-
-    pass
-
-
 class PlotGenerationError(PlotError):
     """
     Exception raised when plot generation fails.

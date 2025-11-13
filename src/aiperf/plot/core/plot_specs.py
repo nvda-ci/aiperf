@@ -18,7 +18,6 @@ class DataSource(Enum):
     TIMESLICES = "timeslices"
     GPU_TELEMETRY = "gpu_telemetry"
     AGGREGATED = "aggregated"
-    SERVER_TELEMETRY = "server_telemetry"  # Future
 
 
 class PlotType(Enum):
@@ -30,7 +29,6 @@ class PlotType(Enum):
     PARETO = "pareto"
     SCATTER_LINE = "scatter_line"
     DUAL_AXIS = "dual_axis"
-    STACKED_AREA = "stacked_area"
     SCATTER_WITH_PERCENTILES = "scatter_with_percentiles"
 
 

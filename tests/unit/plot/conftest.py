@@ -48,7 +48,7 @@ def multiple_run_dirs() -> list[Path]:
     All tests share these directories (read-only).
 
     Returns:
-        List of 3 qwen run directory paths.
+        List of 2 qwen run directory paths.
     """
     return [QWEN_CONCURRENCY1_DIR, QWEN_CONCURRENCY2_DIR]
 

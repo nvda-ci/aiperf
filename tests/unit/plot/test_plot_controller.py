@@ -71,33 +71,6 @@ class TestPlotControllerInit:
         assert controller.paths == paths
 
 
-class TestPlotControllerRun:
-    """Tests for PlotController.run method."""
-
-    def test_run_with_unsupported_mode_raises_error(self, tmp_path: Path) -> None:
-        """Test that running with unsupported mode raises ValueError."""
-        controller = PlotController(
-            paths=[tmp_path],
-            output_dir=tmp_path / "output",
-        )
-        # Manually set an unsupported mode
-        controller.mode = PlotMode.HTML
-
-        with pytest.raises(ValueError, match="Unsupported mode: html"):
-            controller.run()
-
-    def test_run_with_server_mode_raises_error(self, tmp_path: Path) -> None:
-        """Test that running with SERVER mode raises ValueError."""
-        controller = PlotController(
-            paths=[tmp_path],
-            output_dir=tmp_path / "output",
-        )
-        controller.mode = PlotMode.SERVER
-
-        with pytest.raises(ValueError, match="Unsupported mode: server"):
-            controller.run()
-
-
 class TestPlotControllerValidatePaths:
     """Tests for PlotController._validate_paths method."""
 
