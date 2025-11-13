@@ -24,7 +24,7 @@ PROFILE_EXPORT_GPU_TELEMETRY_JSONL = (
 )
 
 # Default output directory and filenames
-DEFAULT_OUTPUT_DIR = Path("plot_export")
+DEFAULT_OUTPUT_DIR = Path("plots")
 DEFAULT_PNG_OUTPUT_DIR = DEFAULT_OUTPUT_DIR / "png"
 PLOT_LOG_FILE = "aiperf_plot.log"
 
