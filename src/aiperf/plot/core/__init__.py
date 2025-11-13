@@ -33,6 +33,7 @@ from aiperf.plot.core.plot_specs import (
     MetricSpec,
     PlotSpec,
     PlotType,
+    Style,
     TimeSlicePlotSpec,
 )
 from aiperf.plot.core.plot_type_handlers import (
@@ -60,6 +61,7 @@ __all__ = [
     "PlotTypeHandlerProtocol",
     "RunData",
     "RunMetadata",
+    "Style",
     "TimeSlicePlotSpec",
     "VisualizationMode",
     "aggregate_gpu_telemetry",

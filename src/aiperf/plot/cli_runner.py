@@ -18,14 +18,14 @@ def run_plot_controller(
 
     Args:
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
-        output: Directory to save generated plots. Defaults to <first_path>/plot_export if not specified.
+        output: Directory to save generated plots. Defaults to <first_path>/plots if not specified.
         mode: Output mode for plots. Defaults to PNG.
         theme: Plot theme to use (LIGHT or DARK). Defaults to LIGHT.
     """
     input_paths = paths or ["./artifacts"]
     input_paths = [Path(p) for p in input_paths]
 
-    output_dir = Path(output) if output else input_paths[0] / "plot_export"
+    output_dir = Path(output) if output else input_paths[0] / "plots"
 
     if isinstance(mode, str):
         mode = PlotMode(mode.lower())

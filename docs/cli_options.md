@@ -188,7 +188,7 @@ Use these options to profile with AIPerf.
 ╭─ Visualization ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ PATHS --paths                            One or more paths to profiling run directories. Can be a single run directory or a parent directory containing multiple    │
 │                                          runs. If not specified, defaults to ./artifacts                                                                            │
-│ OUTPUT --output                          Output directory for generated plots. If not specified, defaults to {first_path}/plot_export/                              │
+│ OUTPUT --output                          Output directory for generated plots. If not specified, defaults to {first_path}/plots/                              │
 │ THEME --theme                            Color theme for plots [choices: light, dark] [default: light]                                                              │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```

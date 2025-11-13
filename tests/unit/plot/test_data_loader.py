@@ -72,14 +72,16 @@ class TestDataLoaderLoadRun:
         assert run.metadata.request_count == 64
         assert run.metadata.endpoint_type == "chat"
 
-    def test_timestamp_conversion_to_utc(self, single_run_dir: Path) -> None:
-        """Test that timestamps are converted to UTC datetime."""
+    def test_timestamp_columns_remain_as_integers(self, single_run_dir: Path) -> None:
+        """Test that timestamp columns remain as integer nanoseconds."""
         loader = DataLoader()
         run = loader.load_run(single_run_dir)
 
-        # Check that timestamp columns are datetime with UTC timezone
-        assert pd.api.types.is_datetime64_any_dtype(run.requests["request_start_ns"])
-        assert run.requests["request_start_ns"].dt.tz is not None
+        # Check that timestamp columns are numeric integers (nanoseconds)
+        assert pd.api.types.is_numeric_dtype(run.requests["request_start_ns"])
+        assert pd.api.types.is_numeric_dtype(run.requests["request_end_ns"])
+        # Verify they contain nanosecond values (large integers)
+        assert run.requests["request_start_ns"].min() > 1e18
 
 
 class TestDataLoaderLoadMultipleRuns:
@@ -281,27 +283,6 @@ class TestDataLoaderLoadAggregatedJson:
 
         with pytest.raises(DataLoadError, match="Failed to parse JSON"):
             loader._load_aggregated_json(json_path)
-
-
-class TestDataLoaderLoadInputConfig:
-    """Tests for DataLoader._load_input_config method."""
-
-    def test_load_valid_input_config(self, single_run_dir: Path) -> None:
-        """Test loading valid inputs.json."""
-        loader = DataLoader()
-        inputs_path = single_run_dir / "inputs.json"
-        data = loader._load_input_config(inputs_path)
-
-        assert isinstance(data, dict)
-        assert "data" in data
-
-    def test_load_missing_input_config(self, tmp_path: Path) -> None:
-        """Test loading missing inputs.json raises DataLoadError."""
-        loader = DataLoader()
-        fake_path = tmp_path / "nonexistent.json"
-
-        with pytest.raises(DataLoadError, match="inputs file not found"):
-            loader._load_input_config(fake_path)
 
 
 class TestDataLoaderExtractMetadata:

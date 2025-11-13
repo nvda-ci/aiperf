@@ -251,8 +251,8 @@ def calculate_rolling_percentiles(
 
 
 def prepare_timeslice_metrics(
-    run: RunData, metric_name: str, stat: str, include_request_counts: bool = False
-) -> pd.DataFrame | tuple[pd.DataFrame, pd.Series]:
+    run: RunData, metric_name: str, stat: str
+) -> pd.DataFrame:
     """
     Extract and prepare timeslice data for a specific metric and stat.
 
@@ -260,16 +260,11 @@ def prepare_timeslice_metrics(
         run: RunData object with timeslices DataFrame
         metric_name: Name of the metric to extract
         stat: Statistic to extract (e.g., "avg", "p50", "p95")
-        include_request_counts: If True, also fetch request counts per timeslice
 
     Returns:
-        DataFrame with Timeslice and stat columns, ready for histogram plotting.
-        If include_request_counts is True, returns tuple of (metric_df, request_counts)
-        where request_counts is a Series indexed by Timeslice.
+        DataFrame with Timeslice and stat columns, ready for histogram plotting
     """
     if run.timeslices is None or run.timeslices.empty:
-        if include_request_counts:
-            return pd.DataFrame(), pd.Series(dtype=int)
         return pd.DataFrame()
 
     metric_data = run.timeslices[
@@ -281,19 +276,6 @@ def prepare_timeslice_metrics(
 
     plot_df = metric_data[["Timeslice", "Value"]].copy()
     plot_df = plot_df.rename(columns={"Value": stat})
-
-    if include_request_counts:
-        request_count_data = run.timeslices[
-            (run.timeslices["Metric"] == "Request Count")
-            & (run.timeslices["Stat"] == "avg")
-        ].copy()
-
-        if request_count_data.empty:
-            request_counts = pd.Series(dtype=int)
-        else:
-            request_counts = request_count_data.set_index("Timeslice")["Value"]
-
-        return plot_df, request_counts
 
     return plot_df
 

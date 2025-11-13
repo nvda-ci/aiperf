@@ -11,6 +11,39 @@ from pydantic import Field
 from aiperf.common.models import AIPerfBaseModel
 
 
+class Style(AIPerfBaseModel):
+    """Styling configuration for a plot trace."""
+
+    mode: str = Field(
+        default="lines",
+        description="Plotly visualization mode ('lines', 'markers', 'lines+markers')",
+    )
+    line_shape: str | None = Field(
+        default=None,
+        description="Line shape for the trace ('linear', 'hv' for step, 'spline', or None)",
+    )
+    fill: str | None = Field(
+        default=None,
+        description="Fill pattern for the trace ('tozeroy', 'tonexty', or None for no fill)",
+    )
+    line_width: int = Field(
+        default=2,
+        description="Width of the line in pixels",
+    )
+    marker_size: int = Field(
+        default=8,
+        description="Size of markers in pixels",
+    )
+    marker_opacity: float = Field(
+        default=1.0,
+        description="Opacity of markers (0.0 to 1.0)",
+    )
+    fill_opacity: float = Field(
+        default=0.3,
+        description="Opacity of fill area (0.0 to 1.0)",
+    )
+
+
 class DataSource(Enum):
     """Data sources for plot metrics."""
 
@@ -67,27 +100,13 @@ class PlotSpec(AIPerfBaseModel):
         default=None,
         description="Column to use for grouping data (for multi-series plots)",
     )
-    primary_mode: str = Field(
-        default="lines",
-        description="Visualization mode for primary (y) axis ('lines', 'markers', 'lines+markers')",
-    )
-    primary_line_shape: str | None = Field(
+    primary_style: Style | None = Field(
         default=None,
-        description="Line shape for primary axis ('linear', 'hv', 'spline', None)",
+        description="Style configuration for primary (y) axis trace",
     )
-    primary_fill: str | None = Field(
+    secondary_style: Style | None = Field(
         default=None,
-        description="Fill mode for primary axis ('tozeroy', 'tonexty', None)",
-    )
-    secondary_mode: str = Field(
-        default="lines",
-        description="Visualization mode for secondary (y2) axis",
-    )
-    secondary_line_shape: str | None = Field(
-        default=None, description="Line shape for secondary axis"
-    )
-    secondary_fill: str | None = Field(
-        default=None, description="Fill mode for secondary axis"
+        description="Style configuration for secondary (y2) axis trace",
     )
     supplementary_col: str | None = Field(
         default=None,
@@ -241,12 +260,8 @@ GPU_PLOT_SPECS: list[PlotSpec] = [
         ],
         title="Output Token Throughput with GPU Utilization",
         filename="gpu_utilization_and_throughput_over_time.png",
-        primary_mode="lines",
-        primary_line_shape="hv",
-        primary_fill=None,
-        secondary_mode="lines",
-        secondary_line_shape=None,
-        secondary_fill="tozeroy",
+        primary_style=Style(mode="lines", line_shape="hv", fill=None),
+        secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         supplementary_col="active_requests",
     ),
 ]

@@ -50,7 +50,7 @@ def plot(
 
     Args:
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
-        output: Directory to save generated plots. Defaults to <first_path>/plot_export if not specified.
+        output: Directory to save generated plots. Defaults to <first_path>/plots if not specified.
         theme: Plot theme to use: 'light' (white background) or 'dark' (dark background). Defaults to 'light'.
     """
     with exit_on_error(title="Error Running Plot Command"):

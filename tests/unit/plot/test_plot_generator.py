@@ -14,6 +14,7 @@ import pytest
 
 from aiperf.plot.constants import NVIDIA_GREEN, NVIDIA_WHITE
 from aiperf.plot.core.plot_generator import PlotGenerator
+from aiperf.plot.core.plot_specs import Style
 
 
 @pytest.fixture
@@ -153,7 +154,7 @@ class TestPlotGenerator:
         )
 
         # Verify auto-generated labels contain metric names
-        assert "Time To First Token" in fig.layout.xaxis.title.text
+        assert "Time to First Token" in fig.layout.xaxis.title.text
         assert "Inter Token Latency" in fig.layout.yaxis.title.text
 
     def test_create_time_series_scatter(self, plot_generator, single_run_df):
@@ -420,7 +421,7 @@ class TestTimeSeriesHistogram:
         assert fig.layout.bargap == 0
 
     def test_histogram_with_annotations(self, plot_generator, timeslice_df):
-        """Test that slice indices are annotated when slice_duration is provided."""
+        """Test that time range labels are annotated when slice_duration is provided."""
         fig = plot_generator.create_time_series_histogram(
             df=timeslice_df,
             x_col="timeslice",
@@ -432,7 +433,10 @@ class TestTimeSeriesHistogram:
         assert len(fig.layout.annotations) == len(timeslice_df)
 
         for i, annotation in enumerate(fig.layout.annotations):
-            assert annotation["text"] == str(i)
+            start_time = i * 10
+            end_time = (i + 1) * 10
+            expected_text = f"{start_time}s-{end_time}s"
+            assert annotation["text"] == expected_text
 
     def test_histogram_with_warning_text(self, plot_generator, timeslice_df):
         """Test histogram with warning text annotation."""
@@ -559,12 +563,8 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
             active_count_col="active_requests",
         )
 
@@ -594,12 +594,8 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
             title=title,
             x_label=x_label,
             y1_label=y1_label,
@@ -623,16 +619,12 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         )
 
         assert "Throughput" in fig.layout.title.text
-        assert "Gpu Utilization" in fig.layout.title.text
+        assert "GPU Utilization" in fig.layout.title.text
         assert fig.layout.xaxis.title.text == "Time (s)"
 
     def test_gpu_dual_axis_plot_styling(self, plot_generator, gpu_metrics_df):
@@ -647,12 +639,8 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         )
 
         assert fig.data[0].line.color == NVIDIA_GREEN
@@ -671,12 +659,8 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         )
 
         assert fig.layout.yaxis2 is not None
@@ -701,12 +685,8 @@ class TestDualAxisPlots:
             x_col_secondary="timestamp_s",
             y1_metric="throughput",
             y2_metric="gpu_utilization",
-            primary_mode="lines",
-            primary_line_shape="hv",
-            primary_fill=None,
-            secondary_mode="lines",
-            secondary_line_shape=None,
-            secondary_fill="tozeroy",
+            primary_style=Style(mode="lines", line_shape="hv", fill=None),
+            secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         )
 
         assert isinstance(fig, go.Figure)

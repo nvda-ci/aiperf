@@ -21,6 +21,8 @@ from aiperf.plot.constants import (
     PLOT_FONT_FAMILY,
     PlotTheme,
 )
+from aiperf.plot.core.plot_specs import Style
+from aiperf.plot.metric_names import get_metric_display_name
 
 
 def get_nvidia_color_scheme(
@@ -86,18 +88,16 @@ class PlotGenerator:
 
         Args:
             groups: List of unique group values from the data (e.g., model names,
-                concurrency levels, or any other categorical configuration parameter)
+                concurrency levels, or any other categorical configuration parameter).
+                Expected to be pre-sorted by caller.
 
         Returns:
             Dictionary mapping group value to color hex code
         """
-        sorted_groups = sorted(groups)  # Sort for consistency
-        color_scheme = get_nvidia_color_scheme(
-            len(sorted_groups), self.colors["secondary"]
-        )
+        color_scheme = get_nvidia_color_scheme(len(groups), self.colors["secondary"])
 
         color_map = {}
-        for i, group in enumerate(sorted_groups):
+        for i, group in enumerate(groups):
             color_map[group] = color_scheme[i]
 
         return color_map
@@ -203,7 +203,7 @@ class PlotGenerator:
             - group_colors: Dict mapping group values to color hex codes
         """
         if group_by and group_by in df.columns:
-            groups = sorted(df[group_by].unique(), reverse=True)
+            groups = sorted(df[group_by].unique())
             group_colors = self._assign_group_colors(list(groups))
         else:
             groups = [None]
@@ -244,12 +244,12 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"Pareto Curve: {y_metric.replace('_', ' ').title()} vs {x_metric.replace('_', ' ').title()}"
-        if x_label is None:
-            x_label = x_metric.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_metric.replace("_", " ").title()
+        title = (
+            title
+            or f"Pareto Curve: {get_metric_display_name(y_metric)} vs {get_metric_display_name(x_metric)}"
+        )
+        x_label = x_label or get_metric_display_name(x_metric)
+        y_label = y_label or get_metric_display_name(y_metric)
 
         groups, group_colors = self._prepare_groups(df_sorted, group_by)
 
@@ -385,12 +385,12 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_metric.replace('_', ' ').title()} vs {x_metric.replace('_', ' ').title()}"
-        if x_label is None:
-            x_label = x_metric.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_metric.replace("_", " ").title()
+        title = (
+            title
+            or f"{get_metric_display_name(y_metric)} vs {get_metric_display_name(x_metric)}"
+        )
+        x_label = x_label or get_metric_display_name(x_metric)
+        y_label = y_label or get_metric_display_name(y_metric)
 
         # Prepare groups and colors
         groups, group_colors = self._prepare_groups(df_sorted, group_by)
@@ -482,12 +482,9 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_metric.replace('_', ' ').title()} Over Time"
-        if x_label is None:
-            x_label = x_col.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_metric.replace("_", " ").title()
+        title = title or f"{get_metric_display_name(y_metric)} Over Time"
+        x_label = x_label or get_metric_display_name(x_col)
+        y_label = y_label or get_metric_display_name(y_metric)
 
         # Main scatter points
         fig.add_trace(
@@ -532,12 +529,9 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_metric.replace('_', ' ').title()} Over Time"
-        if x_label is None:
-            x_label = x_col.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_metric.replace("_", " ").title()
+        title = title or f"{get_metric_display_name(y_metric)} Over Time"
+        x_label = x_label or get_metric_display_name(x_col)
+        y_label = y_label or get_metric_display_name(y_metric)
 
         # Main trace with fill
         fig.add_trace(
@@ -569,7 +563,6 @@ class PlotGenerator:
         y_label: str | None = None,
         slice_duration: float | None = None,
         warning_text: str | None = None,
-        request_counts: pd.Series | None = None,
     ) -> go.Figure:
         """Create a time series histogram/bar chart.
 
@@ -582,7 +575,6 @@ class PlotGenerator:
             y_label: Y-axis label (auto-generated if None)
             slice_duration: Duration of each slice in seconds (for time-based x-axis)
             warning_text: Optional warning text to display at bottom of plot
-            request_counts: Optional Series of request counts per timeslice
 
         Returns:
             Plotly Figure object with bar chart
@@ -590,12 +582,11 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_col.replace('_', ' ').title()} Over Time"
-        if x_label is None:
-            x_label = "Time (s)" if slice_duration else x_col.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_col.replace("_", " ").title()
+        title = title or f"{get_metric_display_name(y_col)} Over Time"
+        x_label = x_label or (
+            "Time (s)" if slice_duration else get_metric_display_name(x_col)
+        )
+        y_label = y_label or get_metric_display_name(y_col)
 
         # Prepare x-axis values and bar configuration
         if slice_duration is not None:
@@ -664,83 +655,38 @@ class PlotGenerator:
             layout["xaxis"]["tick0"] = 0
             layout["xaxis"]["range"] = [0, (max_slice + 1) * slice_duration]
 
-            # Add slice index labels as annotations at the top of each bar
+            # Add time range labels in the center of each bar
             slice_centers = slice_indices * slice_duration + slice_duration / 2
             bar_heights = df[y_col].values
             annotations = []
             for idx, center, height in zip(
                 slice_indices, slice_centers, bar_heights, strict=False
             ):
+                # Calculate time range for this slice
+                start_time = int(idx * slice_duration)
+                end_time = int((idx + 1) * slice_duration)
+                time_range_text = f"{start_time}s-{end_time}s"
+
                 annotations.append(
                     dict(
                         x=center,
-                        y=height,
-                        yshift=5,
+                        y=height / 2,
                         xref="x",
                         yref="y",
-                        text=str(int(idx)),
+                        text=time_range_text,
                         showarrow=False,
                         font=dict(
-                            size=12,
+                            size=11,
                             family=PLOT_FONT_FAMILY,
                             color=self.colors["text"],
                             weight="bold",
                         ),
                         xanchor="center",
-                        yanchor="bottom",
+                        yanchor="middle",
                     )
                 )
 
-            # Add request count labels at the bottom of each bar if provided
-            if request_counts is not None and not request_counts.empty:
-                for idx, center in zip(slice_indices, slice_centers, strict=False):
-                    if idx in request_counts.index:
-                        count = int(request_counts.loc[idx])
-                        annotations.append(
-                            dict(
-                                x=center,
-                                y=0,
-                                yshift=8,
-                                xref="x",
-                                yref="y",
-                                text=str(count),
-                                showarrow=False,
-                                font=dict(
-                                    size=11,
-                                    family=PLOT_FONT_FAMILY,
-                                    color=self.colors["text"],
-                                ),
-                                xanchor="center",
-                                yanchor="bottom",
-                            )
-                        )
-
             layout["annotations"] = annotations
-
-            # Add legend entry explaining slice numbers and request counts
-            legend_text = "Top: slice index"
-            if request_counts is not None and not request_counts.empty:
-                legend_text += ", Bottom: requests completed"
-            else:
-                legend_text = "Bar numbers indicate time slice index"
-
-            fig.add_trace(
-                go.Scatter(
-                    x=[None],
-                    y=[None],
-                    mode="none",
-                    showlegend=True,
-                    name=legend_text,
-                    hoverinfo="skip",
-                )
-            )
-            layout["showlegend"] = True
-            layout["legend"] = dict(
-                x=1,
-                xanchor="right",
-                y=0.05,
-                yanchor="bottom",
-            )
 
         if warning_text:
             if "annotations" not in layout:
@@ -781,12 +727,8 @@ class PlotGenerator:
         x_col_secondary: str,
         y1_metric: str,
         y2_metric: str,
-        primary_mode: str,
-        primary_line_shape: str | None,
-        primary_fill: str | None,
-        secondary_mode: str,
-        secondary_line_shape: str | None,
-        secondary_fill: str | None,
+        primary_style: Style | None = None,
+        secondary_style: Style | None = None,
         active_count_col: str | None = None,
         title: str | None = None,
         x_label: str | None = None,
@@ -794,11 +736,11 @@ class PlotGenerator:
         y2_label: str | None = None,
     ) -> go.Figure:
         """
-        Create a dual Y-axis plot with independent data sources and configurable visualization modes.
+        Create a dual Y-axis plot with independent data sources and configurable visualization styles.
 
         This generic method supports plotting any two metrics on separate Y-axes with
         independent data sources and full control over visualization styles (line modes,
-        shapes, and fill patterns).
+        shapes, fill patterns, widths, and marker properties).
 
         Examples:
             - Throughput + GPU utilization (step function + filled area)
@@ -812,12 +754,8 @@ class PlotGenerator:
             x_col_secondary: Column name for x-axis in secondary DataFrame
             y1_metric: Column name for primary y-axis (left)
             y2_metric: Column name for secondary y-axis (right)
-            primary_mode: Plotly mode for primary trace (e.g., "lines", "markers", "lines+markers")
-            primary_line_shape: Line shape for primary trace (e.g., "linear", "hv" for step, "spline", or None)
-            primary_fill: Fill pattern for primary trace (e.g., "tozeroy", "tonexty", or None for no fill)
-            secondary_mode: Plotly mode for secondary trace (e.g., "lines", "markers", "lines+markers")
-            secondary_line_shape: Line shape for secondary trace (e.g., "linear", "hv" for step, "spline", or None)
-            secondary_fill: Fill pattern for secondary trace (e.g., "tozeroy", "tonexty", or None for no fill)
+            primary_style: Style configuration for primary trace
+            secondary_style: Style configuration for secondary trace
             active_count_col: Optional column name in df_primary for supplementary data (shown in tooltip)
             title: Plot title (auto-generated if None)
             x_label: X-axis label (auto-generated from x_col_primary if None)
@@ -829,14 +767,19 @@ class PlotGenerator:
         """
         fig = go.Figure()
 
-        if title is None:
-            title = f"{y1_metric.replace('_', ' ').title()} with {y2_metric.replace('_', ' ').title()}"
-        if x_label is None:
-            x_label = "Time (s)"
-        if y1_label is None:
-            y1_label = y1_metric.replace("_", " ").title()
-        if y2_label is None:
-            y2_label = y2_metric.replace("_", " ").title()
+        # Provide default styles if not specified
+        if primary_style is None:
+            primary_style = Style(mode="lines", line_shape=None, fill=None)
+        if secondary_style is None:
+            secondary_style = Style(mode="lines", line_shape=None, fill=None)
+
+        title = (
+            title
+            or f"{get_metric_display_name(y1_metric)} with {get_metric_display_name(y2_metric)}"
+        )
+        x_label = x_label or "Time (s)"
+        y1_label = y1_label or get_metric_display_name(y1_metric)
+        y2_label = y2_label or get_metric_display_name(y2_metric)
 
         primary_hover = f"{x_label}: %{{x:.1f}}s<br>{y1_label}: %{{y:.1f}}"
         if active_count_col and active_count_col in df_primary.columns:
@@ -850,8 +793,8 @@ class PlotGenerator:
         primary_trace_config = {
             "x": df_primary[x_col_primary],
             "y": df_primary[y1_metric],
-            "mode": primary_mode,
-            "line": dict(width=2, color=NVIDIA_GREEN),
+            "mode": primary_style.mode,
+            "line": dict(width=primary_style.line_width, color=NVIDIA_GREEN),
             "name": y1_label,
             "yaxis": "y",
             "customdata": customdata,
@@ -859,13 +802,15 @@ class PlotGenerator:
         }
 
         # Apply line shape if specified
-        if primary_line_shape:
-            primary_trace_config["line"]["shape"] = primary_line_shape
+        if primary_style.line_shape:
+            primary_trace_config["line"]["shape"] = primary_style.line_shape
 
         # Apply fill if specified
-        if primary_fill:
-            primary_trace_config["fill"] = primary_fill
-            primary_trace_config["fillcolor"] = "rgba(118, 185, 0, 0.3)"
+        if primary_style.fill:
+            primary_trace_config["fill"] = primary_style.fill
+            primary_trace_config["fillcolor"] = (
+                f"rgba(118, 185, 0, {primary_style.fill_opacity})"
+            )
 
         fig.add_trace(go.Scatter(**primary_trace_config))
 
@@ -873,22 +818,24 @@ class PlotGenerator:
         secondary_trace_config = {
             "x": df_secondary[x_col_secondary],
             "y": df_secondary[y2_metric],
-            "mode": secondary_mode,
-            "line": dict(width=2, color=self.colors["secondary"]),
+            "mode": secondary_style.mode,
+            "line": dict(
+                width=secondary_style.line_width, color=self.colors["secondary"]
+            ),
             "name": y2_label,
             "yaxis": "y2",
             "hovertemplate": f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
         }
 
         # Apply line shape if specified
-        if secondary_line_shape:
-            secondary_trace_config["line"]["shape"] = secondary_line_shape
+        if secondary_style.line_shape:
+            secondary_trace_config["line"]["shape"] = secondary_style.line_shape
 
         # Apply fill if specified
-        if secondary_fill:
-            secondary_trace_config["fill"] = secondary_fill
+        if secondary_style.fill:
+            secondary_trace_config["fill"] = secondary_style.fill
             secondary_trace_config["fillcolor"] = (
-                f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.3)"
+                f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, {secondary_style.fill_opacity})"
             )
 
         fig.add_trace(go.Scatter(**secondary_trace_config))
@@ -941,12 +888,11 @@ class PlotGenerator:
         fig = go.Figure()
 
         # Auto-generate labels if not provided
-        if title is None:
-            title = f"{y_metric.replace('_', ' ').title()} Over Time with Percentiles"
-        if x_label is None:
-            x_label = x_col.replace("_", " ").title()
-        if y_label is None:
-            y_label = y_metric.replace("_", " ").title()
+        title = (
+            title or f"{get_metric_display_name(y_metric)} Over Time with Percentiles"
+        )
+        x_label = x_label or get_metric_display_name(x_col)
+        y_label = y_label or get_metric_display_name(y_metric)
 
         # Get NVIDIA color scheme for percentile lines
         n_percentiles = len(percentile_cols)

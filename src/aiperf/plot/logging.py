@@ -35,7 +35,7 @@ def setup_plot_logging(output_dir: Path, log_level: str = "INFO") -> None:
 
     Examples:
         >>> from pathlib import Path
-        >>> setup_plot_logging(Path("./artifacts/plot_export"), log_level="INFO")
+        >>> setup_plot_logging(Path("./artifacts/plots"), log_level="INFO")
     """
     root_logger = logging.getLogger()
 

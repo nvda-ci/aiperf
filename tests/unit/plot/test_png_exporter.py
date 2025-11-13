@@ -25,14 +25,14 @@ from aiperf.plot.exporters.png import MultiRunPNGExporter, SingleRunPNGExporter
 @pytest.fixture
 def multi_run_exporter(tmp_path):
     """Create a MultiRunPNGExporter instance for testing."""
-    output_dir = tmp_path / "plot_export"
+    output_dir = tmp_path / "plots"
     return MultiRunPNGExporter(output_dir)
 
 
 @pytest.fixture
 def single_run_exporter(tmp_path):
     """Create a SingleRunPNGExporter instance for testing."""
-    output_dir = tmp_path / "plot_export"
+    output_dir = tmp_path / "plots"
     return SingleRunPNGExporter(output_dir)
 
 
@@ -507,28 +507,21 @@ class TestSingleRunPNGExporter:
             f"Should have {len(unique_slices)} annotations"
         )
 
-        # Verify annotation content (should be just numbers, not "Slice X")
+        # Verify annotation content (should be time ranges like "0s-10s")
         annotation_texts = [ann.text for ann in fig.layout.annotations]
         for slice_idx in unique_slices:
-            expected_text = str(int(slice_idx))
+            start_time = int(slice_idx * 10)
+            end_time = int((slice_idx + 1) * 10)
+            expected_text = f"{start_time}s-{end_time}s"
             assert expected_text in annotation_texts, (
                 f"Should have annotation '{expected_text}'"
             )
 
-        # Verify annotation positioning (should be at top of bars)
+        # Verify annotation positioning (should be in center of bars)
         for ann in fig.layout.annotations:
             assert ann.yref == "y", "Annotations should use data coordinates"
             assert ann.y > 0, "Annotations should be at bar height (> 0)"
-            assert hasattr(ann, "yshift"), "Annotations should have yshift"
-            assert ann.yshift > 0, "Annotations should be shifted up above bar"
-
-        # Verify legend exists with slice explanation
-        assert fig.layout.showlegend is True, "Legend should be shown"
-        legend_names = [trace.name for trace in fig.data if trace.showlegend]
-        assert any(
-            "bar numbers" in name.lower() and "slice index" in name.lower()
-            for name in legend_names
-        ), "Legend should explain bar numbers and slice index"
+            assert ann.yanchor == "middle", "Annotations should be centered vertically"
 
     def test_timeslices_plot_handles_missing_data_gracefully(
         self,
@@ -944,7 +937,7 @@ class TestSharedExporterFunctionality:
 
     def test_output_directory_created(self, tmp_path, sample_multi_run_data):
         """Test that output directory is created if it doesn't exist."""
-        output_dir = tmp_path / "new_directory" / "plot_export"
+        output_dir = tmp_path / "new_directory" / "plots"
         assert not output_dir.exists()
 
         exporter = MultiRunPNGExporter(output_dir)
@@ -958,7 +951,7 @@ class TestSharedExporterFunctionality:
         self, tmp_path, sample_available_metrics
     ):
         """Test that export handles missing metrics without crashing."""
-        output_dir = tmp_path / "plot_export"
+        output_dir = tmp_path / "plots"
         exporter = MultiRunPNGExporter(output_dir)
 
         incomplete_data = [

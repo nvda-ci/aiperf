@@ -14,6 +14,7 @@ from pathlib import Path
 from aiperf.common.mixins.aiperf_logger_mixin import AIPerfLoggerMixin
 from aiperf.plot.constants import PlotTheme
 from aiperf.plot.core.plot_generator import PlotGenerator
+from aiperf.plot.metric_names import get_metric_display_name
 
 
 class BaseExporter(AIPerfLoggerMixin, ABC):
@@ -68,7 +69,7 @@ class BaseExporter(AIPerfLoggerMixin, ABC):
         display_names = available_metrics.get("display_names", {})
         units = available_metrics.get("units", {})
 
-        name = display_names.get(metric_tag, metric_tag.replace("_", " ").title())
+        name = display_names.get(metric_tag, get_metric_display_name(metric_tag))
         unit = units.get(metric_tag, "")
 
         label = f"{name} {stat.upper()}" if stat and stat != "value" else name

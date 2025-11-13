@@ -19,16 +19,16 @@ The `aiperf plot` command generates static PNG visualizations from your profilin
 ## Quick Start
 
 ```bash
-# Analyze a single profiling run (outputs to <single_run_name>/plot_export/)
+# Analyze a single profiling run (outputs to <single_run_name>/plots/)
 aiperf plot <single_run_name>
 
-# Compare multiple runs in a directory (outputs to <run_directory>/plot_export/)
+# Compare multiple runs in a directory (outputs to <run_directory>/plots/)
 aiperf plot <run_directory>
 
-# Compare all runs in multiple directories (outputs to <run_directory>/plot_export/)
+# Compare all runs in multiple directories (outputs to <run_directory>/plots/)
 aiperf plot <run_directory1> <run_directory2> ... <run_directoryn>
 
-# Compare multiple specific runs (outputs to <single_run_name1>/plot_export/)
+# Compare multiple specific runs (outputs to <single_run_name1>/plots/)
 aiperf plot <single_run_name1> <single_run_name2> ... <single_run_namen>
 
 # Specify custom output location
@@ -136,16 +136,16 @@ Traditional binning creates artificial spikes, requires arbitrary bin size selec
 ### Basic Options
 
 ```bash
-# Analyze a single profiling run (outputs to <single_run_name>/plot_export/)
+# Analyze a single profiling run (outputs to <single_run_name>/plots/)
 aiperf plot <single_run_name>
 
-# Compare multiple runs in a directory (outputs to <run_directory>/plot_export/)
+# Compare multiple runs in a directory (outputs to <run_directory>/plots/)
 aiperf plot <run_directory>
 
-# Compare all runs in multiple directories (outputs to <run_directory>/plot_export/)
+# Compare all runs in multiple directories (outputs to <run_directory>/plots/)
 aiperf plot <run_directory1> <run_directory2> ... <run_directoryn>
 
-# Compare multiple specific runs (outputs to <single_run_name1>/plot_export/)
+# Compare multiple specific runs (outputs to <single_run_name1>/plots/)
 aiperf plot <single_run_name1> <single_run_name2> ... <single_run_namen>
 
 # Specify custom output location
@@ -159,15 +159,15 @@ aiperf plot <path> --theme dark
 
 The output directory follows this logic:
 1. If `--output` is specified, use that path
-2. Otherwise, use `<first_input_path>/plot_export/`
+2. Otherwise, use `<first_input_path>/plots/`
 3. Default first input path is `./artifacts` if no paths specified
 
 **Examples:**
 ```bash
-# Outputs to: ./artifacts/plot_export/
+# Outputs to: ./artifacts/plots/
 aiperf plot
 
-# Outputs to: <sweep_directory>/plot_export/
+# Outputs to: <sweep_directory>/plots/
 aiperf plot <sweep_directory>
 
 # Outputs to: <custom_output_path>
@@ -257,7 +257,7 @@ These help identify warm-up effects, performance degradation, and steady-state b
 The plot command generates the following files in the output directory:
 
 ```
-plot_export/
+plots/
 ├── pareto_curve_latency_vs_throughput.png
 ├── ttft_vs_throughput.png
 ├── output_token_throughput_per_user_vs_concurrency.png

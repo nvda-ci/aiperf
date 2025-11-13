@@ -209,9 +209,7 @@ class HistogramHandler(BaseSingleRunHandler):
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        plot_df, request_counts = prepare_timeslice_metrics(
-            data, y_metric.name, y_metric.stat, include_request_counts=True
-        )
+        plot_df = prepare_timeslice_metrics(data, y_metric.name, y_metric.stat)
 
         metric_data = data.timeslices[
             (data.timeslices["Metric"] == y_metric.name)
@@ -237,7 +235,6 @@ class HistogramHandler(BaseSingleRunHandler):
             y_label=y_label,
             slice_duration=data.slice_duration if use_slice_duration else None,
             warning_text=warning_message,
-            request_counts=request_counts,
         )
 
 
@@ -314,12 +311,8 @@ class DualAxisHandler(BaseSingleRunHandler):
             x_col_secondary=x_col,
             y1_metric=y1_metric.name,
             y2_metric=y2_metric.name,
-            primary_mode=spec.primary_mode,
-            primary_line_shape=spec.primary_line_shape,
-            primary_fill=spec.primary_fill,
-            secondary_mode=spec.secondary_mode,
-            secondary_line_shape=spec.secondary_line_shape,
-            secondary_fill=spec.secondary_fill,
+            primary_style=spec.primary_style,
+            secondary_style=spec.secondary_style,
             active_count_col=spec.supplementary_col,
             title=spec.title,
             x_label=x_label,

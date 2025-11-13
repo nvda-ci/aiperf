@@ -444,6 +444,92 @@ class DataLoader(AIPerfLoggerMixin):
 
         return {"display_names": display_names, "units": units}
 
+    def _read_jsonl_with_error_handling(
+        self,
+        jsonl_path: Path,
+        parse_func: callable,
+        raise_on_empty: bool = True,
+        file_description: str = "JSONL",
+    ) -> list[dict] | None:
+        """
+        Common utility for reading JSONL files with error handling.
+
+        Args:
+            jsonl_path: Path to JSONL file
+            parse_func: Function to parse each line string into a dict
+            raise_on_empty: Whether to raise error if no records found
+            file_description: Description for log messages
+
+        Returns:
+            List of parsed records, or None if no records found and raise_on_empty=False
+
+        Raises:
+            DataLoadError: If file cannot be read or no records found when raise_on_empty=True
+        """
+        records = []
+        corrupted_lines = 0
+
+        try:
+            with open(jsonl_path, encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    try:
+                        record = parse_func(line)
+                        records.append(record)
+                    except (json.JSONDecodeError, Exception) as e:
+                        corrupted_lines += 1
+                        self.warning(
+                            f"Skipping invalid line {line_num} in {jsonl_path}: {e}"
+                        )
+                        continue
+
+            if corrupted_lines > 0:
+                self.warning(
+                    f"Skipped {corrupted_lines} corrupted lines in {jsonl_path}"
+                )
+
+            if not records:
+                if raise_on_empty:
+                    raise DataLoadError(
+                        f"No valid records found in {file_description} file",
+                        path=str(jsonl_path),
+                    )
+                else:
+                    self.warning(
+                        f"No valid records found in {file_description} file: {jsonl_path}"
+                    )
+                    return None
+
+            return records
+
+        except OSError as e:
+            raise DataLoadError(
+                f"Failed to read {file_description} file: {e}", path=str(jsonl_path)
+            ) from e
+
+    @staticmethod
+    def _calculate_relative_timestamp_seconds(
+        timestamp_ns: int, run_start_time_ns: int | None = None
+    ) -> float:
+        """
+        Convert nanosecond timestamp to relative seconds.
+
+        Args:
+            timestamp_ns: Absolute timestamp in nanoseconds
+            run_start_time_ns: Optional reference start time in nanoseconds.
+                If provided, returns relative seconds from this start time.
+                If None, returns absolute seconds.
+
+        Returns:
+            Timestamp in seconds (relative or absolute)
+        """
+        if run_start_time_ns:
+            return (timestamp_ns - run_start_time_ns) / 1e9
+        return timestamp_ns / 1e9
+
     def _load_jsonl(self, jsonl_path: Path) -> pd.DataFrame:
         """
         Load per-request data from JSONL file.
@@ -460,51 +546,17 @@ class DataLoader(AIPerfLoggerMixin):
         if not jsonl_path.exists():
             raise DataLoadError("JSONL file not found", path=str(jsonl_path))
 
-        records = []
-        corrupted_lines = 0
+        def parse_line(line: str) -> dict:
+            metric_record = MetricRecordInfo.model_validate_json(line)
+            return self._convert_to_flat_dict(metric_record)
 
-        try:
-            with open(jsonl_path, encoding="utf-8") as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line:
-                        continue
+        records = self._read_jsonl_with_error_handling(
+            jsonl_path, parse_line, raise_on_empty=True, file_description="JSONL"
+        )
 
-                    try:
-                        metric_record = MetricRecordInfo.model_validate_json(line)
-                        flat_record = self._convert_to_flat_dict(metric_record)
-                        records.append(flat_record)
-                    except (json.JSONDecodeError, Exception) as e:
-                        corrupted_lines += 1
-                        self.warning(
-                            f"Skipping invalid line {line_num} in {jsonl_path}: {e}"
-                        )
-                        continue
-
-            if corrupted_lines > 0:
-                self.warning(
-                    f"Skipped {corrupted_lines} corrupted lines in {jsonl_path}"
-                )
-
-            if not records:
-                raise DataLoadError(
-                    "No valid records found in JSONL file", path=str(jsonl_path)
-                )
-
-            df = pd.DataFrame(records)
-
-            timestamp_columns = [col for col in df.columns if col.endswith("_ns")]
-            for col in timestamp_columns:
-                if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
-                    df[col] = pd.to_datetime(df[col], unit="ns", utc=True)
-
-            self.info(f"Loaded {len(df)} records from {jsonl_path}")
-            return df
-
-        except OSError as e:
-            raise DataLoadError(
-                f"Failed to read JSONL file: {e}", path=str(jsonl_path)
-            ) from e
+        df = pd.DataFrame(records)
+        self.info(f"Loaded {len(df)} records from {jsonl_path}")
+        return df
 
     @staticmethod
     def _compute_inter_chunk_latency_stats(values: list[float]) -> dict[str, float]:
@@ -670,91 +722,35 @@ class DataLoader(AIPerfLoggerMixin):
             self.debug(f"GPU telemetry file not found: {jsonl_path}")
             return None
 
-        records = []
-        corrupted_lines = 0
+        def parse_line(line: str) -> dict:
+            data = json.loads(line)
 
-        try:
-            with open(jsonl_path, encoding="utf-8") as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line:
-                        continue
+            telemetry_data = data.pop("telemetry_data", {})
+            flat_record = {**data, **telemetry_data}
 
-                    try:
-                        data = json.loads(line)
-
-                        telemetry_data = data.pop("telemetry_data", {})
-                        flat_record = {**data, **telemetry_data}
-
-                        if "timestamp_ns" in flat_record:
-                            timestamp_ns = flat_record["timestamp_ns"]
-                            if run_start_time_ns:
-                                flat_record["timestamp_s"] = (
-                                    timestamp_ns - run_start_time_ns
-                                ) / 1e9
-                            else:
-                                flat_record["timestamp_s"] = timestamp_ns / 1e9
-
-                        records.append(flat_record)
-                    except (json.JSONDecodeError, Exception) as e:
-                        corrupted_lines += 1
-                        self.warning(
-                            f"Skipping invalid line {line_num} in {jsonl_path}: {e}"
-                        )
-                        continue
-
-            if corrupted_lines > 0:
-                self.warning(
-                    f"Skipped {corrupted_lines} corrupted lines in {jsonl_path}"
+            if "timestamp_ns" in flat_record:
+                flat_record["timestamp_s"] = self._calculate_relative_timestamp_seconds(
+                    flat_record["timestamp_ns"], run_start_time_ns
                 )
 
-            if not records:
-                self.warning(
-                    f"No valid records found in GPU telemetry file: {jsonl_path}"
-                )
-                return None
+            return flat_record
 
-            df = pd.DataFrame(records)
-            self.info(
-                f"Loaded {len(df)} GPU telemetry records from {jsonl_path} "
-                f"({df['gpu_index'].nunique() if 'gpu_index' in df.columns else 0} GPUs)"
-            )
-            return df
+        records = self._read_jsonl_with_error_handling(
+            jsonl_path,
+            parse_line,
+            raise_on_empty=False,
+            file_description="GPU telemetry",
+        )
 
-        except OSError as e:
-            raise DataLoadError(
-                f"Failed to read GPU telemetry file: {e}", path=str(jsonl_path)
-            ) from e
+        if records is None:
+            return None
 
-    def _load_input_config(self, inputs_path: Path) -> dict[str, Any]:
-        """
-        Load input configuration from inputs.json.
-
-        Args:
-            inputs_path: Path to the inputs.json file.
-
-        Returns:
-            Dictionary containing input configuration.
-
-        Raises:
-            DataLoadError: If file cannot be read or parsed.
-        """
-        if not inputs_path.exists():
-            raise DataLoadError("Required inputs file not found", path=str(inputs_path))
-
-        try:
-            with open(inputs_path, encoding="utf-8") as f:
-                data = json.load(f)
-            self.info(f"Loaded input config from {inputs_path}")
-            return data
-        except json.JSONDecodeError as e:
-            raise DataLoadError(
-                f"Failed to parse inputs JSON: {e}", path=str(inputs_path)
-            ) from e
-        except OSError as e:
-            raise DataLoadError(
-                f"Failed to read inputs JSON: {e}", path=str(inputs_path)
-            ) from e
+        df = pd.DataFrame(records)
+        self.info(
+            f"Loaded {len(df)} GPU telemetry records from {jsonl_path} "
+            f"({df['gpu_index'].nunique() if 'gpu_index' in df.columns else 0} GPUs)"
+        )
+        return df
 
     def _extract_metadata(
         self,
