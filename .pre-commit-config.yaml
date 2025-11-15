@@ -42,6 +42,12 @@ repos:
         types: [python]
         pass_filenames: false
         args: []
+      - id: generate-cli-docs
+        name: generate-cli-docs
+        entry: python tools/generate_cli_docs.py
+        language: system
+        pass_filenames: false
+        files: ^(src/aiperf/cli\.py|src/aiperf/common/config/.*\.py)$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.8
     hooks:
