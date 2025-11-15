@@ -13,14 +13,16 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
-    ComposerType,
+    CustomDatasetType,
+    DatasetLoaderType,
     MessageType,
     ServiceType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.factories import (
-    ComposerFactory,
+    DatasetLoaderFactory,
     DatasetSamplingStrategyFactory,
+    PublicDatasetFactory,
     ServiceFactory,
 )
 from aiperf.common.hooks import on_command, on_request
@@ -41,7 +43,18 @@ from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.record_models import RequestInfo
 from aiperf.common.protocols import DatasetSamplingStrategyProtocol, ServiceProtocol
 from aiperf.common.tokenizer import Tokenizer
-from aiperf.dataset.loader import ShareGPTLoader
+
+# Import to ensure factory registrations - loaders and datasets self-register on import
+from aiperf.dataset.loader import (  # noqa: F401
+    MooncakeTraceDatasetLoader,
+    MultiTurnDatasetLoader,
+    RandomPoolDatasetLoader,
+    ShareGPTLoader,
+    SingleTurnDatasetLoader,
+    SyntheticMultiModalLoader,
+    SyntheticRankingsLoader,
+)
+from aiperf.dataset.public_datasets import datasets  # noqa: F401
 
 _logger = AIPerfLogger(__name__)
 
@@ -177,18 +190,142 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
                 f"Error generating inputs.json file at {file_path.resolve()}: {e}"
             )
 
-    async def _load_public_dataset(self) -> list[Conversation]:
-        loader = ShareGPTLoader(self.user_config, self.tokenizer)
-        dataset = await loader.load_dataset()
-        return await loader.convert_to_conversations(dataset)
+    def _load_public_dataset(self) -> list[Conversation]:
+        """Load public dataset: metadata → download → loader → conversations.
 
-    def _load_custom_dataset(self) -> list[Conversation]:
-        composer = ComposerFactory.create_instance(
-            ComposerType.CUSTOM,
+        Returns:
+            list[Conversation]: Loaded conversations.
+        """
+        from aiperf.dataset.public_datasets import download_public_dataset
+
+        # 1. Get dataset metadata
+        dataset = PublicDatasetFactory.get_instance(
+            self.user_config.input.public_dataset
+        )
+
+        # 2. Download file
+        file_path = download_public_dataset(dataset)
+
+        # 3. Set sampling strategy from loader
+        self._set_sampling_strategy_from_loader(dataset.loader_type, dataset.name)
+
+        # 4. Create and run loader
+        loader = DatasetLoaderFactory.create_instance(
+            dataset.loader_type,
             config=self.user_config,
             tokenizer=self.tokenizer,
+            filename=str(file_path),
         )
-        return composer.create_dataset()
+        return loader.load()
+
+    def _infer_dataset_type(self) -> "CustomDatasetType":
+        """Infer the dataset type by querying all registered loaders.
+
+        Iterates through all file loaders and checks which one can handle the
+        configured input file.
+
+        Returns:
+            CustomDatasetType: The inferred dataset type.
+
+        Raises:
+            ValueError: If no loader or multiple loaders can handle the format.
+        """
+        # Check for explicit type field first by reading first line
+        from pathlib import Path
+
+        import orjson
+
+        from aiperf.common.enums import CustomDatasetType
+
+        file_path = Path(self.user_config.input.file)
+        if file_path.is_file():
+            try:
+                with open(file_path) as f:
+                    for line in f:
+                        if not (line := line.strip()):
+                            continue
+                        try:
+                            data = orjson.loads(line)
+                            if "type" in data:
+                                explicit_type = CustomDatasetType(data["type"])
+                                self.info(f"Using explicit type field: {explicit_type}")
+                                return explicit_type
+                        except (orjson.JSONDecodeError, ValueError):
+                            pass
+                        break  # Only check first line
+            except Exception as e:
+                self.debug(f"Could not read first line for type detection: {e!r}")
+
+        # Iterate through all loaders to find one that can handle this config
+        detected_type = None
+        for (
+            loader_class,
+            loader_type,
+        ) in DatasetLoaderFactory.get_all_classes_and_types():
+            # Only check file loaders (skip synthetic loaders)
+            if loader_type in [
+                DatasetLoaderType.SYNTHETIC_MULTIMODAL,
+                DatasetLoaderType.SYNTHETIC_RANKINGS,
+                DatasetLoaderType.SHAREGPT,  # ShareGPT handled via public dataset path
+            ]:
+                continue
+
+            try:
+                if loader_class.can_load(self.user_config):
+                    self.info(
+                        f"Loader {loader_class.__name__} can handle the input file format."
+                    )
+                    if detected_type is not None:
+                        raise ValueError(
+                            f"Multiple loaders can handle the data format: {detected_type} and {loader_type}. "
+                            "Please specify --custom-dataset-type explicitly."
+                        )
+                    # Convert DatasetLoaderType back to CustomDatasetType
+                    detected_type = CustomDatasetType(loader_type.value)
+            except Exception as e:
+                self.debug(f"Loader {loader_class.__name__} cannot handle file: {e!r}")
+
+        if detected_type is None:
+            raise ValueError(
+                "No loader can handle the data format. Please specify --custom-dataset-type explicitly."
+            )
+
+        return detected_type
+
+    def _load_custom_dataset(self) -> list[Conversation]:
+        """Load custom dataset: infer type → strategy → loader → conversations.
+
+        Returns:
+            list[Conversation]: Loaded conversations.
+        """
+        from aiperf.dataset.utils import check_file_exists
+
+        check_file_exists(self.user_config.input.file)
+
+        # 1. Determine dataset type (explicit or auto-infer)
+        dataset_type = self.user_config.input.custom_dataset_type
+        if dataset_type is None:
+            dataset_type = self._infer_dataset_type()
+            self.info(f"Auto-detected dataset type: {dataset_type}")
+
+        # Convert CustomDatasetType to DatasetLoaderType
+        loader_type = DatasetLoaderType(dataset_type.value)
+
+        # 2. Set sampling strategy from loader
+        self._set_sampling_strategy_from_loader(loader_type, str(dataset_type))
+
+        # 3. Build loader-specific kwargs
+        kwargs = self._build_loader_kwargs(loader_type)
+
+        # 4. Create and run loader
+        loader = DatasetLoaderFactory.create_instance(
+            loader_type,
+            config=self.user_config,
+            tokenizer=self.tokenizer,
+            filename=self.user_config.input.file,
+            **kwargs,
+        )
+        return loader.load()
 
     def _is_rankings_endpoint(self, endpoint_type: str) -> bool:
         return "rankings" in endpoint_type.lower()
@@ -197,16 +334,55 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         endpoint_type = self.user_config.endpoint.type
 
         if self._is_rankings_endpoint(endpoint_type):
-            composer_type = ComposerType.SYNTHETIC_RANKINGS
+            loader_type = DatasetLoaderType.SYNTHETIC_RANKINGS
         else:
-            composer_type = ComposerType.SYNTHETIC
+            loader_type = DatasetLoaderType.SYNTHETIC_MULTIMODAL
 
-        composer = ComposerFactory.create_instance(
-            composer_type,
+        loader = DatasetLoaderFactory.create_instance(
+            loader_type,
             config=self.user_config,
             tokenizer=self.tokenizer,
         )
-        return composer.create_dataset()
+        return loader.load()
+
+    def _set_sampling_strategy_from_loader(
+        self, loader_type: DatasetLoaderType, source_name: str
+    ) -> None:
+        """Set sampling strategy from loader's preference if not explicitly set.
+
+        Args:
+            loader_type: The loader type to get strategy from
+            source_name: Name for logging (e.g., "ShareGPT", "single_turn")
+        """
+        if self.user_config.input.dataset_sampling_strategy is None:
+            loader_class = DatasetLoaderFactory.get_class_from_type(loader_type)
+            preferred_strategy = loader_class.get_preferred_sampling_strategy()
+            self.user_config.input.dataset_sampling_strategy = preferred_strategy
+            self.info(
+                f"Using preferred sampling strategy for {source_name}: {preferred_strategy}"
+            )
+
+    def _build_loader_kwargs(self, loader_type: DatasetLoaderType) -> dict:
+        """Build loader-specific kwargs.
+
+        Args:
+            loader_type: The loader type to build kwargs for
+
+        Returns:
+            dict: Loader-specific kwargs
+        """
+        if loader_type == DatasetLoaderType.RANDOM_POOL:
+            return {"num_conversations": self.user_config.input.conversation.num}
+        elif loader_type == DatasetLoaderType.MOONCAKE_TRACE:
+            from aiperf.dataset.generator import PromptGenerator
+
+            return {
+                "prompt_generator": PromptGenerator(
+                    config=self.user_config.input.prompt,
+                    tokenizer=self.tokenizer,
+                )
+            }
+        return {}
 
     async def _configure_dataset(self) -> None:
         if self.user_config is None:

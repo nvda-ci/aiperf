@@ -150,84 +150,8 @@ class TestMooncakeTraceCanLoad:
         assert MooncakeTraceDatasetLoader.can_load(data) is expected
 
 
-class TestCustomDatasetComposerInferType:
-    """Tests for CustomDatasetComposer._infer_type() method.
-
-    The method first checks for explicit 'type' field, then falls back to
-    querying loaders. With pydantic validation, loaders respect type fields."""
-
-    @pytest.mark.parametrize(
-        "data,filename,expected_type",
-        [
-            param({"text": "Hello world"}, None, CustomDatasetType.SINGLE_TURN, id="single_turn_text"),
-            param({"type": "single_turn", "text": "Hello"}, None, CustomDatasetType.SINGLE_TURN, id="single_turn_explicit"),
-            param({"image": "/path.png"}, None, CustomDatasetType.SINGLE_TURN, id="single_turn_image"),
-            param({"turns": [{"text": "Turn 1"}]}, None, CustomDatasetType.MULTI_TURN, id="multi_turn_turns"),
-            param({"type": "multi_turn", "turns": [{"text": "Turn 1"}]}, None, CustomDatasetType.MULTI_TURN, id="multi_turn_explicit"),
-            param({"input_length": 100, "output_length": 50}, None, CustomDatasetType.MOONCAKE_TRACE, id="mooncake_input_length"),
-            param({"type": "mooncake_trace", "input_length": 100}, None, CustomDatasetType.MOONCAKE_TRACE, id="mooncake_explicit"),
-            param({"text_input": "Hello"}, None, CustomDatasetType.MOONCAKE_TRACE, id="mooncake_text_input"),
-        ],
-    )  # fmt: skip
-    def test_infer_from_data(
-        self, create_user_config_and_composer, data, filename, expected_type
-    ):
-        """Test inferring dataset type from various data formats."""
-        _, composer = create_user_config_and_composer()
-        result = composer._infer_type(data, filename=filename)
-        assert result == expected_type
-
-    def test_infer_random_pool_explicit_type(
-        self, create_user_config_and_composer, create_jsonl_file
-    ):
-        """Test inferring RandomPool with explicit type field (requires file for validation)."""
-        _, composer = create_user_config_and_composer()
-        # RandomPool with explicit type requires a file path for validation
-        filepath = create_jsonl_file(['{"type": "random_pool", "text": "Query"}'])
-        data = {"type": "random_pool", "text": "Query"}
-        result = composer._infer_type(data, filename=filepath)
-        assert result == CustomDatasetType.RANDOM_POOL
-
-    @pytest.mark.parametrize(
-        "data",
-        [
-            param({"unknown_field": "value"}, id="unknown_format"),
-            param({"metadata": "test"}, id="unknown_metadata"),
-        ],
-    )  # fmt: skip
-    def test_infer_from_data_raises(self, create_user_config_and_composer, data):
-        """Test that unknown formats raise ValueError."""
-        _, composer = create_user_config_and_composer()
-        with pytest.raises(ValueError, match="No loader can handle"):
-            composer._infer_type(data)
-
-    def test_infer_random_pool_with_directory(self, create_user_config_and_composer):
-        """Test inferring RandomPool with directory path."""
-        _, composer = create_user_config_and_composer()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            # Create a valid file in the directory
-            file_path = temp_path / "data.jsonl"
-            file_path.write_text('{"text": "Hello"}\n')
-            result = composer._infer_type(data=None, filename=temp_path)
-            assert result == CustomDatasetType.RANDOM_POOL
-
-    def test_infer_with_filename_parameter(self, create_user_config_and_composer):
-        """Test inference with filename parameter for file path."""
-        _, composer = create_user_config_and_composer()
-        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as temp_file:
-            temp_path = Path(temp_file.name)
-            try:
-                data = {"text": "Hello"}
-                result = composer._infer_type(data, filename=temp_path)
-                # Should infer SingleTurn (file, not directory)
-                assert result == CustomDatasetType.SINGLE_TURN
-            finally:
-                temp_path.unlink()
-
-
-class TestCustomDatasetComposerInferDatasetType:
-    """Tests for CustomDatasetComposer._infer_dataset_type() method."""
+class TestDatasetManagerInferDatasetType:
+    """Tests for DatasetManager._infer_dataset_type() method."""
 
     @pytest.mark.parametrize(
         "content,expected_type",
@@ -241,50 +165,51 @@ class TestCustomDatasetComposerInferDatasetType:
         ],
     )  # fmt: skip
     def test_infer_from_file(
-        self, create_user_config_and_composer, create_jsonl_file, content, expected_type
+        self,
+        create_user_config_and_dataset_manager,
+        create_jsonl_file,
+        content,
+        expected_type,
     ):
         """Test inferring dataset type from file with various content."""
-        _, composer = create_user_config_and_composer()
         filepath = create_jsonl_file(content)
-        result = composer._infer_dataset_type(filepath)
+        config, dataset_manager = create_user_config_and_dataset_manager(
+            file_path=filepath
+        )
+        result = dataset_manager._infer_dataset_type()
         assert result == expected_type
 
     @pytest.mark.parametrize(
         "content",
         [
-            param([], id="empty_file"),
-            param(["", "   ", "\n"], id="only_empty_lines"),
+            param(['{"unknown_field": "value"}'], id="unknown_format"),
+            param(['{"metadata": "test"}'], id="unknown_metadata"),
         ],
     )  # fmt: skip
-    def test_infer_from_file_empty(
-        self, create_user_config_and_composer, create_jsonl_file, content
+    def test_infer_from_file_raises(
+        self, create_user_config_and_dataset_manager, create_jsonl_file, content
     ):
-        """Test that empty files return None (no valid lines to infer from)."""
-        _, composer = create_user_config_and_composer()
+        """Test that unknown formats raise ValueError."""
         filepath = create_jsonl_file(content)
-        # Empty files have no valid lines, so the method exits the loop without calling _infer_type
-        result = composer._infer_dataset_type(filepath)
-        assert result is None
+        config, dataset_manager = create_user_config_and_dataset_manager(
+            file_path=filepath
+        )
+        with pytest.raises(ValueError, match="No loader can handle"):
+            dataset_manager._infer_dataset_type()
 
-    def test_infer_from_file_invalid_json(
-        self, create_user_config_and_composer, create_jsonl_file
+    def test_infer_random_pool_with_directory(
+        self, create_user_config_and_dataset_manager
     ):
-        """Test that invalid JSON raises an error."""
-        _, composer = create_user_config_and_composer()
-        filepath = create_jsonl_file(["not valid json"])
-        with pytest.raises((ValueError, Exception)):
-            composer._infer_dataset_type(filepath)
-
-    def test_infer_from_directory(self, create_user_config_and_composer):
-        """Test inferring type from directory (should be RandomPool)."""
-        _, composer = create_user_config_and_composer()
+        """Test inferring RandomPool with directory path."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create some files in the directory
             temp_path = Path(temp_dir)
-            file1 = temp_path / "queries.jsonl"
-            file1.write_text('{"text": "Query 1"}\n')
-
-            result = composer._infer_dataset_type(temp_dir)
+            # Create a valid file in the directory
+            file_path = temp_path / "data.jsonl"
+            file_path.write_text('{"text": "Hello"}\n')
+            config, dataset_manager = create_user_config_and_dataset_manager(
+                file_path=str(temp_path)
+            )
+            result = dataset_manager._infer_dataset_type()
             assert result == CustomDatasetType.RANDOM_POOL
 
 
@@ -295,9 +220,8 @@ class TestDetectionPriorityAndAmbiguity:
     The 'type' field must match the loader's expected type or be omitted.
     """
 
-    def test_explicit_type_handled_by_validation(self, create_user_config_and_composer):
+    def test_explicit_type_handled_by_validation(self):
         """Test that explicit type field is validated by loaders via pydantic."""
-        _, composer = create_user_config_and_composer()
         # RandomPool with explicit type
         data = {"type": "random_pool", "text": "Hello"}
 
@@ -306,10 +230,6 @@ class TestDetectionPriorityAndAmbiguity:
         # - RandomPool.can_load(data) validates with pydantic and returns True
         assert SingleTurnDatasetLoader.can_load(data) is False
         assert RandomPoolDatasetLoader.can_load(data) is True
-
-        # Type inference with explicit type should return RANDOM_POOL
-        result = composer._infer_type(data)
-        assert result == CustomDatasetType.RANDOM_POOL
 
     @pytest.mark.parametrize(
         "data,single_turn,random_pool",

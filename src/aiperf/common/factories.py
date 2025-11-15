@@ -10,11 +10,11 @@ from aiperf.common.enums import (
     AIPerfUIType,
     CommClientType,
     CommunicationBackend,
-    ComposerType,
     ConsoleExporterType,
-    CustomDatasetType,
     DataExporterType,
+    DatasetLoaderType,
     EndpointType,
+    PublicDatasetType,
     RecordProcessorType,
     RequestRateMode,
     ResultsProcessorType,
@@ -24,6 +24,7 @@ from aiperf.common.enums import (
     ZMQProxyType,
 )
 from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
+from aiperf.common.enums.model_enums import ModelSelectionStrategy
 from aiperf.common.exceptions import (
     FactoryCreationError,
     InvalidOperationError,
@@ -56,16 +57,16 @@ if TYPE_CHECKING:
         ConsoleExporterProtocol,
         DataExporterProtocol,
         DatasetSamplingStrategyProtocol,
+        ModelSelectionStrategyProtocol,
+        PublicDatasetProtocol,
         RecordProcessorProtocol,
         RequestRateGeneratorProtocol,
         ResultsProcessorProtocol,
         ServiceManagerProtocol,
         TransportProtocol,
     )
-    from aiperf.dataset import (
-        CustomDatasetLoaderProtocol,
-    )
-    from aiperf.dataset.composer.base import BaseDatasetComposer
+    from aiperf.common.tokenizer import Tokenizer
+    from aiperf.dataset.loader.base import BaseDatasetLoader
     from aiperf.exporters.exporter_config import ExporterConfig
     from aiperf.timing.config import TimingManagerConfig
     from aiperf.zmq.zmq_proxy_base import BaseZMQProxy
@@ -385,20 +386,6 @@ class CommunicationFactory(
         return super().create_instance(class_type, config=config, **kwargs)
 
 
-class ComposerFactory(AIPerfFactory[ComposerType, "BaseDatasetComposer"]):
-    """Factory for registering and creating BaseDatasetComposer instances based on the specified composer type.
-    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
-    """
-
-    @classmethod
-    def create_instance(  # type: ignore[override]
-        cls,
-        class_type: ComposerType | str,
-        **kwargs,
-    ) -> "BaseDatasetComposer":
-        return super().create_instance(class_type, **kwargs)
-
-
 class ConsoleExporterFactory(
     AIPerfFactory[ConsoleExporterType, "ConsoleExporterProtocol"]
 ):
@@ -418,24 +405,99 @@ class ConsoleExporterFactory(
         )
 
 
-class CustomDatasetFactory(
-    AIPerfFactory[CustomDatasetType, "CustomDatasetLoaderProtocol"]
-):
-    """Factory for registering and creating CustomDatasetLoaderProtocol instances based on the specified custom dataset type.
-    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
+class DatasetLoaderFactory(AIPerfFactory[DatasetLoaderType, "BaseDatasetLoader"]):
+    """Factory for registering and creating BaseDatasetLoader instances.
+
+    This factory handles all types of dataset loaders:
+    - Synthetic loaders (generate data)
+    - File loaders (parse local files)
+    - Remote loaders (download and parse remote datasets)
+
+    See: :class:`aiperf.common.factories.AIPerfFactory` for more details.
     """
 
     @classmethod
     def create_instance(  # type: ignore[override]
         cls,
-        class_type: CustomDatasetType | str,
-        filename: str,
-        user_config: "UserConfig",
+        class_type: DatasetLoaderType | str,
+        config: "UserConfig",
+        tokenizer: "Tokenizer",
+        filename: str | None = None,
         **kwargs,
-    ) -> "CustomDatasetLoaderProtocol":
+    ) -> "BaseDatasetLoader":
+        """Create a dataset loader instance.
+
+        Args:
+            class_type: The type of loader to create
+            config: User configuration
+            tokenizer: Tokenizer instance
+            filename: Optional filename for file-based loaders
+            **kwargs: Additional arguments passed to the loader
+
+        Returns:
+            BaseDatasetLoader instance
+        """
         return super().create_instance(
-            class_type, filename=filename, user_config=user_config, **kwargs
+            class_type,
+            config=config,
+            tokenizer=tokenizer,
+            filename=filename,
+            **kwargs,
         )
+
+
+class PublicDatasetFactory(AIPerfFactory[PublicDatasetType, "PublicDatasetProtocol"]):
+    """Factory for registering public dataset metadata instances.
+
+    Public datasets are pure data instances (dataclasses).
+    Use get_instance() to get the dataset metadata.
+
+    Example:
+        dataset = PublicDatasetFactory.get_instance(PublicDatasetType.SHAREGPT)
+        # dataset.name, dataset.url, dataset.loader_type, etc.
+
+    See: :class:`aiperf.common.factories.AIPerfFactory` for more details.
+    """
+
+    @classmethod
+    def register_instance(
+        cls, class_type: PublicDatasetType, instance: "PublicDatasetProtocol"
+    ) -> None:
+        """Register a dataset instance directly.
+
+        Args:
+            class_type: The dataset type enum
+            instance: The dataset instance (dataclass)
+        """
+        # Store the instance wrapped in a lambda for compatibility
+        cls._registry[class_type] = lambda: instance
+        cls._override_priorities[class_type] = 0
+        cls._logger.debug(
+            f"{class_type!r} instance {instance.name} registered with priority 0."
+        )
+
+    @classmethod
+    def get_instance(
+        cls, class_type: PublicDatasetType | str
+    ) -> "PublicDatasetProtocol":
+        """Get a registered dataset instance.
+
+        Args:
+            class_type: The dataset type to retrieve
+
+        Returns:
+            The dataset instance
+        """
+        if isinstance(class_type, str):
+            class_type = PublicDatasetType(class_type)
+
+        factory_fn = cls._registry.get(class_type)
+        if factory_fn is None:
+            raise FactoryCreationError(
+                f"No dataset registered for type: {class_type}. "
+                f"Available types: {list(cls._registry.keys())}"
+            )
+        return factory_fn()
 
 
 class DataExporterFactory(AIPerfFactory[DataExporterType, "DataExporterProtocol"]):
@@ -672,3 +734,33 @@ class ZMQProxyFactory(AIPerfFactory[ZMQProxyType, "BaseZMQProxy"]):
         return super().create_instance(
             class_type, zmq_proxy_config=zmq_proxy_config, **kwargs
         )
+
+
+class ModelSelectionStrategyFactory(
+    AIPerfFactory[ModelSelectionStrategy, "ModelSelectionStrategyProtocol"]
+):
+    """Factory for registering and creating ModelSelectionStrategyProtocol instances based on the specified model selection strategy.
+    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
+    """
+
+    @classmethod
+    def create_instance(  # type: ignore[override]
+        cls,
+        class_type: ModelSelectionStrategy | str,
+        user_config: "UserConfig",
+        **kwargs,
+    ) -> "ModelSelectionStrategyProtocol":
+        """Create a model selection strategy instance.
+
+        Args:
+            class_type: The type of strategy to create.
+            user_config: The user configuration.
+            **kwargs: Additional arguments for specific strategies.
+
+        Returns:
+            Appropriate strategy instance.
+
+        Raises:
+            FactoryCreationError: If class_type is unsupported or missing required args.
+        """
+        return super().create_instance(class_type, user_config=user_config, **kwargs)

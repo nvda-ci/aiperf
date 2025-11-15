@@ -4,15 +4,22 @@
 from aiperf.common.enums.base_enums import CaseInsensitiveStrEnum
 
 
-class PublicDatasetType(CaseInsensitiveStrEnum):
+class DatasetLoaderType(CaseInsensitiveStrEnum):
+    """Types of dataset loaders (unified: synthetic, file, remote)."""
+
+    SYNTHETIC_MULTIMODAL = "synthetic_multimodal"
+    SYNTHETIC_RANKINGS = "synthetic_rankings"
+    SINGLE_TURN = "single_turn"
+    MULTI_TURN = "multi_turn"
+    RANDOM_POOL = "random_pool"
+    MOONCAKE_TRACE = "mooncake_trace"
     SHAREGPT = "sharegpt"
 
 
-class ComposerType(CaseInsensitiveStrEnum):
-    SYNTHETIC = "synthetic"
-    CUSTOM = "custom"
-    PUBLIC_DATASET = "public_dataset"
-    SYNTHETIC_RANKINGS = "synthetic_rankings"
+class PublicDatasetType(CaseInsensitiveStrEnum):
+    """Types of public datasets (for remote downloading)."""
+
+    SHAREGPT = "sharegpt"
 
 
 class CustomDatasetType(CaseInsensitiveStrEnum):
@@ -20,6 +27,7 @@ class CustomDatasetType(CaseInsensitiveStrEnum):
     MULTI_TURN = "multi_turn"
     RANDOM_POOL = "random_pool"
     MOONCAKE_TRACE = "mooncake_trace"
+    SHAREGPT = "sharegpt"
 
 
 class ImageFormat(CaseInsensitiveStrEnum):

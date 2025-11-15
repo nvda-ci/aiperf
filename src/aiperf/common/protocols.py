@@ -9,7 +9,6 @@ from aiperf.common.enums import CommClientType, LifecycleState
 from aiperf.common.environment import Environment
 from aiperf.common.hooks import Hook, HookType
 from aiperf.common.models import (
-    Conversation,
     MetricRecordMetadata,
     ParsedResponse,
     ParsedResponseRecord,
@@ -17,6 +16,7 @@ from aiperf.common.models import (
     RequestRecord,
     ServiceRunInfo,
     TelemetryRecord,
+    Turn,
 )
 from aiperf.common.types import (
     CommAddressType,
@@ -32,17 +32,14 @@ from aiperf.common.types import (
 
 if TYPE_CHECKING:
     import multiprocessing
-    from pathlib import Path
 
     from rich.console import Console
 
     from aiperf.common.config import ServiceConfig, UserConfig
-    from aiperf.common.enums import DatasetSamplingStrategy
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
     from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
     from aiperf.common.models.record_models import MetricResult
-    from aiperf.dataset.loader.models import CustomDatasetT
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
     from aiperf.timing.config import TimingManagerConfig
@@ -396,39 +393,44 @@ class ConsoleExporterProtocol(Protocol):
 
 
 @runtime_checkable
-class CustomDatasetLoaderProtocol(Protocol):
-    """Protocol for custom dataset loaders that load dataset from a file and convert it to a list of Conversation objects."""
+class PublicDatasetProtocol(Protocol):
+    """Protocol for public dataset metadata.
 
-    @classmethod
-    def can_load(
-        cls, data: dict[str, Any] | None = None, filename: "str | Path | None" = None
-    ) -> bool:
-        """Check if this loader can handle the given data format.
+    Public datasets are simple dataclass instances with metadata.
+    They describe where to download a dataset and which loader to use for parsing.
+    Auto-register on instantiation via __post_init__.
 
-        Args:
-            data: Optional dictionary representing a single line from the JSONL file.
-                  None indicates path-based detection only (e.g., for directories).
-            filename: Optional path to the input file/directory for path-based detection
+    Example:
+        SHAREGPT = PublicDataset(
+            dataset_type=PublicDatasetType.SHAREGPT,  # Auto-registers!
+            name="ShareGPT",
+            url="https://...",
+            remote_filename="sharegpt.json",
+            loader_type=DatasetLoaderType.SHAREGPT
+        )
 
-        Returns:
-            True if this loader can handle the data format, False otherwise
-        """
-        ...
+    Attributes:
+        dataset_type: PublicDatasetType enum for registration
+        name: Human-readable name for the dataset
+        url: Remote URL to download the dataset from
+        remote_filename: Filename to use for local caching
+        loader_type: Which DatasetLoaderType to use for parsing
+    """
 
-    @classmethod
-    def get_preferred_sampling_strategy(cls) -> "DatasetSamplingStrategy":
-        """Get the preferred dataset sampling strategy for this loader.
+    dataset_type: "PublicDatasetType"  # noqa: F821
+    """Dataset type enum (for factory registration)"""
 
-        Returns:
-            DatasetSamplingStrategy: The preferred sampling strategy
-        """
-        ...
+    name: str
+    """Human-readable name for the dataset"""
 
-    def load_dataset(self) -> dict[str, list["CustomDatasetT"]]: ...
+    url: str
+    """URL to download the dataset from"""
 
-    def convert_to_conversations(
-        self, custom_data: dict[str, list["CustomDatasetT"]]
-    ) -> list[Conversation]: ...
+    remote_filename: str
+    """Filename to use for local caching"""
+
+    loader_type: "DatasetLoaderType"  # noqa: F821
+    """Which loader to use for parsing this dataset"""
 
 
 @runtime_checkable
@@ -673,3 +675,24 @@ class TransportProtocol(AIPerfLifecycleProtocol, Protocol):
     async def send_request(
         self, request_info: RequestInfo, payload: RequestInputT
     ) -> RequestRecord: ...
+
+
+@runtime_checkable
+class ModelSelectionStrategyProtocol(Protocol):
+    """Protocol for model selection strategies.
+
+    Strategies can examine the Turn object to make context-aware decisions
+    about which model to select (e.g., based on modalities, token counts).
+    """
+
+    def select(self, turn: Turn) -> str:
+        """Select a model name for the given turn.
+
+        Args:
+            turn: Turn object containing text, images, audio, video, etc.
+                  Strategies can examine turn content to make decisions.
+
+        Returns:
+            Selected model name string.
+        """
+        ...

@@ -3,19 +3,18 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
-from aiperf.common.enums import CustomDatasetType, DatasetSamplingStrategy, MediaType
-from aiperf.common.factories import CustomDatasetFactory
+from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy, MediaType
+from aiperf.common.factories import DatasetLoaderFactory
 from aiperf.common.models import Conversation, Turn
-from aiperf.dataset.loader.base_loader import BaseFileLoader
+from aiperf.dataset.loader.file.base import BaseFileLoader
 from aiperf.dataset.loader.mixins import MediaConversionMixin
 from aiperf.dataset.loader.models import MultiTurn
 
 
-@CustomDatasetFactory.register(CustomDatasetType.MULTI_TURN)
+@DatasetLoaderFactory.register(DatasetLoaderType.MULTI_TURN)
 class MultiTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
     """A dataset loader that loads multi-turn data from a file.
 
@@ -95,21 +94,30 @@ class MultiTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
     """
 
     @classmethod
-    def can_load(
-        cls, data: dict[str, Any] | None = None, filename: str | Path | None = None
-    ) -> bool:
-        """Check if this loader can handle the given data format.
+    def can_load_file(cls, path: Path) -> bool:
+        """Check if this loader can handle the given file.
 
-        For multi-turn data, simply validate the data against the MultiTurn model.
+        For multi-turn data, validates first non-empty line against the MultiTurn model.
         This will handle all of the validation logic for the different input combinations.
+
+        Args:
+            path: Path to the file to check.
+
+        Returns:
+            True if this loader can handle the file, False otherwise.
         """
-        if data is None:
+        if not path.is_file():
             return False
 
         try:
-            MultiTurn.model_validate(data)
-            return True
-        except ValidationError:
+            with open(path) as f:
+                for line in f:
+                    if (line := line.strip()) == "":
+                        continue  # Skip empty lines
+                    MultiTurn.model_validate_json(line)
+                    return True  # Successfully validated first line
+            return False  # File is empty or has only empty lines
+        except (ValidationError, Exception):
             return False
 
     @classmethod
@@ -117,16 +125,16 @@ class MultiTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
         """Get the preferred dataset sampling strategy for MultiTurn."""
         return DatasetSamplingStrategy.SEQUENTIAL
 
-    def load_dataset(self) -> dict[str, list[MultiTurn]]:
-        """Load multi-turn data from a JSONL file.
+    def parse_and_validate(self) -> list[MultiTurn]:
+        """Parse and validate multi-turn data from a JSONL file.
 
         Each line represents a complete multi-turn conversation with its own
         session_id and multiple turns.
 
         Returns:
-            A dictionary mapping session_id to list of MultiTurn objects.
+            A list of validated MultiTurn objects.
         """
-        data: dict[str, list[MultiTurn]] = defaultdict(list)
+        data: list[MultiTurn] = []
 
         with open(self.filename) as f:
             for line in f:
@@ -134,26 +142,30 @@ class MultiTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
                     continue  # Skip empty lines
 
                 multi_turn_data = MultiTurn.model_validate_json(line)
-                session_id = (
-                    multi_turn_data.session_id or self.session_id_generator.next()
-                )
-                data[session_id].append(multi_turn_data)
+                data.append(multi_turn_data)
 
         return data
 
-    def convert_to_conversations(
-        self, data: dict[str, list[MultiTurn]]
-    ) -> list[Conversation]:
+    def convert_to_conversations(self, data: list[MultiTurn]) -> list[Conversation]:
         """Convert multi-turn data to conversation objects.
 
+        Groups MultiTurn entries by session_id and creates conversations.
+
         Args:
-            data: A dictionary mapping session_id to list of MultiTurn objects.
+            data: A list of MultiTurn objects.
 
         Returns:
             A list of conversations.
         """
+        # Group by session_id
+        grouped_data: dict[str, list[MultiTurn]] = defaultdict(list)
+        for multi_turn in data:
+            session_id = multi_turn.session_id or self.session_id_generator.next()
+            grouped_data[session_id].append(multi_turn)
+
+        # Convert grouped data to conversations
         conversations = []
-        for session_id, multi_turns in data.items():
+        for session_id, multi_turns in grouped_data.items():
             conversation = Conversation(session_id=session_id)
 
             # Process all MultiTurn objects for this session

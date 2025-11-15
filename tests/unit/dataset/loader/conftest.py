@@ -12,9 +12,10 @@ from aiperf.common.config import (
     InputConfig,
     InputTokensConfig,
     PromptConfig,
+    ServiceConfig,
     UserConfig,
 )
-from aiperf.dataset.composer.custom import CustomDatasetComposer
+from aiperf.dataset.dataset_manager import DatasetManager
 
 
 @pytest.fixture
@@ -38,25 +39,30 @@ def create_jsonl_file():
 
 
 @pytest.fixture
-def create_user_config_and_composer(mock_tokenizer_cls):
-    """Create a UserConfig and CustomDatasetComposer for testing."""
+def create_user_config_and_dataset_manager(
+    mock_tokenizer_from_pretrained, mock_tokenizer_cls
+):
+    """Create a UserConfig and DatasetManager for testing."""
 
-    def _create():
+    def _create(file_path="test_data.jsonl"):
         config = UserConfig(
             endpoint=EndpointConfig(model_names=["test-model"]),
             input=InputConfig.model_construct(
-                file="test_data.jsonl",
+                file=file_path,
                 conversation=ConversationConfig(num=5),
                 prompt=PromptConfig(
                     input_tokens=InputTokensConfig(mean=10, stddev=2),
                 ),
             ),
         )
-        tokenizer = mock_tokenizer_cls.from_pretrained(
-            "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+        # Mock the tokenizer to avoid HTTP requests
+        mock_tokenizer_from_pretrained.return_value = (
+            mock_tokenizer_cls.from_pretrained("test-model")
         )
-        composer = CustomDatasetComposer(config, tokenizer)
-        return config, composer
+
+        service_config = ServiceConfig()
+        dataset_manager = DatasetManager(service_config, config)
+        return config, dataset_manager
 
     return _create
 

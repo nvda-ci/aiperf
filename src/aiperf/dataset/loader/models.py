@@ -208,7 +208,44 @@ class MooncakeTrace(AIPerfBaseModel):
         return self
 
 
+class ShareGPTMessage(AIPerfBaseModel):
+    """Defines a single message in a ShareGPT conversation."""
+
+    from_: str = Field(..., alias="from", description="The role of the message sender")
+    value: str = Field(..., description="The content of the message")
+
+
+class ShareGPT(AIPerfBaseModel):
+    """Defines the schema for ShareGPT dataset format.
+
+    The ShareGPT format contains multi-turn conversations from the ShareGPT dataset.
+    Each entry has a list of conversation messages with alternating roles (human/gpt).
+
+    Example:
+        {
+            "conversations": [
+                {"from": "human", "value": "Hello!"},
+                {"from": "gpt", "value": "Hi there!"}
+            ]
+        }
+    """
+
+    type: Literal[CustomDatasetType.SHAREGPT] = CustomDatasetType.SHAREGPT
+
+    conversations: list[ShareGPTMessage] = Field(
+        ..., description="List of conversation messages"
+    )
+
+    @model_validator(mode="after")
+    def validate_conversations(self) -> "ShareGPT":
+        """Ensure at least 2 messages are provided"""
+        if len(self.conversations) < 2:
+            raise ValueError("ShareGPT conversations must have at least 2 messages")
+        return self
+
+
 CustomDatasetT = TypeVar(
-    "CustomDatasetT", bound=SingleTurn | MultiTurn | RandomPool | MooncakeTrace
+    "CustomDatasetT",
+    bound=SingleTurn | MultiTurn | RandomPool | MooncakeTrace | ShareGPT,
 )
 """A union type of all custom data types."""

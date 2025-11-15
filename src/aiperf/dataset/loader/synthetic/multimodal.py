@@ -3,83 +3,112 @@
 
 from aiperf.common import random_generator as rng
 from aiperf.common.config import UserConfig
-from aiperf.common.config.config_defaults import InputDefaults
-from aiperf.common.enums import ComposerType
-from aiperf.common.factories import ComposerFactory
+from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy
+from aiperf.common.factories import DatasetLoaderFactory
 from aiperf.common.models import Audio, Conversation, Image, Text, Turn, Video
-from aiperf.common.session_id_generator import SessionIDGenerator
 from aiperf.common.tokenizer import Tokenizer
-from aiperf.dataset.composer.base import BaseDatasetComposer
+from aiperf.dataset.loader.synthetic.base import BaseSyntheticLoader
 
 
-@ComposerFactory.register(ComposerType.SYNTHETIC)
-class SyntheticDatasetComposer(BaseDatasetComposer):
+@DatasetLoaderFactory.register(DatasetLoaderType.SYNTHETIC_MULTIMODAL)
+class SyntheticMultiModalLoader(BaseSyntheticLoader):
+    """Generates synthetic multi-modal conversations.
+
+    Creates synthetic conversations with configurable:
+    - Number of turns per conversation (with variance)
+    - Multi-modal payloads: text, image, audio, video
+    - Turn delays
+    - ISL/OSL distribution for consistent prompt/response pairing
+
+    At least one modality must be enabled (prompt, image, or audio).
+
+    Args:
+        config: The user configuration
+        tokenizer: The tokenizer instance
+    """
+
     def __init__(self, config: UserConfig, tokenizer: Tokenizer):
         super().__init__(config, tokenizer)
-        self.session_id_generator = SessionIDGenerator(seed=config.input.random_seed)
 
-        self._turn_sampler_rng = rng.derive("composer.conversation.turn_count")
-        self._delay_sampler_rng = rng.derive("composer.conversation.turn_delay")
+        # Derived RNGs for sampling
+        self._turn_sampler_rng = rng.derive("loader.conversation.turn_count")
+        self._delay_sampler_rng = rng.derive("loader.conversation.turn_delay")
 
-        # Set default sampling strategy for synthetic datasets if not explicitly set
-        if self.config.input.dataset_sampling_strategy is None:
-            self.config.input.dataset_sampling_strategy = (
-                InputDefaults.DATASET_SAMPLING_STRATEGY
-            )
-            self.info(
-                f"Using default sampling strategy for synthetic dataset: {InputDefaults.DATASET_SAMPLING_STRATEGY}"
-            )
-
+        # Validate at least one modality is enabled
         if (
             not self.include_prompt
             and not self.include_image
             and not self.include_audio
         ):
             raise ValueError(
-                "All synthetic data are disabled. "
+                "All synthetic data modalities are disabled. "
                 "Please enable at least one of prompt, image, or audio by "
                 "setting the mean to a positive value."
             )
 
-    def create_dataset(self) -> list[Conversation]:
-        """Create a synthetic conversation dataset from the given configuration.
+    @classmethod
+    def can_load(cls, config: UserConfig) -> bool:
+        """Check if this loader should be used.
 
-        It generates a set of conversations with a varying number of turns,
-        where each turn contains synthetic text, image, and audio payloads.
+        Returns True if:
+        - No file specified
+        - No public dataset specified
+        - Not a rankings endpoint
+
+        Args:
+            config: The user configuration to check.
 
         Returns:
-            list[Conversation]: A list of conversation objects.
+            True if this loader should generate synthetic multi-modal data.
+        """
+        from aiperf.common.enums import EndpointType
+
+        return (
+            config.input.file is None
+            and config.input.public_dataset_type is None
+            and config.endpoint.endpoint_type != EndpointType.RANKINGS
+        )
+
+    def load(self) -> list[Conversation]:
+        """Generate synthetic multi-modal conversations.
+
+        Returns:
+            List of Conversation objects with synthetic data.
         """
         conversations = []
-        for _ in range(self.config.input.conversation.num_dataset_entries):
-            conversation = Conversation(session_id=self.session_id_generator.next())
 
+        for _ in range(self.config.input.conversation.num_dataset_entries):
+            session_id = self.session_id_generator.next()
+
+            # Sample number of turns for this conversation
             num_turns = self._turn_sampler_rng.sample_positive_normal_integer(
                 self.config.input.conversation.turn.mean,
                 self.config.input.conversation.turn.stddev,
             )
-            self.logger.debug("Creating conversation with %d turns", num_turns)
+            self.debug(lambda: f"Creating conversation with {num_turns} turns")
 
+            turns = []
             for turn_idx in range(num_turns):
                 turn = self._create_turn(is_first=(turn_idx == 0))
-                conversation.turns.append(turn)
+                turns.append(turn)
+
+            conversation = Conversation(session_id=session_id, turns=turns)
             conversations.append(conversation)
+
         return conversations
 
     def _create_turn(self, is_first: bool) -> Turn:
-        """Create a turn object that contains synthetic payloads to send.
-
-        It generates multi-modal data (e.g. text, image, audio) using synthetic
-        generators and also the delay between turns.
+        """Create a single turn with multi-modal payloads.
 
         Args:
-            is_first: Whether the turn is the first turn in the conversation.
+            is_first: Whether this is the first turn in the conversation.
 
         Returns:
-            Turn: A dataset representation of a single turn.
+            Turn object with generated media payloads.
         """
         turn = Turn()
 
+        # Generate multi-modal payloads
         if self.include_prompt:
             turn.texts.append(self._generate_text_payloads(turn, is_first))
         if self.include_image:
@@ -89,6 +118,7 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         if self.include_video:
             turn.videos.append(self._generate_video_payloads())
 
+        # Set delay for non-first turns
         if not is_first and self.config.input.conversation.turn.delay.mean > 0:
             delay = self._delay_sampler_rng.sample_positive_normal_integer(
                 self.config.input.conversation.turn.delay.mean,
@@ -96,30 +126,34 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
             )
             turn.delay = delay * self.config.input.conversation.turn.delay.ratio
 
+        # Validate at least one payload was generated
         if not turn.texts and not turn.images and not turn.audios and not turn.videos:
-            self.logger.warning(
-                "There were no synthetic payloads generated. "
-                "Please enable at least one of prompt, image, or audio by "
-                "setting the mean to a positive value."
+            self.warning(
+                "No synthetic payloads generated. Please enable at least one modality."
             )
 
-        self._finalize_turn(turn)
+        # Set turn metadata
+        turn.model = self.model_selector.select(turn)
+        turn.max_tokens = self.get_max_tokens_for_turn(turn)
+
+        # Clear cached sequence lengths to free memory
+        self.clear_turn_cache(turn)
 
         return turn
 
     def _generate_text_payloads(self, turn: Turn, is_first: bool) -> Text:
-        """Generate text payloads for a single turn.
+        """Generate text payloads for a turn with ISL/OSL consistency.
 
         Args:
             turn: The turn object (used for caching sequence lengths)
-            is_first: Whether the turn is the first turn in the conversation.
+            is_first: Whether this is the first turn in the conversation
 
         Returns:
-            Text: A text payload object.
+            Text object with generated content.
         """
         text = Text(name="text")
 
-        # Sample ISL/OSL pair for this request (cached for consistency)
+        # Sample ISL/OSL pair for this turn (cached for consistency)
         turn_id = id(turn)
         isl, _ = self._get_turn_sequence_lengths(turn_id)
 
@@ -144,11 +178,10 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         return text
 
     def _generate_image_payloads(self) -> Image:
-        """
-        Generate synthetic images if the image width and height are specified.
+        """Generate synthetic images.
 
         Returns:
-            Image: An image payload object.
+            Image object with generated data.
         """
         image = Image(name="image_url")
         for _ in range(self.config.input.image.batch_size):
@@ -157,11 +190,10 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         return image
 
     def _generate_audio_payloads(self) -> Audio:
-        """
-        Generate synthetic audios if the audio length is specified.
+        """Generate synthetic audio.
 
         Returns:
-            Audio: An audio payload object.
+            Audio object with generated data.
         """
         audio = Audio(name="input_audio")
         for _ in range(self.config.input.audio.batch_size):
@@ -170,11 +202,10 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         return audio
 
     def _generate_video_payloads(self) -> Video:
-        """
-        Generate synthetic videos if the video width and height are specified.
+        """Generate synthetic video.
 
         Returns:
-            Video: A video payload object.
+            Video object with generated data.
         """
         video = Video(name="video_url")
         for _ in range(self.config.input.video.batch_size):
@@ -183,12 +214,24 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
                 video.contents.append(data)
         return video
 
+    def get_preferred_sampling_strategy(self) -> DatasetSamplingStrategy:
+        """Return preferred sampling strategy for synthetic data.
+
+        Returns:
+            DatasetSamplingStrategy.SHUFFLE for variety in synthetic data.
+        """
+        return DatasetSamplingStrategy.SHUFFLE
+
+    # Helper properties to check if modalities are enabled
+
     @property
     def include_prompt(self) -> bool:
+        """Check if prompt generation is enabled."""
         return self.config.input.prompt.input_tokens.mean > 0
 
     @property
     def include_image(self) -> bool:
+        """Check if image generation is enabled."""
         return (
             self.config.input.image.width.mean > 0
             and self.config.input.image.height.mean > 0
@@ -196,8 +239,10 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
 
     @property
     def include_audio(self) -> bool:
+        """Check if audio generation is enabled."""
         return self.config.input.audio.length.mean > 0
 
     @property
     def include_video(self) -> bool:
+        """Check if video generation is enabled."""
         return bool(self.config.input.video.width and self.config.input.video.height)

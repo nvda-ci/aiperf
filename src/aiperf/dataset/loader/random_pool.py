@@ -3,16 +3,17 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 from pydantic import ValidationError
 
 from aiperf.common import random_generator as rng
 from aiperf.common.config.user_config import UserConfig
-from aiperf.common.enums import CustomDatasetType, DatasetSamplingStrategy, MediaType
-from aiperf.common.factories import CustomDatasetFactory
+from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy, MediaType
+from aiperf.common.factories import DatasetLoaderFactory
 from aiperf.common.models import Conversation, Turn
-from aiperf.dataset.loader.base_loader import BaseFileLoader
+from aiperf.common.tokenizer import Tokenizer
+from aiperf.dataset.loader.file.base import BaseFileLoader
 from aiperf.dataset.loader.mixins import MediaConversionMixin
 from aiperf.dataset.loader.models import RandomPool
 
@@ -20,7 +21,7 @@ from aiperf.dataset.loader.models import RandomPool
 Filename: TypeAlias = str
 
 
-@CustomDatasetFactory.register(CustomDatasetType.RANDOM_POOL)
+@DatasetLoaderFactory.register(DatasetLoaderType.RANDOM_POOL)
 class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
     """A dataset loader that loads data from a single file or a directory.
 
@@ -74,15 +75,17 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
 
     def __init__(
         self,
-        *,
+        config: UserConfig,
+        tokenizer: Tokenizer,
         filename: str,
-        user_config: UserConfig,
         num_conversations: int = 1,
         **kwargs,
     ):
-        super().__init__(filename=filename, user_config=user_config, **kwargs)
+        super().__init__(config, tokenizer, filename, **kwargs)
         self._rng = rng.derive("dataset.loader.random_pool")
         self.num_conversations = num_conversations
+        # Store filename->pool mapping for convert_to_conversations
+        self._pool_mapping: dict[Filename, list[RandomPool]] = {}
 
     @staticmethod
     def _validate_path(path: Path) -> int:
@@ -120,64 +123,87 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
         return valid_count
 
     @classmethod
-    def can_load(
-        cls, data: dict[str, Any] | None = None, filename: str | Path | None = None
-    ) -> bool:
-        """Check if this loader can handle the given data format.
+    def can_load_file(cls, path: Path) -> bool:
+        """Check if this loader can handle the given file.
 
-        RandomPool is the only loader that supports directory inputs.
-        For structural detection, RandomPool format is ambiguous with SingleTurn
-        (both have modality fields), so explicit 'type' field or directory path is required.
+        RandomPool format is ambiguous with SingleTurn (both have modality fields),
+        so we only match on explicit type field in the data. Regular files without
+        explicit type field will not match here.
+
+        Args:
+            path: Path to the file to check.
 
         Returns:
-            True only if filename is a directory with at least one valid file.
-            False otherwise (including for regular files without explicit type).
+            True if file has explicit RandomPool type field, False otherwise.
         """
+        if not path.is_file():
+            return False
 
-        if data is not None and data.get("type") == CustomDatasetType.RANDOM_POOL:
-            try:
-                RandomPool.model_validate(data)
-                return True
-            except ValidationError:
-                return False
+        try:
+            with open(path) as f:
+                for line in f:
+                    if (line := line.strip()) == "":
+                        continue  # Skip empty lines
+                    # Check if data has explicit type field
+                    import orjson
 
-        if filename is not None:
-            try:
-                path = Path(filename) if isinstance(filename, str) else filename
-                # Only match directories - files are ambiguous with SingleTurn
-                if path.is_dir():
-                    valid_count = cls._validate_path(path)
-                    return valid_count > 0
-                return False
-            except ValidationError:
-                return False
+                    data = orjson.loads(line)
+                    if data.get("type") == "random_pool":
+                        RandomPool.model_validate(data)
+                        return True
+                    return False  # First line doesn't have explicit type
+            return False  # File is empty or has only empty lines
+        except (ValidationError, Exception):
+            return False
 
-        # RandomPool schema is very similar to SingleTurn, so we can't reliably
-        # distinguish without an explicit type field or directory path
-        return False
+    @classmethod
+    def can_load_directory(cls, path: Path) -> bool:
+        """Check if this loader can handle the given directory.
+
+        RandomPool is the only loader that supports directory inputs.
+        Validates that directory contains at least one valid file.
+
+        Args:
+            path: Path to the directory to check.
+
+        Returns:
+            True if directory contains at least one valid file, False otherwise.
+        """
+        if not path.is_dir():
+            return False
+
+        try:
+            valid_count = cls._validate_path(path)
+            return valid_count > 0
+        except (ValidationError, Exception):
+            return False
 
     @classmethod
     def get_preferred_sampling_strategy(cls) -> DatasetSamplingStrategy:
         """Get the preferred dataset sampling strategy for RandomPool."""
         return DatasetSamplingStrategy.SHUFFLE
 
-    def load_dataset(self) -> dict[Filename, list[RandomPool]]:
-        """Load random pool data from a file or directory.
+    def parse_and_validate(self) -> list[RandomPool]:
+        """Parse and validate random pool data from a file or directory.
 
         If filename is a file, reads and parses using the RandomPool model.
-        If filename is a directory, reads each file in the directory and merges
-        items with different modality names into combined RandomPool objects.
+        If filename is a directory, reads each file in the directory and stores
+        the filename->pool mapping for later sampling.
 
         Returns:
-            A dictionary mapping filename to list of RandomPool objects.
+            A flat list of RandomPool objects (for interface compliance).
+            The filename->pool mapping is stored in self._pool_mapping.
         """
         path = Path(self.filename)
 
         if path.is_file():
             dataset_pool = self._load_dataset_from_file(path)
-            return {path.name: dataset_pool}
+            self._pool_mapping = {path.name: dataset_pool}
+            return dataset_pool
 
-        return self._load_dataset_from_dir(path)
+        self._pool_mapping = self._load_dataset_from_dir(path)
+        # Return flat list for interface compliance
+        return [item for pool in self._pool_mapping.values() for item in pool]
 
     def _load_dataset_from_file(self, file_path: Path) -> list[RandomPool]:
         """Load random pool data from a single file.
@@ -220,19 +246,18 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
 
         return data
 
-    def convert_to_conversations(
-        self, data: dict[Filename, list[RandomPool]]
-    ) -> list[Conversation]:
+    def convert_to_conversations(self, data: list[RandomPool]) -> list[Conversation]:
         """Convert random pool data to conversation objects.
 
-        Each RandomPool entry becomes a single-turn conversation with a unique session ID.
+        Uses self._pool_mapping to sample from each file's pool and merge turns.
 
         Args:
-            data: A dictionary mapping filename to list of RandomPool objects.
+            data: A flat list of RandomPool objects (unused, uses self._pool_mapping).
 
         Returns:
             A list of conversations.
         """
+        # Use the pool_mapping stored during parse_and_validate
         conversations = [
             Conversation(session_id=self.session_id_generator.next())
             for _ in range(self.num_conversations)
@@ -242,7 +267,7 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
         sampled_dataset: dict[Filename, list[Turn]] = {}
 
         # Randomly sample (with replacement) from each dataset pool
-        for filename, dataset_pool in data.items():
+        for filename, dataset_pool in self._pool_mapping.items():
             samples = self._rng.choices(dataset_pool, k=self.num_conversations)
             turns: list[Turn] = []
             for sample in samples:

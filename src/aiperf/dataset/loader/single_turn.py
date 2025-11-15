@@ -1,21 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
-from aiperf.common.enums import CustomDatasetType, DatasetSamplingStrategy, MediaType
-from aiperf.common.factories import CustomDatasetFactory
+from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy, MediaType
+from aiperf.common.factories import DatasetLoaderFactory
 from aiperf.common.models import Conversation, Turn
-from aiperf.dataset.loader.base_loader import BaseFileLoader
+from aiperf.dataset.loader.file.base import BaseFileLoader
 from aiperf.dataset.loader.mixins import MediaConversionMixin
 from aiperf.dataset.loader.models import SingleTurn
 
 
-@CustomDatasetFactory.register(CustomDatasetType.SINGLE_TURN)
+@DatasetLoaderFactory.register(DatasetLoaderType.SINGLE_TURN)
 class SingleTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
     """A dataset loader that loads single turn data from a file.
 
@@ -69,21 +67,30 @@ class SingleTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
     """
 
     @classmethod
-    def can_load(
-        cls, data: dict[str, Any] | None = None, filename: str | Path | None = None
-    ) -> bool:
-        """Check if this loader can handle the given data format.
+    def can_load_file(cls, path: Path) -> bool:
+        """Check if this loader can handle the given file.
 
         SingleTurn format has modality fields (text/texts, image/images, etc.)
-        but does NOT have a "turns" field. Use the SingleTurn model to validate the data.
+        but does NOT have a "turns" field. Validates first non-empty line against SingleTurn model.
+
+        Args:
+            path: Path to the file to check.
+
+        Returns:
+            True if this loader can handle the file, False otherwise.
         """
-        if data is None:
+        if not path.is_file():
             return False
 
         try:
-            SingleTurn.model_validate(data)
-            return True
-        except ValidationError:
+            with open(path) as f:
+                for line in f:
+                    if (line := line.strip()) == "":
+                        continue  # Skip empty lines
+                    SingleTurn.model_validate_json(line)
+                    return True  # Successfully validated first line
+            return False  # File is empty or has only empty lines
+        except (ValidationError, Exception):
             return False
 
     @classmethod
@@ -91,16 +98,15 @@ class SingleTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
         """Get the preferred dataset sampling strategy for SingleTurn."""
         return DatasetSamplingStrategy.SEQUENTIAL
 
-    def load_dataset(self) -> dict[str, list[SingleTurn]]:
-        """Load single-turn data from a JSONL file.
+    def parse_and_validate(self) -> list[SingleTurn]:
+        """Parse and validate single-turn data from a JSONL file.
 
-        Each line represents a single turn conversation. Multiple turns with
-        the same session_id (or generated UUID) are grouped together.
+        Each line represents a single turn conversation.
 
         Returns:
-            A dictionary mapping session_id to list of CustomData.
+            A list of validated SingleTurn objects.
         """
-        data: dict[str, list[SingleTurn]] = defaultdict(list)
+        data: list[SingleTurn] = []
 
         with open(self.filename) as f:
             for line in f:
@@ -108,37 +114,36 @@ class SingleTurnDatasetLoader(BaseFileLoader, MediaConversionMixin):
                     continue  # Skip empty lines
 
                 single_turn_data = SingleTurn.model_validate_json(line)
-                session_id = self.session_id_generator.next()
-                data[session_id].append(single_turn_data)
+                data.append(single_turn_data)
 
         return data
 
-    def convert_to_conversations(
-        self, data: dict[str, list[SingleTurn]]
-    ) -> list[Conversation]:
+    def convert_to_conversations(self, data: list[SingleTurn]) -> list[Conversation]:
         """Convert single turn data to conversation objects.
 
+        Each SingleTurn becomes a separate Conversation with a unique session ID.
+
         Args:
-            data: A dictionary mapping session_id to list of SingleTurn objects.
+            data: A list of SingleTurn objects.
 
         Returns:
             A list of conversations.
         """
         conversations = []
-        for session_id, single_turns in data.items():
+        for single_turn in data:
+            session_id = self.session_id_generator.next()
             conversation = Conversation(session_id=session_id)
-            for single_turn in single_turns:
-                media = self.convert_to_media_objects(single_turn)
-                conversation.turns.append(
-                    Turn(
-                        texts=media[MediaType.TEXT],
-                        images=media[MediaType.IMAGE],
-                        audios=media[MediaType.AUDIO],
-                        videos=media[MediaType.VIDEO],
-                        timestamp=single_turn.timestamp,
-                        delay=single_turn.delay,
-                        role=single_turn.role,
-                    )
+            media = self.convert_to_media_objects(single_turn)
+            conversation.turns.append(
+                Turn(
+                    texts=media[MediaType.TEXT],
+                    images=media[MediaType.IMAGE],
+                    audios=media[MediaType.AUDIO],
+                    videos=media[MediaType.VIDEO],
+                    timestamp=single_turn.timestamp,
+                    delay=single_turn.delay,
+                    role=single_turn.role,
                 )
+            )
             conversations.append(conversation)
         return conversations
