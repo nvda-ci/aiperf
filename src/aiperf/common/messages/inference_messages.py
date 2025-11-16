@@ -10,6 +10,7 @@ from aiperf.common.messages.service_messages import BaseServiceMessage
 from aiperf.common.models import ErrorDetails, RequestRecord
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.record_models import MetricRecordMetadata, MetricResult
+from aiperf.common.models.trace_models import BaseTraceData
 from aiperf.common.types import MessageTypeT, MetricTagT
 
 _logger = AIPerfLogger(__name__)
@@ -34,6 +35,12 @@ class MetricRecordsData(AIPerfBaseModel):
     metrics: dict[MetricTagT, MetricValueTypeT] = Field(
         ..., description="The combined metric records for this inference request."
     )
+    trace_data: SerializeAsAny[BaseTraceData] | None = Field(
+        default=None,
+        description="Comprehensive trace data captured via a trace config. "
+        "Includes detailed timing for connection establishment, DNS resolution, request/response events, etc. "
+        "The type of the trace data is determined by the transport and library used.",
+    )
     error: ErrorDetails | None = Field(
         default=None, description="The error details if the request failed."
     )
@@ -55,6 +62,12 @@ class MetricRecordsMessage(BaseServiceMessage):
     )
     results: list[dict[MetricTagT, MetricValueTypeT]] = Field(
         ..., description="The record processor metric results"
+    )
+    trace_data: SerializeAsAny[BaseTraceData] | None = Field(
+        default=None,
+        description="Comprehensive trace data captured via a trace config. "
+        "Includes detailed timing for connection establishment, DNS resolution, request/response events, etc. "
+        "The type of the trace data is determined by the transport and library used.",
     )
     error: ErrorDetails | None = Field(
         default=None, description="The error details if the request failed."
@@ -80,6 +93,7 @@ class MetricRecordsMessage(BaseServiceMessage):
         return MetricRecordsData(
             metadata=self.metadata,
             metrics=metrics,
+            trace_data=self.trace_data,
             error=self.error,
         )
 

@@ -114,6 +114,12 @@ from aiperf.common.models.telemetry_models import (
     TelemetryRecord,
     TelemetryResults,
 )
+from aiperf.common.models.trace_models import (
+    AioHttpTraceData,
+    AioHttpTraceDataExport,
+    BaseTraceData,
+    TraceDataExport,
+)
 from aiperf.common.models.usage_models import (
     Usage,
 )
@@ -123,10 +129,13 @@ from aiperf.common.models.worker_models import (
 
 __all__ = [
     "AIPerfBaseModel",
+    "AioHttpTraceData",
+    "AioHttpTraceDataExport",
     "Audio",
     "AutoRoutedModel",
     "BaseInferenceServerResponse",
     "BaseResponseData",
+    "BaseTraceData",
     "CPUTimes",
     "ComputedStats",
     "Conversation",
@@ -193,6 +202,7 @@ __all__ = [
     "TextResponseData",
     "TimesliceCollectionExportData",
     "TimesliceData",
+    "TraceDataExport",
     "TransportMetadata",
     "Turn",
     "Usage",

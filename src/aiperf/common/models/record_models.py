@@ -25,6 +25,7 @@ from aiperf.common.models.dataset_models import Turn
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
 from aiperf.common.models.export_models import JsonMetricResult
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
+from aiperf.common.models.trace_models import BaseTraceData, TraceDataExport
 from aiperf.common.models.usage_models import Usage
 from aiperf.common.types import JsonObject, MetricTagT, TimeSliceT
 from aiperf.common.utils import load_json_str
@@ -453,6 +454,12 @@ class RequestRecord(AIPerfBaseModel):
         default=None,
         description="The X-Correlation-ID header of the request. This is the ID of the credit drop.",
     )
+    trace_data: SerializeAsAny[BaseTraceData] | None = Field(
+        default=None,
+        description="Comprehensive trace data captured via a trace config. "
+        "Includes detailed timing for connection establishment, DNS resolution, request/response events, etc. "
+        "The type of the trace data is determined by the transport and library used.",
+    )
 
     @property
     def delayed(self) -> bool:
@@ -818,6 +825,12 @@ class MetricRecordInfo(AIPerfBaseModel):
     metrics: dict[str, MetricValue] = Field(
         ...,
         description="A dictionary containing all metric values along with their units.",
+    )
+    trace_data: SerializeAsAny[TraceDataExport] | None = Field(
+        default=None,
+        description="Comprehensive trace data captured via a trace config with wall-clock timestamps. "
+        "Includes detailed timing for connection establishment, DNS resolution, request/response events, etc. "
+        "The type of the trace data is determined by the transport and library used.",
     )
     error: ErrorDetails | None = Field(
         default=None,

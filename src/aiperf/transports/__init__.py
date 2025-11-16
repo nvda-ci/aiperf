@@ -12,6 +12,9 @@ from aiperf.transports.aiohttp_client import (
     AioHttpClient,
     create_tcp_connector,
 )
+from aiperf.transports.aiohttp_trace import (
+    create_aiohttp_trace_config,
+)
 from aiperf.transports.aiohttp_transport import (
     AioHttpTransport,
 )
@@ -33,5 +36,6 @@ __all__ = [
     "AsyncSSEStreamReader",
     "BaseTransport",
     "SocketDefaults",
+    "create_aiohttp_trace_config",
     "create_tcp_connector",
 ]

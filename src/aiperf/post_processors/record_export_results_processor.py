@@ -65,9 +65,15 @@ class RecordExportResultsProcessor(
             if not display_metrics:
                 return
 
+            # Convert trace data to export format (wall-clock timestamps)
+            export_trace_data = None
+            if record_data.trace_data:
+                export_trace_data = record_data.trace_data.to_export()
+
             record_info = MetricRecordInfo(
                 metadata=record_data.metadata,
                 metrics=display_metrics,
+                trace_data=export_trace_data,
                 error=record_data.error,
             )
 

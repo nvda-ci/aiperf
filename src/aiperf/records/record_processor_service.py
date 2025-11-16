@@ -189,6 +189,7 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
                 service_id=self.service_id,
                 metadata=metadata,
                 results=results,
+                trace_data=message.record.trace_data,
                 error=message.record.error,
             )
         )

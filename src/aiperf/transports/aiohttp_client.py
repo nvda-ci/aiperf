@@ -9,10 +9,12 @@ import aiohttp
 from aiperf.common.exceptions import SSEResponseError
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import (
+    AioHttpTraceData,
     ErrorDetails,
     RequestRecord,
     TextResponse,
 )
+from aiperf.transports.aiohttp_trace import create_aiohttp_trace_config
 from aiperf.transports.http_defaults import AioHttpDefaults, SocketDefaults
 from aiperf.transports.sse_utils import AsyncSSEStreamReader
 
@@ -65,10 +67,16 @@ class AioHttpClient(AIPerfLoggerMixin):
 
         record: RequestRecord = RequestRecord(
             start_perf_ns=time.perf_counter_ns(),
+            trace_data=AioHttpTraceData(),
         )
+
+        # Create trace config for comprehensive timing
+        trace_config = create_aiohttp_trace_config(record.trace_data)
 
         try:
             # Make raw HTTP request with precise timing using aiohttp
+            # Create a new session for each request with unique trace config
+            # We share the tcp_connector via connector_owner=False for connection pooling
             async with aiohttp.ClientSession(
                 connector=self.tcp_connector,
                 timeout=self.timeout,
@@ -79,12 +87,23 @@ class AioHttpClient(AIPerfLoggerMixin):
                     "Accept-Encoding",
                 ],
                 connector_owner=False,
+                trace_configs=[trace_config],
             ) as session:
                 record.start_perf_ns = time.perf_counter_ns()
                 async with session.request(
                     method, url, data=data, headers=headers, **kwargs
                 ) as response:
                     record.status = response.status
+
+                    # Capture response metadata for trace data
+                    record.trace_data.response_status = response.status
+                    record.trace_data.response_reason = response.reason
+                    try:
+                        record.trace_data.response_headers = dict(response.headers)
+                    except (TypeError, AttributeError):
+                        # Handle cases where headers can't be converted (e.g., in tests with mocks)
+                        record.trace_data.response_headers = None
+
                     # Check for HTTP errors
                     if response.status != 200:
                         error_text = await response.text()
@@ -102,7 +121,28 @@ class AioHttpClient(AIPerfLoggerMixin):
                         and response.content_type == "text/event-stream"
                     ):
                         # Parse SSE stream with optimal performance
-                        async for message in AsyncSSEStreamReader(response.content):
+                        # Wrap the content stream to track chunks for trace data
+                        async def tracked_content_stream():
+                            """Wrapper that tracks chunk timing while yielding chunks for SSE parsing."""
+                            # Use iter_any() if available (StreamReader), otherwise iterate directly
+                            content_iter = (
+                                response.content.iter_any()
+                                if hasattr(response.content, "iter_any")
+                                else response.content
+                            )
+                            async for chunk in content_iter:
+                                chunk_ns = time.perf_counter_ns()
+                                record.trace_data.response_receive_timestamps_perf_ns.append(
+                                    chunk_ns
+                                )
+                                record.trace_data.response_receive_sizes_bytes.append(
+                                    len(chunk)
+                                )
+                                yield chunk
+
+                        async for message in AsyncSSEStreamReader(
+                            tracked_content_stream()
+                        ):
                             AsyncSSEStreamReader.inspect_message_for_error(message)
                             record.responses.append(message)
                     else:
