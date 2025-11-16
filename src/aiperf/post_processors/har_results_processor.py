@@ -13,7 +13,7 @@ from aiperf.common.enums import ExportLevel, ResultsProcessorType
 from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.messages.inference_messages import MetricRecordsData
-from aiperf.common.mixins import AIPerfLoggerMixin
+from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models.har_models import (
     HAR,
     HARCache,
@@ -37,7 +37,7 @@ from aiperf.common.protocols import ResultsProcessorProtocol
 
 @implements_protocol(ResultsProcessorProtocol)
 @ResultsProcessorFactory.register(ResultsProcessorType.HAR)
-class HARResultsProcessor(AIPerfLoggerMixin):
+class HARResultsProcessor(AIPerfLifecycleMixin):
     """Exports benchmark results to HAR (HTTP Archive) 1.2 format.
 
     Creates a standards-compliant HAR file with comprehensive timing information
