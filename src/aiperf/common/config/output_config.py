@@ -75,6 +75,7 @@ class OutputConfig(BaseConfig):
     _profile_export_gpu_telemetry_jsonl_file: Path = (
         OutputDefaults.PROFILE_EXPORT_GPU_TELEMETRY_JSONL_FILE
     )
+    _profile_export_har_file: Path = OutputDefaults.PROFILE_EXPORT_HAR_FILE
 
     @model_validator(mode="after")
     def set_export_filenames(self) -> Self:
@@ -93,6 +94,7 @@ class OutputConfig(BaseConfig):
             ".csv",
             ".json",
             ".jsonl",
+            ".har",
         ]
         for suffix in suffixes_to_strip:
             if base_str.endswith(suffix):
@@ -108,6 +110,7 @@ class OutputConfig(BaseConfig):
         self._profile_export_gpu_telemetry_jsonl_file = Path(
             f"{base_str}_gpu_telemetry.jsonl"
         )
+        self._profile_export_har_file = Path(f"{base_str}.har")
 
         return self
 
@@ -149,3 +152,7 @@ class OutputConfig(BaseConfig):
     @property
     def profile_export_gpu_telemetry_jsonl_file(self) -> Path:
         return self.artifact_directory / self._profile_export_gpu_telemetry_jsonl_file
+
+    @property
+    def profile_export_har_file(self) -> Path:
+        return self.artifact_directory / self._profile_export_har_file

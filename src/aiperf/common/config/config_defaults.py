@@ -148,6 +148,7 @@ class OutputDefaults:
     PROFILE_EXPORT_JSONL_FILE = Path("profile_export.jsonl")
     PROFILE_EXPORT_RAW_JSONL_FILE = Path("profile_export_raw.jsonl")
     PROFILE_EXPORT_GPU_TELEMETRY_JSONL_FILE = Path("gpu_telemetry_export.jsonl")
+    PROFILE_EXPORT_HAR_FILE = Path("profile_export.har")
     EXPORT_LEVEL = ExportLevel.RECORDS
     SLICE_DURATION = None
 

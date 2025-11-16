@@ -11,6 +11,9 @@ __ignore__ = ["logger"]
 from aiperf.post_processors.base_metrics_processor import (
     BaseMetricsProcessor,
 )
+from aiperf.post_processors.har_results_processor import (
+    HARResultsProcessor,
+)
 from aiperf.post_processors.metric_record_processor import (
     MetricRecordProcessor,
 )
@@ -36,6 +39,7 @@ from aiperf.post_processors.timeslice_metric_results_processor import (
 
 __all__ = [
     "BaseMetricsProcessor",
+    "HARResultsProcessor",
     "MetricRecordProcessor",
     "MetricResultsProcessor",
     "RawRecordAggregator",

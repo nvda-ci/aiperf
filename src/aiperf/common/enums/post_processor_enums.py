@@ -45,3 +45,7 @@ class ResultsProcessorType(CaseInsensitiveStrEnum):
 
     TIMESLICE = "timeslice"
     """Processor that processes metric results for each user-configurable time-slice."""
+
+    HAR = "har"
+    """Processor that exports HAR (HTTP Archive) 1.2 format file for Chrome DevTools compatibility.
+    Generates a standards-compliant HAR file with comprehensive timing information from trace data."""
