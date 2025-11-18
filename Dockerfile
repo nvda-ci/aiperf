@@ -82,7 +82,7 @@ FROM base AS env-builder
 
 WORKDIR /workspace
 
-# Build ffmpeg from source with libvpx
+# Build ffmpeg from source with libvpx and install chromium for kaleido
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
@@ -91,6 +91,7 @@ RUN apt-get update -y && \
         wget \
         yasm \
         libvpx-dev \
+        chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and build ffmpeg with libvpx (VP9 codec)
@@ -146,6 +147,11 @@ COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
 ENV PATH="/opt/ffmpeg/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
 
+# Copy chromium binaries and libraries for kaleido
+COPY --from=env-builder --chown=1000:1000 /usr/bin/chromium /usr/bin/chromium
+COPY --from=env-builder --chown=1000:1000 /usr/lib/chromium /usr/lib/chromium
+COPY --from=env-builder --chown=1000:1000 /usr/share/chromium /usr/share/chromium
+
 # Setup the directories with permissions for nvs user
 COPY --from=env-builder --chown=1000:1000 /app /app
 WORKDIR /app
@@ -155,7 +161,9 @@ ENV HOME=/app
 COPY --from=env-builder --chown=1000:1000 /opt/aiperf/venv /opt/aiperf/venv
 
 ENV VIRTUAL_ENV=/opt/aiperf/venv \
-    PATH="/opt/aiperf/venv/bin:${PATH}"
+    PATH="/opt/aiperf/venv/bin:${PATH}" \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROMIUM_FLAGS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
 
 # Set bash as entrypoint
 ENTRYPOINT ["/bin/bash", "-c"]
