@@ -8,13 +8,24 @@ This module tests the plot generation functionality, ensuring that each plot
 type is created correctly with proper styling and data handling.
 """
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from aiperf.plot.constants import NVIDIA_GREEN, NVIDIA_WHITE
-from aiperf.plot.core.plot_generator import PlotGenerator
-from aiperf.plot.core.plot_specs import Style
+from aiperf.plot.constants import (
+    DARK_THEME_COLORS,
+    NVIDIA_CARD_BG,
+    NVIDIA_DARK_BG,
+    NVIDIA_GREEN,
+    NVIDIA_TEXT_LIGHT,
+    NVIDIA_WHITE,
+    PlotTheme,
+)
+from aiperf.plot.core.plot_generator import (
+    PlotGenerator,
+    detect_directional_outliers,
+)
 
 # Light mode uses seaborn "deep" palette (blue) instead of NVIDIA brand colors
 LIGHT_MODE_PRIMARY_COLOR = "#4c72b0"
@@ -879,3 +890,237 @@ class TestLatencyScatterWithPercentiles:
 
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 4
+
+
+class TestOutlierDetection:
+    """Tests for detect_directional_outliers function."""
+
+    def test_detect_outliers_empty_values(self):
+        """Test outlier detection with empty array returns empty boolean array."""
+        values = np.array([])
+        result = detect_directional_outliers(
+            values, "time_to_first_token", run_average=50.0, run_std=10.0
+        )
+
+        assert isinstance(result, np.ndarray)
+        assert result.dtype == bool
+        assert len(result) == 0
+
+    def test_detect_outliers_no_run_stats(self):
+        """Test outlier detection without run statistics returns all False."""
+        values = np.array([45.0, 50.0, 55.0, 60.0])
+
+        # No run_average
+        result = detect_directional_outliers(
+            values, "time_to_first_token", run_average=None, run_std=10.0
+        )
+        assert np.all(~result)
+
+        # No run_std
+        result = detect_directional_outliers(
+            values, "time_to_first_token", run_average=50.0, run_std=None
+        )
+        assert np.all(~result)
+
+    def test_detect_outliers_throughput_vs_latency(self):
+        """Test outlier direction depends on metric type."""
+        run_avg = 100.0
+        run_std = 10.0
+
+        # Latency-type metrics: high values are bad
+        latency_values = np.array([95.0, 105.0, 130.0])
+        latency_outliers = detect_directional_outliers(
+            latency_values, "time_to_first_token", run_avg, run_std
+        )
+        # Only 130.0 is outlier (above upper bound 110.0)
+        assert latency_outliers[2] == True
+        assert latency_outliers[0] == False
+        assert latency_outliers[1] == False
+
+        # Throughput metrics: low values are bad
+        throughput_values = np.array([105.0, 95.0, 70.0])
+        throughput_outliers = detect_directional_outliers(
+            throughput_values, "request_throughput", run_avg, run_std
+        )
+        # Only 70.0 is outlier (below lower bound 90.0)
+        assert throughput_outliers[2] == True
+        assert throughput_outliers[0] == False
+        assert throughput_outliers[1] == False
+
+    def test_detect_outliers_with_slice_stds(self):
+        """Test outlier detection incorporates per-slice standard deviations."""
+        values = np.array([50.0, 60.0, 80.0, 90.0])
+        run_avg = 70.0
+        run_std = 10.0
+        slice_stds = np.array([5.0, 5.0, 2.0, 15.0])
+
+        outliers = detect_directional_outliers(
+            values, "time_to_first_token", run_avg, run_std, slice_stds
+        )
+
+        # Upper bounds: 70 + 10 + slice_stds = [85, 85, 82, 95]
+        # 50 < 85 (not outlier), 60 < 85 (not outlier),
+        # 80 < 82 (not outlier), 90 < 95 (not outlier)
+        assert not np.any(outliers)
+
+        # But without slice_stds, 90 would be outlier (upper bound = 80)
+        outliers_no_slice = detect_directional_outliers(
+            values, "time_to_first_token", run_avg, run_std, slice_stds=None
+        )
+        assert outliers_no_slice[3] == True
+
+    def test_detect_outliers_mismatched_slice_stds_length(self):
+        """Test slice_stds length mismatch defaults to zeros."""
+        values = np.array([50.0, 60.0, 80.0, 90.0])
+        run_avg = 70.0
+        run_std = 10.0
+        slice_stds_wrong_length = np.array([5.0, 5.0])
+
+        outliers = detect_directional_outliers(
+            values, "time_to_first_token", run_avg, run_std, slice_stds_wrong_length
+        )
+
+        # Should use zeros for slice_stds (upper bound = 80)
+        assert outliers[3] == True
+        assert outliers[0] == False
+
+
+class TestDarkTheme:
+    """Tests for dark theme functionality."""
+
+    @pytest.fixture
+    def dark_plot_generator(self):
+        """Create a PlotGenerator with dark theme."""
+        return PlotGenerator(theme=PlotTheme.DARK)
+
+    @pytest.fixture
+    def multi_run_df(self):
+        """Create sample multi-run DataFrame for testing."""
+        return pd.DataFrame(
+            {
+                "model": ["model-a"] * 3 + ["model-b"] * 3,
+                "concurrency": [1, 4, 8] * 2,
+                "request_latency": [100, 150, 200, 120, 180, 250],
+                "request_throughput": [10, 25, 35, 8, 20, 28],
+            }
+        )
+
+    def test_dark_theme_initialization(self, dark_plot_generator):
+        """Test PlotGenerator initializes with dark theme."""
+        assert dark_plot_generator.theme == PlotTheme.DARK
+        assert dark_plot_generator.colors == DARK_THEME_COLORS
+
+    def test_dark_theme_background_colors(self, dark_plot_generator, multi_run_df):
+        """Test dark theme uses correct background colors."""
+        fig = dark_plot_generator.create_pareto_plot(
+            df=multi_run_df,
+            x_metric="request_latency",
+            y_metric="request_throughput",
+            group_by="model",
+        )
+
+        assert fig.layout.plot_bgcolor == NVIDIA_DARK_BG
+        assert fig.layout.paper_bgcolor == NVIDIA_CARD_BG
+
+    def test_dark_theme_text_color(self, dark_plot_generator, multi_run_df):
+        """Test dark theme uses light text color."""
+        fig = dark_plot_generator.create_pareto_plot(
+            df=multi_run_df,
+            x_metric="request_latency",
+            y_metric="request_throughput",
+            group_by="model",
+        )
+
+        assert fig.layout.font.color == NVIDIA_TEXT_LIGHT
+
+    def test_dark_theme_uses_nvidia_brand_colors(self, dark_plot_generator):
+        """Test dark theme color pool starts with NVIDIA brand colors."""
+        # Dark theme should use brand colors (green + gold first)
+        color_pool = dark_plot_generator._color_pool
+
+        assert len(color_pool) > 0
+        assert NVIDIA_GREEN in color_pool
+        # First color should be NVIDIA green
+        assert color_pool[0] == NVIDIA_GREEN
+
+    def test_dark_theme_plot_comparison_with_light(self, multi_run_df):
+        """Test dark theme produces different colors than light theme."""
+        light_gen = PlotGenerator(theme=PlotTheme.LIGHT)
+        dark_gen = PlotGenerator(theme=PlotTheme.DARK)
+
+        light_fig = light_gen.create_pareto_plot(
+            df=multi_run_df,
+            x_metric="request_latency",
+            y_metric="request_throughput",
+        )
+        dark_fig = dark_gen.create_pareto_plot(
+            df=multi_run_df,
+            x_metric="request_latency",
+            y_metric="request_throughput",
+        )
+
+        # Background colors should differ
+        assert light_fig.layout.plot_bgcolor != dark_fig.layout.plot_bgcolor
+        assert light_fig.layout.paper_bgcolor != dark_fig.layout.paper_bgcolor
+
+        # Text colors should differ
+        assert light_fig.layout.font.color != dark_fig.layout.font.color
+
+
+class TestColorEdgeCases:
+    """Tests for color assignment edge cases."""
+
+    def test_prepare_groups_none_group_by(self):
+        """Test _prepare_groups with group_by=None returns no color map."""
+        plot_gen = PlotGenerator()
+        df = pd.DataFrame({"model": ["a", "b", "c"]})
+
+        groups, color_map = plot_gen._prepare_groups(df, group_by=None)
+
+        # Should return [None] groups and empty color_map
+        assert groups == [None]
+        assert color_map == {}
+
+    def test_color_cycling_more_groups_than_pool(self):
+        """Test color cycling when groups exceed pool size."""
+        plot_gen = PlotGenerator(color_pool_size=5)
+        # Create models with zero-padded numbers to ensure alphabetical sorting
+        model_names = [f"model-{i:02d}" for i in range(12)]
+        df = pd.DataFrame({"model": model_names})
+
+        groups, color_map = plot_gen._prepare_groups(df, "model")
+
+        # All models should get a color
+        assert len(color_map) == 12
+
+        # Colors should cycle (some will repeat)
+        unique_colors = set(color_map.values())
+        # Should have at most pool_size unique colors
+        assert len(unique_colors) <= len(plot_gen._color_pool)
+        # Should have fewer unique colors than models
+        assert len(unique_colors) < len(model_names)
+
+        # Verify cycling pattern: models assigned sequentially wrap around
+        # model-00 gets index 0, model-05 gets index 5 which wraps to color pool[0]
+        assert color_map["model-00"] == color_map["model-05"]
+        assert color_map["model-01"] == color_map["model-06"]
+
+    def test_color_pool_size_zero_edge_case(self):
+        """Test color pool with size zero falls back to default."""
+        # Even with 0, should get at least some colors from seaborn
+        plot_gen = PlotGenerator(color_pool_size=0)
+
+        # Color pool should still exist (seaborn will return empty or minimal palette)
+        assert isinstance(plot_gen._color_pool, list)
+
+    def test_prepare_groups_missing_column_returns_no_groups(self):
+        """Test _prepare_groups with non-existent column returns no color map."""
+        plot_gen = PlotGenerator()
+        df = pd.DataFrame({"model": ["a", "b", "c"]})
+
+        # Try to group by non-existent column
+        groups, color_map = plot_gen._prepare_groups(df, "nonexistent_column")
+
+        # Should return [None] and empty color_map (no grouping)
+        assert groups == [None]
+        assert color_map == {}
