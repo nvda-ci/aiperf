@@ -617,7 +617,7 @@ class SystemController(SignalHandlerMixin, BaseService):
     def _print_log_file_info(self, console: Console) -> None:
         """Print the log file info."""
         log_file = (
-            self.user_config.output.artifact_directory
+            self.user_config.computed_artifact_directory
             / OutputDefaults.LOG_FOLDER
             / OutputDefaults.LOG_FILE
         )

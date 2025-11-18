@@ -42,7 +42,7 @@ class TimesliceMetricsJsonExporter(MetricsJsonExporter):
 
         # Override file path for timeslice-specific output
         self._file_path = (
-            exporter_config.user_config.output.profile_export_timeslices_json_file
+            exporter_config.user_config.profile_export_timeslices_json_file
         )
 
         self.debug(

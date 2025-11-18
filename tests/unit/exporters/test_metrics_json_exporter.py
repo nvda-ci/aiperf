@@ -9,7 +9,6 @@ from unittest.mock import patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
-from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.constants import NANOS_PER_MILLIS
 from aiperf.common.enums import EndpointType
 from aiperf.common.models import MetricResult
@@ -82,11 +81,11 @@ def mock_results(sample_records):
 class TestMetricsJsonExporter:
     @pytest.mark.asyncio
     async def test_metrics_json_exporter_creates_expected_json(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -98,7 +97,7 @@ class TestMetricsJsonExporter:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             assert expected_file.exists()
 
             with open(expected_file) as f:
@@ -122,7 +121,7 @@ class TestMetricsJsonExporter:
         """Verify MetricsJsonExporter inherits from MetricsBaseExporter."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             mock_results = type(
                 "MockResults",
@@ -152,14 +151,14 @@ class TestMetricsJsonExporter:
 
     @pytest.mark.asyncio
     async def test_metrics_json_exporter_uses_base_export(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Verify uses base class export() method."""
         from unittest.mock import AsyncMock, patch
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -182,14 +181,14 @@ class TestMetricsJsonExporter:
                 mock_export.assert_called_once()
 
     def test_generate_content_uses_instance_data_members(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Verify _generate_content() uses instance data members."""
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -222,7 +221,7 @@ class TestMetricsJsonExporter:
         """Verify _generate_content() uses self._telemetry_results."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -256,7 +255,7 @@ class TestMetricsJsonExporter:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -278,9 +277,7 @@ class TestMetricsJsonExporter:
                 mock_generate.assert_called_once()
 
                 # Verify file contains the returned content
-                expected_file = (
-                    output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
-                )
+                expected_file = mock_user_config.profile_export_aiperf_json_file
                 with open(expected_file) as f:
                     actual_content = f.read()
 
@@ -292,12 +289,12 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_with_telemetry_data(
-        self, mock_results, mock_user_config, sample_telemetry_results
+        self, mock_results, mock_user_config: UserConfig, sample_telemetry_results
     ):
         """Test that JSON export includes telemetry_data field."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -309,7 +306,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             assert expected_file.exists()
 
             with open(expected_file) as f:
@@ -336,12 +333,12 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_without_telemetry_data(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test that JSON export works when telemetry_results is None."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -353,7 +350,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             assert expected_file.exists()
 
             with open(expected_file) as f:
@@ -364,12 +361,12 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_structure(
-        self, mock_results, mock_user_config, sample_telemetry_results
+        self, mock_results, mock_user_config: UserConfig, sample_telemetry_results
     ):
         """Test that JSON telemetry data has correct structure with metrics."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             exporter_config = ExporterConfig(
                 results=mock_results,
@@ -381,7 +378,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 
@@ -411,7 +408,7 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_exception_handling(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test that telemetry export handles metric retrieval exceptions."""
         from unittest.mock import Mock
@@ -425,7 +422,7 @@ class TestMetricsJsonExporterTelemetry:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             # Create GPU data that will fail on metric retrieval
             gpu_data = Mock(spec=GpuTelemetryData)
@@ -462,7 +459,7 @@ class TestMetricsJsonExporterTelemetry:
             # Should not raise exception despite metric retrieval failures
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             assert expected_file.exists()
 
             with open(expected_file) as f:
@@ -473,7 +470,7 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_with_none_values(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test JSON export when metric values are None."""
         from aiperf.common.models import (
@@ -485,7 +482,7 @@ class TestMetricsJsonExporterTelemetry:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             # Create GPU data with None values (no snapshots = no data)
             gpu_data = GpuTelemetryData(
@@ -520,7 +517,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 
@@ -529,14 +526,14 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_empty_hierarchy(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test JSON export with empty telemetry hierarchy."""
         from aiperf.common.models import TelemetryHierarchy, TelemetryResults
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             # Empty hierarchy
             telemetry_results = TelemetryResults(
@@ -557,7 +554,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 
@@ -568,7 +565,7 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_endpoint_normalization(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test that endpoint URLs are normalized in JSON output."""
         from aiperf.common.models import (
@@ -580,7 +577,7 @@ class TestMetricsJsonExporterTelemetry:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             gpu_data = GpuTelemetryData(
                 metadata=GpuMetadata(
@@ -616,7 +613,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 
@@ -626,7 +623,7 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_telemetry_multi_endpoint(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test JSON export with multiple DCGM endpoints."""
         from aiperf.common.models import (
@@ -638,7 +635,7 @@ class TestMetricsJsonExporterTelemetry:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             # Create two endpoints with GPU data
             gpu1_data = GpuTelemetryData(
@@ -699,7 +696,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 
@@ -714,7 +711,7 @@ class TestMetricsJsonExporterTelemetry:
 
     @pytest.mark.asyncio
     async def test_json_export_with_hostname_metadata(
-        self, mock_results, mock_user_config
+        self, mock_results, mock_user_config: UserConfig
     ):
         """Test JSON export includes hostname metadata."""
         from aiperf.common.models import (
@@ -726,7 +723,7 @@ class TestMetricsJsonExporterTelemetry:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             gpu_data = GpuTelemetryData(
                 metadata=GpuMetadata(
@@ -763,7 +760,7 @@ class TestMetricsJsonExporterTelemetry:
             exporter = MetricsJsonExporter(exporter_config)
             await exporter.export()
 
-            expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
+            expected_file = mock_user_config.profile_export_aiperf_json_file
             with open(expected_file) as f:
                 data = json.load(f)
 

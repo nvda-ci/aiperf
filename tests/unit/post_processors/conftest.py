@@ -108,7 +108,7 @@ def user_config_raw(tmp_artifact_dir: Path) -> UserConfig:
             streaming=False,
         ),
         output=OutputConfig(
-            artifact_directory=tmp_artifact_dir,
+            base_artifact_directory=tmp_artifact_dir,
             export_level=ExportLevel.RAW,
         ),
     )

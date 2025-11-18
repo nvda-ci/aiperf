@@ -36,7 +36,7 @@ class MetricsJsonExporter(MetricsBaseExporter):
         self.debug(
             lambda: f"Initializing MetricsJsonExporter with config: {exporter_config}"
         )
-        self._file_path = exporter_config.user_config.output.profile_export_json_file
+        self._file_path = exporter_config.user_config.profile_export_aiperf_json_file
 
     def get_export_info(self) -> FileExportInfo:
         return FileExportInfo(

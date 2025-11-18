@@ -32,7 +32,7 @@ def user_config_telemetry_export(tmp_artifact_dir: Path) -> UserConfig:
             type=EndpointType.CHAT,
         ),
         output=OutputConfig(
-            artifact_directory=tmp_artifact_dir,
+            base_artifact_directory=tmp_artifact_dir,
         ),
     )
 
@@ -101,7 +101,7 @@ class TestTelemetryExportResultsProcessorInitialization:
         )
 
         assert processor.lines_written == 0
-        assert processor.output_file.name == "gpu_telemetry_export.jsonl"
+        assert processor.output_file.name == "profile_export_gpu_telemetry.jsonl"
         assert processor.output_file.parent.exists()
 
     def test_creates_output_directory(
@@ -127,8 +127,8 @@ class TestTelemetryExportResultsProcessorInitialization:
         """Test that initialization clears existing output file."""
         # Create a file with existing content
         output_file = (
-            user_config_telemetry_export.output.artifact_directory
-            / "gpu_telemetry_export.jsonl"
+            user_config_telemetry_export.computed_artifact_directory
+            / "profile_export_gpu_telemetry.jsonl"
         )
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text("existing content\n")
@@ -179,7 +179,7 @@ class TestTelemetryExportResultsProcessorInitialization:
                 for record in caplog.records
             )
             assert any(
-                "gpu_telemetry_export.jsonl" in record.message
+                "profile_export_gpu_telemetry.jsonl" in record.message
                 for record in caplog.records
             )
 

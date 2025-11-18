@@ -51,7 +51,7 @@ def user_config_records_export(tmp_artifact_dir: Path) -> UserConfig:
             type=EndpointType.CHAT,
         ),
         output=OutputConfig(
-            artifact_directory=tmp_artifact_dir,
+            base_artifact_directory=tmp_artifact_dir,
         ),
     )
 
@@ -155,7 +155,7 @@ class TestRecordExportResultsProcessorInitialization:
         """Test that initialization clears existing output file."""
         # Create a file with existing content
         output_file = (
-            user_config_records_export.output.artifact_directory
+            user_config_records_export.computed_artifact_directory
             / "profile_export.jsonl"
         )
         output_file.parent.mkdir(parents=True, exist_ok=True)

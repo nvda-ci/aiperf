@@ -19,7 +19,7 @@ def endpoint_config():
 
 @pytest.fixture
 def output_config(tmp_path):
-    return OutputConfig(artifact_directory=tmp_path)
+    return OutputConfig(base_artifact_directory=tmp_path)
 
 
 @pytest.fixture

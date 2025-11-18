@@ -44,9 +44,7 @@ class TimesliceMetricsCsvExporter(MetricsBaseExporter):
             )
 
         # Extract base filename from configured CSV path
-        self._file_path = (
-            exporter_config.user_config.output.profile_export_timeslices_csv_file
-        )
+        self._file_path = exporter_config.user_config.profile_export_timeslices_csv_file
 
         self.debug(
             lambda: f"Initialized TimesliceMetricsCsvExporter: file={self._file_path}"

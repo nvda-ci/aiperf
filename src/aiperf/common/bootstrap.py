@@ -161,7 +161,7 @@ def _stop_yappi_profiling(service_id_: str, user_config: UserConfig) -> None:
 
     # Get profile stats and save to file in the artifact directory
     stats = yappi.get_func_stats()
-    yappi_dir = user_config.output.artifact_directory / "yappi"
+    yappi_dir = user_config.computed_artifact_directory / "yappi"
     yappi_dir.mkdir(parents=True, exist_ok=True)
     stats.save(
         str(yappi_dir / f"{service_id_}.prof"),

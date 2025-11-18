@@ -27,7 +27,7 @@ def user_config(tmp_path: Path) -> UserConfig:
             streaming=False,
             url="http://localhost:8000",
         ),
-        output=OutputConfig(artifact_directory=tmp_path),
+        output=OutputConfig(base_artifact_directory=tmp_path),
     )
 
 

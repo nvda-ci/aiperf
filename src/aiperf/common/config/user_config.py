@@ -286,18 +286,6 @@ class UserConfig(BaseConfig):
         """Get the path to custom GPU metrics CSV file."""
         return self._gpu_telemetry_metrics_file
 
-    @model_validator(mode="after")
-    def _compute_config(self) -> Self:
-        """Compute additional configuration.
-
-        This method is automatically called after the model is validated to compute additional configuration.
-        """
-
-        if "artifact_directory" not in self.output.model_fields_set:
-            self.output.artifact_directory = self._compute_artifact_directory()
-
-        return self
-
     def _compute_artifact_directory(self) -> Path:
         """Compute the artifact directory based on the user selected options."""
         names: list[str] = [
@@ -305,7 +293,7 @@ class UserConfig(BaseConfig):
             self._get_artifact_service_kind(),
             self._get_artifact_stimulus(),
         ]
-        return self.output.artifact_directory / "-".join(names)
+        return self.output.base_artifact_directory / "-".join(names)
 
     def _get_artifact_model_name(self) -> str:
         """Get the artifact model name based on the user selected options."""
@@ -395,3 +383,85 @@ class UserConfig(BaseConfig):
             )
 
         return self
+
+    _computed_artifact_directory: Path | None = None
+
+    @property
+    def computed_artifact_directory(self) -> Path:
+        """Get the computed artifact directory based on user configuration."""
+        if self._computed_artifact_directory is None:
+            self._computed_artifact_directory = self._compute_artifact_directory()
+        return self._computed_artifact_directory
+
+    @computed_artifact_directory.setter
+    def computed_artifact_directory(self, value: Path) -> None:
+        """Set the computed artifact directory."""
+        self._computed_artifact_directory = value
+
+    def _get_export_base_path(self) -> Path:
+        """Get the base path for export files, stripping any suffixes from profile_export_prefix."""
+        if self.output.profile_export_prefix is None:
+            return Path("profile_export")
+
+        base_str = str(self.output.profile_export_prefix)
+
+        suffixes_to_strip = [
+            ".csv",
+            ".json",
+            ".jsonl",
+        ]
+        for suffix in suffixes_to_strip:
+            if base_str.endswith(suffix):
+                base_str = base_str[: -len(suffix)]
+                break
+
+        return Path(base_str)
+
+    @property
+    def profile_export_aiperf_csv_file(self) -> Path:
+        """Get the path for the CSV profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_aiperf.csv"
+        )
+
+    @property
+    def profile_export_aiperf_json_file(self) -> Path:
+        """Get the path for the JSON profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_aiperf.json"
+        )
+
+    @property
+    def profile_export_timeslices_csv_file(self) -> Path:
+        """Get the path for the CSV timeslices profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_timeslices.csv"
+        )
+
+    @property
+    def profile_export_timeslices_json_file(self) -> Path:
+        """Get the path for the JSON timeslices profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_timeslices.json"
+        )
+
+    @property
+    def profile_export_jsonl_file(self) -> Path:
+        """Get the path for the JSONL profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}.jsonl"
+        )
+
+    @property
+    def profile_export_raw_jsonl_file(self) -> Path:
+        """Get the path for the raw JSONL profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_raw.jsonl"
+        )
+
+    @property
+    def profile_export_gpu_telemetry_jsonl_file(self) -> Path:
+        """Get the path for the GPU telemetry JSONL profile export file."""
+        return self.computed_artifact_directory / Path(
+            f"{self._get_export_base_path()}_gpu_telemetry.jsonl"
+        )

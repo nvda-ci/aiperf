@@ -67,7 +67,7 @@ def mock_results():
 def exporter_config(mock_results, mock_user_config):
     """Create ExporterConfig for testing."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        mock_user_config.output.artifact_directory = Path(temp_dir)
+        mock_user_config.computed_artifact_directory = Path(temp_dir)
         yield ExporterConfig(
             results=mock_results,
             user_config=mock_user_config,
@@ -82,7 +82,7 @@ class TestMetricsBaseExporterInitialization:
     def test_base_exporter_initialization(self, mock_results, mock_user_config):
         """Verify all instance variables are set correctly from ExporterConfig."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -108,7 +108,7 @@ class TestMetricsBaseExporterPrepareMetrics:
     ):
         """Verify conversion function is called with correct arguments."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -147,7 +147,7 @@ class TestMetricsBaseExporterPrepareMetrics:
     ):
         """Verify EXPERIMENTAL metrics are filtered out."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -189,7 +189,7 @@ class TestMetricsBaseExporterPrepareMetrics:
     ):
         """Verify INTERNAL metrics are filtered out."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -225,7 +225,7 @@ class TestMetricsBaseExporterPrepareMetrics:
     def test_prepare_metrics_keeps_public_metrics(self, mock_results, mock_user_config):
         """Verify public metrics pass through _prepare_metrics()."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -266,7 +266,7 @@ class TestMetricsBaseExporterPrepareMetrics:
     def test_prepare_metrics_handles_empty_input(self, mock_results, mock_user_config):
         """Verify it returns empty dict without errors for empty input."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -292,7 +292,7 @@ class TestMetricsBaseExporterShouldExport:
     def test_should_export_allows_public_metrics(self, mock_results, mock_user_config):
         """Verify returns True for public metrics."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -321,7 +321,7 @@ class TestMetricsBaseExporterShouldExport:
     ):
         """Verify returns False for EXPERIMENTAL metrics."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -347,7 +347,7 @@ class TestMetricsBaseExporterShouldExport:
     ):
         """Verify returns False for INTERNAL metrics."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -371,7 +371,7 @@ class TestMetricsBaseExporterShouldExport:
     def test_should_export_blocks_combined_flags(self, mock_results, mock_user_config):
         """Verify returns False for metrics with EXPERIMENTAL | INTERNAL flags."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -403,7 +403,7 @@ class TestMetricsBaseExporterExport:
         """Verify directory is created if it doesn't exist."""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "nested" / "output"
-            mock_user_config.output.artifact_directory = output_dir
+            mock_user_config.computed_artifact_directory = output_dir
 
             config = ExporterConfig(
                 results=mock_results,
@@ -425,7 +425,7 @@ class TestMetricsBaseExporterExport:
     async def test_export_calls_generate_content(self, mock_results, mock_user_config):
         """Verify _generate_content() is called during export."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -446,7 +446,7 @@ class TestMetricsBaseExporterExport:
     async def test_export_writes_content_to_file(self, mock_results, mock_user_config):
         """Verify file contains returned content."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -470,7 +470,7 @@ class TestMetricsBaseExporterExport:
     async def test_export_handles_write_errors(self, mock_results, mock_user_config):
         """Verify error is logged and exception is re-raised on write failure."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,
@@ -508,7 +508,7 @@ class TestMetricsBaseExporterExport:
     async def test_export_logs_debug_message(self, mock_results, mock_user_config):
         """Verify debug message is logged with file path."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            mock_user_config.output.artifact_directory = Path(temp_dir)
+            mock_user_config.computed_artifact_directory = Path(temp_dir)
             config = ExporterConfig(
                 results=mock_results,
                 user_config=mock_user_config,

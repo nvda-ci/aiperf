@@ -34,7 +34,7 @@ class MetricsCsvExporter(MetricsBaseExporter):
         self.debug(
             lambda: f"Initializing MetricsCsvExporter with config: {exporter_config}"
         )
-        self._file_path = exporter_config.user_config.output.profile_export_csv_file
+        self._file_path = exporter_config.user_config.profile_export_aiperf_csv_file
         self._percentile_keys = _percentile_keys_from(STAT_KEYS)
 
     def get_export_info(self) -> FileExportInfo:

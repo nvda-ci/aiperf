@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
@@ -19,7 +20,6 @@ from aiperf.common.config import (
 )
 from aiperf.common.enums import EndpointType, GPUTelemetryMode
 from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
-from aiperf.common.enums.timing_enums import TimingMode
 
 """
 Test suite for the UserConfig class.
@@ -66,7 +66,7 @@ class TestUserConfig:
                 ),
             ),
             output=OutputConfig(
-                artifact_directory="test_artifacts",
+                base_artifact_directory="test_artifacts",
             ),
             tokenizer=TokenizerConfig(
                 name="test_tokenizer",
@@ -222,62 +222,84 @@ def test_user_config_exclude_unset_fields():
     assert config.model_dump_json(exclude_none=True) != config.model_dump_json()  # fmt: skip
 
 
+@dataclass
+class ArtifactDirectoryTestCase:
+    model_names: list[str]
+    endpoint_type: EndpointType
+    fixed_schedule: bool
+    streaming: bool
+    concurrency: int | None
+    request_rate: float | None
+    expected_dir: str
+    description: str = ""
+
+
 @pytest.mark.parametrize(
-    "model_names,endpoint_type,timing_mode,streaming,expected_dir",
+    "test_case",
     [
-        (
-            ["hf/model"],  # model name with slash
-            EndpointType.CHAT,
-            TimingMode.REQUEST_RATE,
-            True,
-            "/tmp/artifacts/hf_model-openai-chat-concurrency5-request_rate10.0",
+        ArtifactDirectoryTestCase(
+            model_names=["hf/model"],
+            endpoint_type=EndpointType.CHAT,
+            fixed_schedule=False,
+            streaming=True,
+            concurrency=5,
+            request_rate=10.0,
+            expected_dir=Path(
+                "/tmp/artifacts/hf_model-openai-chat-concurrency5-request_rate10.0"
+            ),
+            description="model name with slash",
         ),
-        (
-            ["model1", "model2"],  # multi-model
-            EndpointType.COMPLETIONS,
-            TimingMode.REQUEST_RATE,
-            True,
-            "/tmp/artifacts/model1_multi-openai-completions-concurrency5-request_rate10.0",
+        ArtifactDirectoryTestCase(
+            model_names=["model1", "model2"],
+            endpoint_type=EndpointType.COMPLETIONS,
+            fixed_schedule=False,
+            streaming=False,
+            concurrency=8,
+            request_rate=25.5,
+            expected_dir=Path(
+                "/tmp/artifacts/model1_multi-openai-completions-concurrency8-request_rate25.5"
+            ),
+            description="multi-model",
         ),
-        (
-            ["singlemodel"],  # single model
-            EndpointType.EMBEDDINGS,
-            TimingMode.FIXED_SCHEDULE,
-            False,
-            "/tmp/artifacts/singlemodel-openai-embeddings-fixed_schedule",
+        ArtifactDirectoryTestCase(
+            model_names=["singlemodel"],
+            endpoint_type=EndpointType.EMBEDDINGS,
+            fixed_schedule=True,
+            streaming=False,
+            concurrency=None,
+            request_rate=None,
+            expected_dir=Path(
+                "/tmp/artifacts/singlemodel-openai-embeddings-fixed_schedule"
+            ),
+            description="single model with fixed schedule",
         ),
     ],
+    ids=lambda test_case: test_case.description,
 )
-def test_compute_artifact_directory(
-    monkeypatch, model_names, endpoint_type, timing_mode, streaming, expected_dir
-):
-    endpoint = EndpointConfig(
-        model_names=model_names,
-        type=endpoint_type,
-        custom_endpoint="custom_endpoint",
-        streaming=streaming,
-        url="http://custom-url",
-    )
-    output = OutputConfig(artifact_directory=Path("/tmp/artifacts"))
-    loadgen = LoadGeneratorConfig(concurrency=5, request_rate=10)
-
+def test_compute_artifact_directory(monkeypatch, test_case: ArtifactDirectoryTestCase):
+    """Test that the artifact directory is computed correctly."""
     monkeypatch.setattr("pathlib.Path.is_file", lambda self: True)
-    input_cfg = InputConfig(
-        fixed_schedule=(timing_mode == TimingMode.FIXED_SCHEDULE),
-        file="/tmp/dummy_input.txt",
-    )
     config = UserConfig(
-        endpoint=endpoint,
-        output=output,
-        loadgen=loadgen,
-        input=input_cfg,
+        endpoint=EndpointConfig(
+            model_names=test_case.model_names,
+            type=test_case.endpoint_type,
+            custom_endpoint="custom_endpoint",
+            streaming=test_case.streaming,
+            url="http://custom-url",
+        ),
+        output=OutputConfig(base_artifact_directory=Path("/tmp/artifacts")),
+        loadgen=LoadGeneratorConfig(
+            concurrency=test_case.concurrency, request_rate=test_case.request_rate
+        ),
+        input=InputConfig(
+            fixed_schedule=True,
+            file="/tmp/dummy_input.txt",
+        )
+        if test_case.fixed_schedule
+        else InputConfig(),
     )
 
-    # Patch timing_mode property to return the desired timing_mode
-    monkeypatch.setattr(UserConfig, "_timing_mode", property(lambda self: timing_mode))
-
-    artifact_dir = config._compute_artifact_directory()
-    assert artifact_dir == Path(expected_dir)
+    assert config.computed_artifact_directory == test_case.expected_dir
 
 
 @pytest.mark.parametrize(

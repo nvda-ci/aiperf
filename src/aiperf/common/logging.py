@@ -142,9 +142,9 @@ def setup_child_process_logging(
         rich_handler.setLevel(level)
         root_logger.addHandler(rich_handler)
 
-    if user_config and user_config.output.artifact_directory:
+    if user_config and user_config.computed_artifact_directory:
         file_handler = create_file_handler(
-            user_config.output.artifact_directory / OutputDefaults.LOG_FOLDER, level
+            user_config.computed_artifact_directory / OutputDefaults.LOG_FOLDER, level
         )
         root_logger.addHandler(file_handler)
 
@@ -170,7 +170,7 @@ def setup_rich_logging(user_config: UserConfig, service_config: ServiceConfig) -
 
     # Enable file logging for services
     # TODO: Use config to determine if file logging is enabled and the folder path.
-    log_folder = user_config.output.artifact_directory / OutputDefaults.LOG_FOLDER
+    log_folder = user_config.computed_artifact_directory / OutputDefaults.LOG_FOLDER
     log_folder.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_folder / OutputDefaults.LOG_FILE)
     file_handler.setLevel(level)

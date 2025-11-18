@@ -41,7 +41,7 @@ class TelemetryExportResultsProcessor(
         user_config: UserConfig,
         **kwargs,
     ):
-        output_file: Path = user_config.output.profile_export_gpu_telemetry_jsonl_file
+        output_file: Path = user_config.profile_export_gpu_telemetry_jsonl_file
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.unlink(missing_ok=True)
 

@@ -58,7 +58,7 @@ class RawRecordWriterProcessor(BufferedJSONLWriterMixin[RawRecordInfo]):
 
         # Construct output file path: raw_records/raw_records_processor_{id}.jsonl
         output_dir = (
-            user_config.output.artifact_directory / OutputDefaults.RAW_RECORDS_FOLDER
+            user_config.computed_artifact_directory / OutputDefaults.RAW_RECORDS_FOLDER
         )
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -132,11 +132,9 @@ class RawRecordAggregator(AIPerfLoggerMixin):
             raise DataExporterDisabled(
                 f"RawRecordAggregator is disabled for export level {self.exporter_config.user_config.output.export_level}"
             )
-        self.output_file = (
-            exporter_config.user_config.output.profile_export_raw_jsonl_file
-        )
+        self.output_file = exporter_config.user_config.profile_export_raw_jsonl_file
         self.output_dir = (
-            exporter_config.user_config.output.artifact_directory
+            exporter_config.user_config.computed_artifact_directory
             / OutputDefaults.RAW_RECORDS_FOLDER
         )
 

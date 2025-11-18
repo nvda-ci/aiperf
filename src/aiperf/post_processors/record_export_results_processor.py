@@ -36,7 +36,7 @@ class RecordExportResultsProcessor(
                 f"Record export results processor is disabled for export level {export_level}"
             )
 
-        output_file = user_config.output.profile_export_jsonl_file
+        output_file = user_config.profile_export_jsonl_file
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.unlink(missing_ok=True)
 

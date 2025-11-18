@@ -23,7 +23,7 @@ class MetricsBaseExporter(AIPerfLoggerMixin, ABC):
         self._telemetry_results = exporter_config.telemetry_results
         self._user_config = exporter_config.user_config
         self._metric_registry = MetricRegistry
-        self._output_directory = exporter_config.user_config.output.artifact_directory
+        self._output_directory = exporter_config.user_config.computed_artifact_directory
 
     def _prepare_metrics(
         self, metric_results: Iterable[MetricResult]

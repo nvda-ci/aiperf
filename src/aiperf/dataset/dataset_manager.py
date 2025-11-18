@@ -154,7 +154,8 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
     async def _generate_inputs_json_file(self) -> None:
         """Generate inputs.json file in the artifact directory."""
         file_path = (
-            self.user_config.output.artifact_directory / OutputDefaults.INPUTS_JSON_FILE
+            self.user_config.computed_artifact_directory
+            / OutputDefaults.INPUTS_JSON_FILE
         )
         self.info(f"Generating inputs.json file at {file_path.resolve()}")
 
