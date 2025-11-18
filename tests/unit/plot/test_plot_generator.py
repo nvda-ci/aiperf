@@ -26,6 +26,7 @@ from aiperf.plot.core.plot_generator import (
     PlotGenerator,
     detect_directional_outliers,
 )
+from aiperf.plot.core.plot_specs import Style
 
 # Light mode uses seaborn "deep" palette (blue) instead of NVIDIA brand colors
 LIGHT_MODE_PRIMARY_COLOR = "#4c72b0"
