@@ -95,6 +95,7 @@ from aiperf.plot.handlers import (
     ScatterHandler,
     ScatterLineHandler,
     ScatterWithPercentilesHandler,
+    TimeSliceHandler,
 )
 from aiperf.plot.logging import (
     setup_plot_logging,
@@ -170,6 +171,7 @@ __all__ = [
     "ScatterWithPercentilesHandler",
     "SingleRunPNGExporter",
     "Style",
+    "TimeSliceHandler",
     "TimeSlicePlotSpec",
     "VisualizationMode",
     "aggregate_gpu_telemetry",

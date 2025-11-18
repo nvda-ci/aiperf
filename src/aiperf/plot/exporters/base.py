@@ -25,18 +25,26 @@ class BaseExporter(AIPerfLoggerMixin, ABC):
     Subclasses implement format-specific export logic.
     """
 
-    def __init__(self, output_dir: Path, theme: PlotTheme = PlotTheme.LIGHT):
+    def __init__(
+        self,
+        output_dir: Path,
+        theme: PlotTheme = PlotTheme.LIGHT,
+        color_pool_size: int = 10,
+    ):
         """
         Initialize the base exporter.
 
         Args:
             output_dir: Directory where exported files will be saved
             theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
+            color_pool_size: Number of colors to pre-generate for group assignments.
+                Defaults to 10 (seaborn's perceptual limit for distinct colors).
+                Colors cycle for plots with more groups.
         """
         super().__init__()
         self.output_dir = Path(output_dir)
         self.theme = theme
-        self.plot_generator = PlotGenerator(theme=theme)
+        self.plot_generator = PlotGenerator(theme=theme, color_pool_size=color_pool_size)
 
     @abstractmethod
     def export(self, *args, **kwargs):

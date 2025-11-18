@@ -83,6 +83,16 @@ class RunData(AIPerfBaseModel):
         description="DataFrame containing GPU telemetry time series data, or None if not loaded",
     )
 
+    def get_metric(self, metric_name: str) -> MetricResult | dict[str, Any] | None:
+        """Get a metric from aggregated data."""
+        if not self.aggregated:
+            return None
+
+        if "metrics" in self.aggregated:
+            return self.aggregated["metrics"].get(metric_name)
+
+        return self.aggregated.get(metric_name)
+
 
 class DerivedMetricCalculator:
     """

@@ -15,6 +15,7 @@ from aiperf.plot.handlers.single_run_handlers import (
     HistogramHandler,
     ScatterHandler,
     ScatterWithPercentilesHandler,
+    TimeSliceHandler,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "ScatterHandler",
     "ScatterLineHandler",
     "ScatterWithPercentilesHandler",
+    "TimeSliceHandler",
 ]

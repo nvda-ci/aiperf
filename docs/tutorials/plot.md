@@ -241,11 +241,6 @@ These help identify warm-up effects, performance degradation, and steady-state b
 
 ![ITL Across Timeslices](../diagrams/plot_examples/single_run/timeslices/timeslices_itl.png)
 
-![Throughput Across Timeslices](../diagrams/plot_examples/single_run/timeslices/timeslices_throughput_warning.png)
-
-> [!NOTE]
-> **Throughput Warning**: The throughput plot displays a warning when requests have varying input/output sequence lengths. In these cases, requests per second may not accurately represent workload capacity. Consider using token throughput metrics for non-uniform workloads.
-
 ![Latency Across Timeslices](../diagrams/plot_examples/single_run/timeslices/timeslices_latency.png)
 
 > [!TIP]

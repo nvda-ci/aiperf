@@ -29,6 +29,7 @@ from aiperf.plot.core.plot_specs import (
 )
 from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.exceptions import DataLoadError, PlotGenerationError
+from aiperf.plot.metric_names import get_all_metric_display_names
 
 
 class BaseSingleRunHandler:
@@ -64,8 +65,10 @@ class BaseSingleRunHandler:
             return "Request Number"
         elif metric_spec.name == "timestamp":
             return "Time (seconds)"
-        elif metric_spec.name == "timestamp_s" or metric_spec.name == "Timeslice":
+        elif metric_spec.name == "timestamp_s":
             return "Time (s)"
+        elif metric_spec.name == "Timeslice":
+            return "Timeslice (s)"
         else:
             return self._get_metric_label(
                 metric_spec.name, metric_spec.stat, available_metrics
@@ -190,8 +193,103 @@ class AreaHandler(BaseSingleRunHandler):
 
 
 @PlotTypeHandlerFactory.register(PlotType.HISTOGRAM)
+class TimeSliceHandler(BaseSingleRunHandler):
+    """Handler for timeslice scatter plot type."""
+
+    def can_handle(self, spec: PlotSpec, data: RunData) -> bool:
+        """Check if timeslice plot can be generated."""
+        for metric in spec.metrics:
+            if metric.source == DataSource.TIMESLICES and (
+                data.timeslices is None or data.timeslices.empty
+            ):
+                return False
+        return True
+
+    def create_plot(
+        self, spec: PlotSpec, data: RunData, available_metrics: dict
+    ) -> go.Figure:
+        """Create a timeslice scatter plot."""
+        x_metric = next(m for m in spec.metrics if m.axis == "x")
+        y_metric = next(m for m in spec.metrics if m.axis == "y")
+
+        stats_to_extract = ["avg", "std"]
+        plot_df, unit = prepare_timeslice_metrics(data, y_metric.name, stats_to_extract)
+
+        y_label = f"{y_metric.name} ({unit})" if unit else y_metric.name
+
+        use_slice_duration = (
+            isinstance(spec, TimeSlicePlotSpec) and spec.use_slice_duration
+        )
+
+        warning_message = None
+        if "throughput" in spec.name.lower():
+            _, warning_message = validate_request_uniformity(data, self.logger)
+
+        # Extract average and std from aggregated stats by converting display name to metric tag
+        average_value, average_label, average_std = (
+            self._get_average_for_timeslice_metric(y_metric.name, data)
+        )
+
+        return self.plot_generator.create_timeslice_scatter(
+            df=plot_df,
+            x_col=x_metric.name,
+            y_col=y_metric.stat,
+            metric_name=y_metric.name,
+            title=spec.title,
+            x_label=self._get_axis_label(x_metric, available_metrics),
+            y_label=y_label,
+            slice_duration=data.slice_duration if use_slice_duration else None,
+            warning_text=warning_message,
+            average_value=average_value,
+            average_label=average_label,
+            average_std=average_std,
+            unit=unit,
+        )
+
+    def _get_average_for_timeslice_metric(
+        self, metric_display_name: str, data: RunData
+    ) -> tuple[float | None, str | None, float | None]:
+        """
+        Get average value and std for a timeslice metric from aggregated stats.
+
+        Args:
+            metric_display_name: Display name of the metric (e.g., "Time to First Token")
+            data: RunData object containing aggregated stats
+
+        Returns:
+            Tuple of (average_value, formatted_label, std_value) or (None, None, None) if not found
+        """
+
+        display_to_tag = {v: k for k, v in get_all_metric_display_names().items()}
+        metric_tag = display_to_tag.get(metric_display_name)
+        if metric_tag is None:
+            return None, None, None
+
+        metric = data.get_metric(metric_tag)
+        if not metric:
+            return None, None, None
+
+        avg = metric.avg if hasattr(metric, "avg") else metric.get("avg")
+        unit = metric.unit if hasattr(metric, "unit") else metric.get("unit", "")
+        std = metric.std if hasattr(metric, "std") else metric.get("std")
+
+        if avg is None:
+            return None, None, None
+
+        label = f"Run Average: {avg:.2f}"
+        if unit:
+            label += f" {unit}"
+
+        return avg, label, std
+
+
 class HistogramHandler(BaseSingleRunHandler):
-    """Handler for histogram plot type (timeslices)."""
+    """Handler for histogram/bar chart plots (preserved for future use).
+
+    This handler is not currently registered to any PlotType and won't generate
+    plots automatically. It's kept available for future use when bar chart
+    visualization is needed.
+    """
 
     def can_handle(self, spec: PlotSpec, data: RunData) -> bool:
         """Check if histogram plot can be generated."""
@@ -205,25 +303,26 @@ class HistogramHandler(BaseSingleRunHandler):
     def create_plot(
         self, spec: PlotSpec, data: RunData, available_metrics: dict
     ) -> go.Figure:
-        """Create a histogram plot."""
+        """Create a histogram/bar chart plot."""
         x_metric = next(m for m in spec.metrics if m.axis == "x")
         y_metric = next(m for m in spec.metrics if m.axis == "y")
 
-        plot_df = prepare_timeslice_metrics(data, y_metric.name, y_metric.stat)
+        stats_to_extract = ["avg", "std"]
+        plot_df, unit = prepare_timeslice_metrics(data, y_metric.name, stats_to_extract)
 
-        metric_data = data.timeslices[
-            (data.timeslices["Metric"] == y_metric.name)
-            & (data.timeslices["Stat"] == y_metric.stat)
-        ]
-        unit = metric_data["Unit"].iloc[0] if not metric_data.empty else ""
         y_label = f"{y_metric.name} ({unit})" if unit else y_metric.name
+
+        use_slice_duration = (
+            isinstance(spec, TimeSlicePlotSpec) and spec.use_slice_duration
+        )
 
         warning_message = None
         if "throughput" in spec.name.lower():
             _, warning_message = validate_request_uniformity(data, self.logger)
 
-        use_slice_duration = (
-            isinstance(spec, TimeSlicePlotSpec) and spec.use_slice_duration
+        # Extract average and std from aggregated stats
+        average_value, average_label, average_std = (
+            self._get_average_for_timeslice_metric(y_metric.name, data)
         )
 
         return self.plot_generator.create_time_series_histogram(
@@ -235,7 +334,46 @@ class HistogramHandler(BaseSingleRunHandler):
             y_label=y_label,
             slice_duration=data.slice_duration if use_slice_duration else None,
             warning_text=warning_message,
+            average_value=average_value,
+            average_label=average_label,
+            average_std=average_std,
         )
+
+    def _get_average_for_timeslice_metric(
+        self, metric_display_name: str, data: RunData
+    ) -> tuple[float | None, str | None, float | None]:
+        """Get average value and std for a timeslice metric from aggregated stats.
+
+        Args:
+            metric_display_name: Display name of the metric
+            data: RunData object containing aggregated stats
+
+        Returns:
+            Tuple of (average_value, formatted_label, std_value) or (None, None, None)
+        """
+        from aiperf.plot.metric_names import get_all_metric_display_names
+
+        display_to_tag = {v: k for k, v in get_all_metric_display_names().items()}
+        metric_tag = display_to_tag.get(metric_display_name)
+        if metric_tag is None:
+            return None, None, None
+
+        metric = data.get_metric(metric_tag)
+        if not metric:
+            return None, None, None
+
+        avg = metric.avg if hasattr(metric, "avg") else metric.get("avg")
+        unit = metric.unit if hasattr(metric, "unit") else metric.get("unit", "")
+        std = metric.std if hasattr(metric, "std") else metric.get("std")
+
+        if avg is None:
+            return None, None, None
+
+        label = f"Run Average: {avg:.2f}"
+        if unit:
+            label += f" {unit}"
+
+        return avg, label, std
 
 
 @PlotTypeHandlerFactory.register(PlotType.DUAL_AXIS)

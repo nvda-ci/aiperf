@@ -16,6 +16,9 @@ from aiperf.plot.constants import NVIDIA_GREEN, NVIDIA_WHITE
 from aiperf.plot.core.plot_generator import PlotGenerator
 from aiperf.plot.core.plot_specs import Style
 
+# Light mode uses seaborn "deep" palette (blue) instead of NVIDIA brand colors
+LIGHT_MODE_PRIMARY_COLOR = "#4c72b0"
+
 
 @pytest.fixture
 def plot_generator():
@@ -214,8 +217,8 @@ class TestPlotGenerator:
         assert fig.data[0].fill == "tozeroy"
         assert fig.data[0].mode == "lines"
 
-        # Verify NVIDIA green color
-        assert NVIDIA_GREEN in fig.data[0].line.color
+        # Verify light mode primary color (seaborn deep palette blue)
+        assert LIGHT_MODE_PRIMARY_COLOR in fig.data[0].line.color
 
     def test_create_time_series_area_auto_labels(self, plot_generator, single_run_df):
         """Test time series area with auto-generated labels."""
@@ -338,9 +341,8 @@ class TestPlotGenerator:
         assert isinstance(fig, go.Figure)
         assert len(fig.data) > 0
 
-        # Test the helper method directly
-        models = ["ModelA", "ModelB", "ModelC"]
-        color_map = plot_generator._assign_group_colors(models)
+        # Test that groups are registered in the color registry
+        groups, color_map = plot_generator._prepare_groups(df, "model")
 
         # Verify all models get colors
         assert len(color_map) == 3
@@ -353,30 +355,42 @@ class TestPlotGenerator:
             assert isinstance(color, str)
             assert color.startswith("#")
 
+        # Verify colors are in the registry
+        assert "ModelA" in plot_generator._group_color_registry
+        assert "ModelB" in plot_generator._group_color_registry
+        assert "ModelC" in plot_generator._group_color_registry
+
     def test_color_consistency_across_models(self, plot_generator):
         """Test that same model gets same color across different calls."""
-        models1 = ["ModelX", "ModelY", "ModelZ"]
-        colors1 = plot_generator._assign_group_colors(models1)
+        df1 = pd.DataFrame({"model": ["ModelX", "ModelY", "ModelZ"]})
+        groups1, colors1 = plot_generator._prepare_groups(df1, "model")
 
-        models2 = ["ModelX", "ModelY", "ModelZ"]
-        colors2 = plot_generator._assign_group_colors(models2)
+        df2 = pd.DataFrame({"model": ["ModelX", "ModelY", "ModelZ"]})
+        groups2, colors2 = plot_generator._prepare_groups(df2, "model")
 
-        # Same models in same order should get same colors
+        # Same models should get same colors across calls
         assert colors1 == colors2
+        # Colors should be persisted in registry
+        assert plot_generator._group_color_registry["ModelX"] == colors1["ModelX"]
+        assert plot_generator._group_color_registry["ModelY"] == colors1["ModelY"]
+        assert plot_generator._group_color_registry["ModelZ"] == colors1["ModelZ"]
 
     def test_color_assignment_with_many_models(self, plot_generator):
         """Test that color assignment cycles when there are more models than colors."""
-        # Create more models than available colors
-        models = [f"Model{i}" for i in range(15)]
-        color_map = plot_generator._assign_group_colors(models)
+        # Create more models than available colors in the pool (default 10)
+        model_names = [f"Model{i}" for i in range(15)]
+        df = pd.DataFrame({"model": model_names})
+        groups, color_map = plot_generator._prepare_groups(df, "model")
 
         # All models should get a color
         assert len(color_map) == 15
 
         # Colors should cycle (some will repeat)
         unique_colors = set(color_map.values())
+        # Should have at most pool_size unique colors (10 by default)
+        assert len(unique_colors) <= len(plot_generator._color_pool)
         # Should have fewer unique colors than models (due to cycling)
-        assert len(unique_colors) < len(models)
+        assert len(unique_colors) < len(model_names)
 
 
 class TestTimeSeriesHistogram:
@@ -482,7 +496,7 @@ class TestTimeSeriesHistogram:
     def test_histogram_auto_labels_with_slice_duration(
         self, plot_generator, timeslice_df
     ):
-        """Test that x-axis label is 'Time (s)' when slice_duration is provided."""
+        """Test that x-axis label is 'Timeslice (s)' when slice_duration is provided."""
         fig = plot_generator.create_time_series_histogram(
             df=timeslice_df,
             x_col="timeslice",
@@ -490,7 +504,7 @@ class TestTimeSeriesHistogram:
             slice_duration=10.0,
         )
 
-        assert fig.layout.xaxis.title.text == "Time (s)"
+        assert fig.layout.xaxis.title.text == "Timeslice (s)"
 
     def test_histogram_with_empty_dataframe(self, plot_generator):
         """Test histogram with empty DataFrame."""
@@ -514,8 +528,9 @@ class TestTimeSeriesHistogram:
         )
 
         marker = fig.data[0].marker
-        assert "rgba(118, 185, 0, 0.7)" in marker.color
-        assert marker.line.color == NVIDIA_GREEN
+        # Light mode uses seaborn deep palette blue
+        assert "rgba(76, 114, 176, 0.7)" in marker.color
+        assert marker.line.color == LIGHT_MODE_PRIMARY_COLOR
         assert marker.line.width == 2
 
     def test_histogram_marker_config_without_slice_duration(
@@ -527,7 +542,8 @@ class TestTimeSeriesHistogram:
         )
 
         marker = fig.data[0].marker
-        assert marker.color == NVIDIA_GREEN
+        # Light mode uses seaborn deep palette blue
+        assert marker.color == LIGHT_MODE_PRIMARY_COLOR
 
 
 class TestDualAxisPlots:
@@ -638,7 +654,8 @@ class TestDualAxisPlots:
             secondary_style=Style(mode="lines", line_shape=None, fill="tozeroy"),
         )
 
-        assert fig.data[0].line.color == NVIDIA_GREEN
+        # Light mode uses seaborn deep palette colors
+        assert fig.data[0].line.color == LIGHT_MODE_PRIMARY_COLOR
         assert fig.data[0].line.width == 2
         assert fig.data[1].line.width == 2
 
@@ -767,7 +784,7 @@ class TestLatencyScatterWithPercentiles:
         assert "Request Latency" in fig.layout.yaxis.title.text
 
     def test_latency_scatter_with_percentiles_colors(self, plot_generator, latency_df):
-        """Test that percentile lines use NVIDIA color palette."""
+        """Test that percentile lines use seaborn color palette in light mode."""
         fig = plot_generator.create_latency_scatter_with_percentiles(
             df=latency_df,
             x_col="timestamp",
@@ -775,7 +792,8 @@ class TestLatencyScatterWithPercentiles:
             percentile_cols=["p50", "p95", "p99"],
         )
 
-        assert fig.data[1].line.color == NVIDIA_GREEN
+        # Light mode uses seaborn deep palette - first color is blue
+        assert fig.data[1].line.color == LIGHT_MODE_PRIMARY_COLOR
         assert fig.data[2].line.color is not None
         assert fig.data[3].line.color is not None
 

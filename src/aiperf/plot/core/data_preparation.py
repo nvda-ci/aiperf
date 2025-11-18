@@ -251,33 +251,54 @@ def calculate_rolling_percentiles(
 
 
 def prepare_timeslice_metrics(
-    run: RunData, metric_name: str, stat: str
-) -> pd.DataFrame:
+    run: RunData, metric_name: str, stat: str | list[str]
+) -> tuple[pd.DataFrame, str]:
     """
-    Extract and prepare timeslice data for a specific metric and stat.
+    Extract and prepare timeslice data for a specific metric and stat(s).
 
     Args:
         run: RunData object with timeslices DataFrame
         metric_name: Name of the metric to extract
-        stat: Statistic to extract (e.g., "avg", "p50", "p95")
+        stat: Statistic(s) to extract (e.g., "avg", ["avg", "p50", "std"])
 
     Returns:
-        DataFrame with Timeslice and stat columns, ready for histogram plotting
+        Tuple of (DataFrame with Timeslice and stat column(s), unit string)
     """
     if run.timeslices is None or run.timeslices.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), ""
 
-    metric_data = run.timeslices[
-        (run.timeslices["Metric"] == metric_name) & (run.timeslices["Stat"] == stat)
-    ].copy()
+    stats = [stat] if isinstance(stat, str) else stat
 
-    if metric_data.empty:
-        raise DataLoadError(f"No timeslice data for {metric_name} ({stat})")
+    plot_dfs = []
+    missing_stats = []
+    unit = ""
 
-    plot_df = metric_data[["Timeslice", "Value"]].copy()
-    plot_df = plot_df.rename(columns={"Value": stat})
+    for s in stats:
+        metric_data = run.timeslices[
+            (run.timeslices["Metric"] == metric_name) & (run.timeslices["Stat"] == s)
+        ].copy()
 
-    return plot_df
+        if metric_data.empty:
+            missing_stats.append(s)
+            continue
+
+        if not unit and not metric_data.empty:
+            unit = metric_data["Unit"].iloc[0]
+
+        stat_df = metric_data[["Timeslice", "Value"]].copy()
+        stat_df = stat_df.rename(columns={"Value": s})
+        plot_dfs.append(stat_df)
+
+    if not plot_dfs:
+        raise DataLoadError(
+            f"No timeslice data for {metric_name} ({', '.join(stats)})"
+        )
+
+    plot_df = plot_dfs[0]
+    for df in plot_dfs[1:]:
+        plot_df = plot_df.merge(df, on="Timeslice", how="outer")
+
+    return plot_df, unit
 
 
 def aggregate_gpu_telemetry(run: RunData) -> pd.DataFrame:

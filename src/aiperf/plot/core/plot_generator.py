@@ -9,6 +9,8 @@ with NVIDIA brand styling for various plot types including pareto curves, scatte
 plots, line charts, and time series.
 """
 
+import matplotlib.colors as mcolors
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import seaborn as sns
@@ -18,6 +20,7 @@ from aiperf.plot.constants import (
     LIGHT_THEME_COLORS,
     NVIDIA_GOLD,
     NVIDIA_GREEN,
+    OUTLIER_RED,
     PLOT_FONT_FAMILY,
     PlotTheme,
 )
@@ -26,36 +29,80 @@ from aiperf.plot.metric_names import get_metric_display_name
 
 
 def get_nvidia_color_scheme(
-    n_colors: int, secondary_color: str = NVIDIA_GOLD
+    n_colors: int,
+    palette_name: str = "bright",
+    use_brand_colors: bool = True,
 ) -> list[str]:
     """
-    Generate color scheme with NVIDIA brand colors first, then seaborn for extras.
+    Generate color scheme with optional NVIDIA brand colors and seaborn palette.
 
-    Uses NVIDIA green and a secondary color (gold for dark theme, grey for light theme)
-    for the first two colors, then dynamically generates additional colors using
-    seaborn's "bright" palette for any remaining colors needed.
+    For dark theme: Uses NVIDIA green and gold with "bright" palette for vibrant contrast.
+    For light theme: Uses "deep" palette for professional, subdued colors without brand prefix.
 
     Args:
         n_colors: Number of colors needed
-        secondary_color: Secondary color to use (NVIDIA_GOLD or NVIDIA_GRAY)
+        palette_name: Seaborn palette name ("bright" or "deep")
+        use_brand_colors: If True, prefix with NVIDIA_GREEN and NVIDIA_GOLD
 
     Returns:
         List of hex color strings
     """
-    custom_colors = [NVIDIA_GREEN, secondary_color]
+    if use_brand_colors:
+        custom_colors = [NVIDIA_GREEN, NVIDIA_GOLD]
 
-    if n_colors <= len(custom_colors):
-        return custom_colors[:n_colors]
+        if n_colors <= len(custom_colors):
+            return custom_colors[:n_colors]
 
-    additional_needed = n_colors - len(custom_colors)
-    palette = sns.color_palette("bright", additional_needed)
+        additional_needed = n_colors - len(custom_colors)
+        palette = sns.color_palette(palette_name, additional_needed)
+        additional = [mcolors.to_hex(color) for color in palette]
+        return custom_colors + additional
+    else:
+        palette = sns.color_palette(palette_name, n_colors)
+        return [mcolors.to_hex(color) for color in palette]
 
-    additional = [
-        f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-        for r, g, b in palette
-    ]
 
-    return custom_colors + additional
+def detect_directional_outliers(
+    values: np.ndarray | pd.Series,
+    metric_name: str,
+    run_average: float | None = None,
+    run_std: float | None = None,
+    slice_stds: np.ndarray | pd.Series | None = None,
+) -> np.ndarray:
+    """
+    Detect "bad" performance outliers using run_std + slice_std threshold.
+
+    High values are considered bad for latency-related metrics (TTFT, ITL, latency),
+    while low values are considered bad for throughput metrics. Points are marked
+    as outliers if they exceed run_average ± (run_std + slice_std).
+
+    Args:
+        values: Array of metric values to analyze (point values, not including error bars)
+        metric_name: Name of the metric (used to determine direction)
+        run_average: Average value across the entire run
+        run_std: Standard deviation across the entire run
+        slice_stds: Array of standard deviations for each timeslice (error bar values)
+
+    Returns:
+        Boolean array where True indicates an outlier point
+    """
+    if len(values) == 0:
+        return np.array([], dtype=bool)
+
+    if run_average is None or run_std is None:
+        return np.zeros(len(values), dtype=bool)
+
+    if slice_stds is None or len(slice_stds) != len(values):
+        slice_stds = np.zeros(len(values))
+
+    upper_bounds = run_average + run_std + slice_stds
+    lower_bounds = run_average - run_std - slice_stds
+
+    metric_lower = metric_name.lower()
+    if "throughput" in metric_lower:
+        return values < lower_bounds
+    else:
+        return values > upper_bounds
 
 
 class PlotGenerator:
@@ -69,38 +116,69 @@ class PlotGenerator:
         theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
     """
 
-    def __init__(self, theme: PlotTheme = PlotTheme.LIGHT):
+    def __init__(self, theme: PlotTheme = PlotTheme.LIGHT, color_pool_size: int = 10):
         """Initialize PlotGenerator with specified theme.
 
         Args:
             theme: Theme to use for plots (LIGHT or DARK). Defaults to LIGHT.
+            color_pool_size: Number of colors to pre-generate for group assignments.
+                Defaults to 10, which is the standard perceptual limit for
+                distinguishing colors in visualizations (based on seaborn palettes).
+                Colors cycle via modulo when groups exceed this limit. Future
+                versions will auto-detect from swept parameters.
         """
         self.theme = theme
         self.colors = (
             LIGHT_THEME_COLORS if theme == PlotTheme.LIGHT else DARK_THEME_COLORS
         )
+        self._group_color_registry: dict[str, str] = {}
+        self._color_pool: list[str] = self._generate_color_pool(color_pool_size)
+        self._next_color_index: int = 0
 
-    def _assign_group_colors(self, groups: list[str]) -> dict[str, str]:
-        """Dynamically assign colors to groups from NVIDIA palette.
+    def _generate_color_pool(self, pool_size: int) -> list[str]:
+        """Generate master color pool for consistent group coloring.
 
-        Colors are assigned in a consistent order based on sorted group values,
-        ensuring the same group always gets the same color across different plots.
+        Pre-generates a palette to assign to groups consistently across all
+        plots in a session. Dark theme uses NVIDIA brand colors with bright
+        palette, light theme uses deep palette.
+
+        Seaborn palettes provide up to 10 perceptually distinct colors.
+        Groups beyond this limit will cycle through the palette via modulo.
 
         Args:
-            groups: List of unique group values from the data (e.g., model names,
-                concurrency levels, or any other categorical configuration parameter).
-                Expected to be pre-sorted by caller.
+            pool_size: Number of colors to generate (typically 10 based on
+                seaborn's perceptual limit)
 
         Returns:
-            Dictionary mapping group value to color hex code
+            List of hex color strings for the master color pool
         """
-        color_scheme = get_nvidia_color_scheme(len(groups), self.colors["secondary"])
+        if self.theme == PlotTheme.DARK:
+            return get_nvidia_color_scheme(
+                pool_size,
+                palette_name="bright",
+                use_brand_colors=True,
+            )
+        else:
+            return get_nvidia_color_scheme(
+                pool_size,
+                palette_name="deep",
+                use_brand_colors=False,
+            )
 
-        color_map = {}
-        for i, group in enumerate(groups):
-            color_map[group] = color_scheme[i]
+    def _get_palette_colors(self, n_colors: int = 1) -> list[str]:
+        """Get N colors from the master color pool.
 
-        return color_map
+        Returns the first N colors from the pre-generated pool. All colors come
+        from the same master palette used for group assignments, ensuring visual
+        consistency across all plot types.
+
+        Args:
+            n_colors: Number of colors needed
+
+        Returns:
+            List of hex color strings sliced from the master pool
+        """
+        return self._color_pool[:n_colors]
 
     def _get_base_layout(
         self,
@@ -188,9 +266,9 @@ class PlotGenerator:
         """
         Prepare group list and color mapping for multi-series plots.
 
-        Handles grouping logic and color assignment in a consistent way across
-        all plot types that support grouping (e.g., by model, concurrency, or
-        any other categorical configuration parameter).
+        Uses a persistent color registry to ensure the same group always gets
+        the same color across all plots in a session. New groups are assigned
+        colors sequentially from a pre-generated color pool.
 
         Args:
             df: DataFrame containing the data
@@ -204,7 +282,14 @@ class PlotGenerator:
         """
         if group_by and group_by in df.columns:
             groups = sorted(df[group_by].unique())
-            group_colors = self._assign_group_colors(list(groups))
+
+            for group in groups:
+                if group not in self._group_color_registry:
+                    color_index = self._next_color_index % len(self._color_pool)
+                    self._group_color_registry[group] = self._color_pool[color_index]
+                    self._next_color_index += 1
+
+            group_colors = {group: self._group_color_registry[group] for group in groups}
         else:
             groups = [None]
             group_colors = {}
@@ -256,13 +341,13 @@ class PlotGenerator:
         for group in groups:
             if group is None:
                 group_data = df_sorted
-                group_color = NVIDIA_GREEN
+                group_color = self._get_palette_colors(1)[0]
                 group_name = "Data"
             else:
                 group_data = df_sorted[df_sorted[group_by] == group].sort_values(
                     x_metric
                 )
-                group_color = group_colors.get(group, NVIDIA_GREEN)
+                group_color = group_colors[group]
                 group_name = group
 
             # Calculate Pareto frontier for this group using vectorized operations
@@ -398,13 +483,13 @@ class PlotGenerator:
         for group in groups:
             if group is None:
                 group_data = df_sorted
-                group_color = NVIDIA_GREEN
+                group_color = self._get_palette_colors(1)[0]
                 group_name = "Data"
             else:
                 group_data = df_sorted[df_sorted[group_by] == group].sort_values(
                     x_metric
                 )
-                group_color = group_colors.get(group, NVIDIA_GREEN)
+                group_color = group_colors[group]
                 group_name = group
 
             # Shadow layer
@@ -487,12 +572,13 @@ class PlotGenerator:
         y_label = y_label or get_metric_display_name(y_metric)
 
         # Main scatter points
+        primary_color = self._get_palette_colors(1)[0]
         fig.add_trace(
             go.Scatter(
                 x=df[x_col],
                 y=df[y_metric],
                 mode="markers",
-                marker=dict(size=8, opacity=0.95, color=self.colors["secondary"]),
+                marker=dict(size=8, opacity=0.95, color=primary_color),
                 showlegend=False,
                 hovertemplate=f"{x_label} %{{x}}<br>{y_label}: %{{y:.1f}}<extra></extra>",
             )
@@ -534,14 +620,19 @@ class PlotGenerator:
         y_label = y_label or get_metric_display_name(y_metric)
 
         # Main trace with fill
+        primary_color = self._get_palette_colors(1)[0]
+        # Extract RGB from hex for fillcolor
+        r, g, b = mcolors.to_rgb(primary_color)
+        fillcolor = f"rgba({int(r * 255)}, {int(g * 255)}, {int(b * 255)}, 0.2)"
+
         fig.add_trace(
             go.Scatter(
                 x=df[x_col],
                 y=df[y_metric],
                 mode="lines",
-                line=dict(width=2, color=NVIDIA_GREEN, shape="hv"),
+                line=dict(width=2, color=primary_color, shape="hv"),
                 fill="tozeroy",
-                fillcolor="rgba(118, 185, 0, 0.2)",
+                fillcolor=fillcolor,
                 showlegend=False,
                 hovertemplate=f"{x_label}: %{{x:.0f}}<br>{y_label}: %{{y:.1f}}<extra></extra>",
             )
@@ -563,6 +654,9 @@ class PlotGenerator:
         y_label: str | None = None,
         slice_duration: float | None = None,
         warning_text: str | None = None,
+        average_value: float | None = None,
+        average_label: str | None = None,
+        average_std: float | None = None,
     ) -> go.Figure:
         """Create a time series histogram/bar chart.
 
@@ -575,6 +669,9 @@ class PlotGenerator:
             y_label: Y-axis label (auto-generated if None)
             slice_duration: Duration of each slice in seconds (for time-based x-axis)
             warning_text: Optional warning text to display at bottom of plot
+            average_value: Optional average value across whole run to display as horizontal line
+            average_label: Optional label for the average line
+            average_std: Optional standard deviation to show as error band around average line
 
         Returns:
             Plotly Figure object with bar chart
@@ -584,9 +681,13 @@ class PlotGenerator:
         # Auto-generate labels if not provided
         title = title or f"{get_metric_display_name(y_col)} Over Time"
         x_label = x_label or (
-            "Time (s)" if slice_duration else get_metric_display_name(x_col)
+            "Timeslice (s)" if slice_duration else get_metric_display_name(x_col)
         )
         y_label = y_label or get_metric_display_name(y_col)
+
+        # Get primary color from theme-specific palette
+        primary_color = self._get_palette_colors(1)[0]
+        r, g, b = mcolors.to_rgb(primary_color)
 
         # Prepare x-axis values and bar configuration
         if slice_duration is not None:
@@ -612,8 +713,8 @@ class PlotGenerator:
 
             # Transparent bars with borders
             marker_config = dict(
-                color="rgba(118, 185, 0, 0.7)",  # 70% opacity
-                line=dict(color=NVIDIA_GREEN, width=2),
+                color=f"rgba({int(r * 255)}, {int(g * 255)}, {int(b * 255)}, 0.7)",
+                line=dict(color=primary_color, width=2),
             )
         else:
             # Fallback for non-time-based data
@@ -624,22 +725,79 @@ class PlotGenerator:
             )
             customdata = None
             marker_config = dict(
-                color=NVIDIA_GREEN,
-                line=dict(color=NVIDIA_GREEN, width=0),
+                color=primary_color,
+                line=dict(color=primary_color, width=0),
             )
 
-        # Create bar chart
+        # Create bar chart with error bars if std is available
+        error_y_config = None
+        if "std" in df.columns:
+            error_y_config = dict(
+                type="data",
+                array=df["std"],
+                visible=True,
+                color=primary_color,
+                thickness=2,
+                width=6,
+            )
+
         fig.add_trace(
             go.Bar(
                 x=x_values,
                 y=df[y_col],
                 width=bar_width,
                 marker=marker_config,
+                error_y=error_y_config,
                 showlegend=False,
                 hovertemplate=hover_template,
                 customdata=customdata,
             )
         )
+
+        # Add horizontal average line if provided
+        if average_value is not None:
+            if slice_duration is not None:
+                x_range = [0, (df[x_col].max() + 1) * slice_duration]
+            else:
+                x_range = [df[x_col].min() - 0.5, df[x_col].max() + 0.5]
+
+            # Add shaded region for ±1 std if provided
+            if average_std is not None:
+                upper_bound = average_value + average_std
+                lower_bound = average_value - average_std
+
+                # Add filled area for std band
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_range + x_range[::-1],
+                        y=[upper_bound, upper_bound, lower_bound, lower_bound],
+                        fill="toself",
+                        fillcolor="rgba(255, 184, 28, 0.2)",  # NVIDIA gold with 20% opacity
+                        line=dict(width=0),
+                        showlegend=True,
+                        name="±1 Std Dev",
+                        hovertemplate=f"±1 Std Dev: {lower_bound:.2f} - {upper_bound:.2f}<extra></extra>",
+                    )
+                )
+
+            # Add average line on top of std band
+            # Use secondary color from palette for average line
+            palette_colors = self._get_palette_colors(2)
+            avg_line_color = (
+                palette_colors[1] if len(palette_colors) > 1 else palette_colors[0]
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x_range,
+                    y=[average_value, average_value],
+                    mode="lines",
+                    line=dict(color=avg_line_color, width=3),
+                    name=average_label or "Run Average",
+                    showlegend=True,
+                    hovertemplate=f"{average_label or 'Run Average'}<extra></extra>",
+                )
+            )
 
         # Apply NVIDIA branding layout
         layout = self._get_base_layout(title, x_label, y_label, hovermode="x unified")
@@ -654,6 +812,312 @@ class PlotGenerator:
             layout["xaxis"]["dtick"] = slice_duration
             layout["xaxis"]["tick0"] = 0
             layout["xaxis"]["range"] = [0, (max_slice + 1) * slice_duration]
+
+        if warning_text:
+            if "annotations" not in layout:
+                layout["annotations"] = []
+
+            layout["margin"]["b"] = 140
+
+            warning_annotation = dict(
+                x=0.5,
+                y=-0.10,
+                xref="paper",
+                yref="paper",
+                text=warning_text,
+                showarrow=False,
+                font=dict(
+                    size=11, family=PLOT_FONT_FAMILY, color=self.colors["secondary"]
+                ),
+                bgcolor=f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, 0.1)",
+                bordercolor=self.colors["secondary"],
+                borderwidth=2,
+                borderpad=8,
+                xanchor="center",
+                yanchor="top",
+            )
+            layout["annotations"] = list(layout.get("annotations", [])) + [
+                warning_annotation
+            ]
+
+        fig.update_layout(layout)
+
+        return fig
+
+    def create_timeslice_scatter(
+        self,
+        df: pd.DataFrame,
+        x_col: str,
+        y_col: str,
+        metric_name: str,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        slice_duration: float | None = None,
+        warning_text: str | None = None,
+        average_value: float | None = None,
+        average_label: str | None = None,
+        average_std: float | None = None,
+        unit: str = "",
+    ) -> go.Figure:
+        """Create a timeslice scatter plot with outlier highlighting.
+
+        Designed specifically for timeslice data with low data-to-ink ratio:
+        - Scatter points instead of bars
+        - Seaborn deep palette colors for normal points
+        - Red highlighting for bad outliers outside the run average ± std band
+        - Minimal grid and axes styling
+        - Error bars and average line overlay preserved
+        - Time range labels (e.g., "0-10", "10-20") on diagonal
+
+        Args:
+            df: DataFrame containing the timeslice data
+            x_col: Column name for x-axis (e.g., "Timeslice")
+            y_col: Column name for y-axis values (e.g., "avg", "p50", "p90")
+            metric_name: Name of the metric for outlier detection
+            title: Plot title (auto-generated if None)
+            x_label: X-axis label (auto-generated if None)
+            y_label: Y-axis label (auto-generated if None)
+            slice_duration: Duration of each slice in seconds (for time-based x-axis)
+            warning_text: Optional warning text to display at bottom of plot
+            average_value: Run average value (center of gold band) for outlier detection
+            average_label: Optional label for the average line
+            average_std: Run standard deviation (width of gold band) for outlier detection
+            unit: Unit of measurement for the metric (e.g., "ms", "tokens/s")
+
+        Returns:
+            Plotly Figure object with timeslice scatter plot
+        """
+        fig = go.Figure()
+
+        title = title or f"{get_metric_display_name(y_col)} Over Time"
+        x_label = x_label or (
+            "Timeslice (s)" if slice_duration else get_metric_display_name(x_col)
+        )
+        y_label = y_label or get_metric_display_name(y_col)
+
+        # Get primary color from theme-specific palette for normal points
+        primary_color = self._get_palette_colors(1)[0]
+
+        if slice_duration is not None:
+            slice_indices = df[x_col].values
+            x_values = slice_indices * slice_duration + slice_duration / 2
+
+            slice_start_times = slice_indices * slice_duration
+            time_ranges = [
+                f"{int(start)}s-{int(start + slice_duration)}s"
+                for start in slice_start_times
+            ]
+            hover_template = (
+                f"Time: %{{customdata[0]}}<br>"
+                f"Slice: %{{customdata[1]}}<br>"
+                f"{y_label}: %{{y:.2f}}<extra></extra>"
+            )
+            customdata = list(zip(time_ranges, slice_indices.astype(int), strict=False))
+        else:
+            x_values = df[x_col].values
+            hover_template = (
+                f"{x_label}: %{{x}}<br>{y_label}: %{{y:.2f}}<extra></extra>"
+            )
+            customdata = None
+
+        y_values = df[y_col].values
+        slice_stds = df["std"].values if "std" in df.columns else None
+        outlier_mask = detect_directional_outliers(
+            y_values,
+            metric_name,
+            run_average=average_value,
+            run_std=average_std,
+            slice_stds=slice_stds,
+        )
+
+        normal_mask = ~outlier_mask
+        normal_x = x_values[normal_mask]
+        normal_y = y_values[normal_mask]
+        outlier_x = x_values[outlier_mask]
+        outlier_y = y_values[outlier_mask]
+
+        error_y_normal = None
+        error_y_outlier = None
+        if "std" in df.columns:
+            std_values = df["std"].values
+            if np.any(normal_mask):
+                error_y_normal = dict(
+                    type="data",
+                    array=std_values[normal_mask],
+                    visible=True,
+                    color=primary_color,
+                    thickness=1.5,
+                    width=4,
+                )
+            if np.any(outlier_mask):
+                error_y_outlier = dict(
+                    type="data",
+                    array=std_values[outlier_mask],
+                    visible=True,
+                    color=OUTLIER_RED,
+                    thickness=1.5,
+                    width=4,
+                )
+
+        if average_value is not None:
+            if slice_duration is not None:
+                x_max = (df[x_col].max() + 1) * slice_duration
+                x_range = [0, x_max]
+            else:
+                x_range = [df[x_col].min() - 0.5, df[x_col].max() + 0.5]
+
+            if average_std is not None:
+                upper_bound = average_value + average_std
+                lower_bound = average_value - average_std
+
+                std_label = f"Run Std: {average_std:.2f}"
+                if unit:
+                    std_label = f"{std_label} {unit}"
+
+                band_color = (
+                    "rgba(232, 232, 232, 0.3)"
+                    if self.theme == PlotTheme.LIGHT
+                    else "rgba(255, 184, 28, 0.15)"
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_range + x_range[::-1],
+                        y=[upper_bound, upper_bound, lower_bound, lower_bound],
+                        mode="lines",
+                        fill="toself",
+                        fillcolor=band_color,
+                        line=dict(width=0),
+                        showlegend=True,
+                        legendrank=3,
+                        name=std_label,
+                        hovertemplate=f"±1 Std Dev: {lower_bound:.2f} - {upper_bound:.2f}<extra></extra>",
+                    )
+                )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x_range,
+                    y=[average_value, average_value],
+                    mode="lines",
+                    line=dict(color="#555555", width=2),
+                    name=average_label or "Run Average",
+                    showlegend=True,
+                    legendrank=4,
+                    hovertemplate=f"{average_label or 'Run Average'}<extra></extra>",
+                )
+            )
+
+        if np.any(normal_mask):
+            normal_customdata = (
+                [customdata[i] for i in range(len(customdata)) if normal_mask[i]]
+                if customdata is not None
+                else None
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=normal_x,
+                    y=normal_y,
+                    mode="markers",
+                    marker=dict(
+                        color=primary_color,
+                        size=8,
+                        line=dict(width=0),
+                    ),
+                    error_y=error_y_normal,
+                    name="Timeslice Average",
+                    showlegend=True,
+                    legendrank=1,
+                    hovertemplate=hover_template,
+                    customdata=normal_customdata,
+                )
+            )
+
+        if np.any(outlier_mask):
+            outlier_customdata = (
+                [customdata[i] for i in range(len(customdata)) if outlier_mask[i]]
+                if customdata is not None
+                else None
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=outlier_x,
+                    y=outlier_y,
+                    mode="markers",
+                    marker=dict(
+                        color=OUTLIER_RED,
+                        size=10,
+                        symbol="diamond",
+                        line=dict(width=0),
+                    ),
+                    error_y=error_y_outlier,
+                    name="Outliers",
+                    showlegend=True,
+                    legendrank=5,
+                    hovertemplate=hover_template,
+                    customdata=outlier_customdata,
+                )
+            )
+
+        if "std" in df.columns and (np.any(normal_mask) or np.any(outlier_mask)):
+            fig.add_trace(
+                go.Scatter(
+                    x=[-999999, -999999],
+                    y=[0, 1],
+                    mode="lines",
+                    line=dict(
+                        color=primary_color,
+                        width=3,
+                    ),
+                    name="±1 Timeslice Std",
+                    showlegend=True,
+                    legendrank=2,
+                    hoverinfo="skip",
+                )
+            )
+
+        layout = self._get_base_layout(title, x_label, y_label, hovermode="closest")
+
+        layout["xaxis"]["showgrid"] = True
+        layout["xaxis"]["gridwidth"] = 0.5
+        layout["xaxis"]["gridcolor"] = (
+            "rgba(200, 200, 200, 0.2)"
+            if self.theme == PlotTheme.LIGHT
+            else "rgba(100, 100, 100, 0.2)"
+        )
+
+        layout["yaxis"]["showgrid"] = True
+        layout["yaxis"]["gridwidth"] = 0.5
+        layout["yaxis"]["gridcolor"] = (
+            "rgba(200, 200, 200, 0.2)"
+            if self.theme == PlotTheme.LIGHT
+            else "rgba(100, 100, 100, 0.2)"
+        )
+
+        layout["xaxis"]["linewidth"] = 1
+        layout["yaxis"]["linewidth"] = 1
+        layout["yaxis"]["rangemode"] = "tozero"
+
+        if slice_duration is not None:
+            slice_indices = df[x_col].values
+            max_slice = slice_indices.max()
+
+            # Configure custom ticks with range labels at center positions
+            layout["xaxis"]["tickmode"] = "array"
+            tick_positions = [i * slice_duration + slice_duration / 2 for i in range(int(max_slice) + 1)]
+            tick_labels = [f"{int(i * slice_duration)}-{int((i + 1) * slice_duration)}" for i in range(int(max_slice) + 1)]
+            layout["xaxis"]["tickvals"] = tick_positions
+            layout["xaxis"]["ticktext"] = tick_labels
+            layout["xaxis"]["tickangle"] = -45
+
+            # Increase bottom margin to accommodate diagonal labels
+            if "margin" not in layout:
+                layout["margin"] = {}
+            layout["margin"]["b"] = 100
+
+            x_max = (max_slice + 1) * slice_duration
+            layout["xaxis"]["range"] = [0, x_max]
 
         if warning_text:
             if "annotations" not in layout:
@@ -756,12 +1220,23 @@ class PlotGenerator:
 
         customdata = df_primary[active_count_col] if active_count_col else None
 
+        # Get palette colors for primary and secondary traces
+        palette_colors = self._get_palette_colors(2)
+        primary_color = palette_colors[0]
+        secondary_color = (
+            palette_colors[1] if len(palette_colors) > 1 else palette_colors[0]
+        )
+
+        # Extract RGB from colors for fillcolor
+        primary_rgb = mcolors.to_rgb(primary_color)
+        secondary_rgb = mcolors.to_rgb(secondary_color)
+
         # Build primary trace configuration
         primary_trace_config = {
             "x": df_primary[x_col_primary],
             "y": df_primary[y1_metric],
             "mode": primary_style.mode,
-            "line": dict(width=primary_style.line_width, color=NVIDIA_GREEN),
+            "line": dict(width=primary_style.line_width, color=primary_color),
             "name": y1_label,
             "yaxis": "y",
             "customdata": customdata,
@@ -776,7 +1251,7 @@ class PlotGenerator:
         if primary_style.fill:
             primary_trace_config["fill"] = primary_style.fill
             primary_trace_config["fillcolor"] = (
-                f"rgba(118, 185, 0, {primary_style.fill_opacity})"
+                f"rgba({int(primary_rgb[0] * 255)}, {int(primary_rgb[1] * 255)}, {int(primary_rgb[2] * 255)}, {primary_style.fill_opacity})"
             )
 
         fig.add_trace(go.Scatter(**primary_trace_config))
@@ -786,9 +1261,7 @@ class PlotGenerator:
             "x": df_secondary[x_col_secondary],
             "y": df_secondary[y2_metric],
             "mode": secondary_style.mode,
-            "line": dict(
-                width=secondary_style.line_width, color=self.colors["secondary"]
-            ),
+            "line": dict(width=secondary_style.line_width, color=secondary_color),
             "name": y2_label,
             "yaxis": "y2",
             "hovertemplate": f"{x_label}: %{{x:.1f}}s<br>{y2_label}: %{{y:.1f}}<extra></extra>",
@@ -802,7 +1275,7 @@ class PlotGenerator:
         if secondary_style.fill:
             secondary_trace_config["fill"] = secondary_style.fill
             secondary_trace_config["fillcolor"] = (
-                f"rgba({int(self.colors['secondary'][1:3], 16)}, {int(self.colors['secondary'][3:5], 16)}, {int(self.colors['secondary'][5:7], 16)}, {secondary_style.fill_opacity})"
+                f"rgba({int(secondary_rgb[0] * 255)}, {int(secondary_rgb[1] * 255)}, {int(secondary_rgb[2] * 255)}, {secondary_style.fill_opacity})"
             )
 
         fig.add_trace(go.Scatter(**secondary_trace_config))
@@ -861,11 +1334,9 @@ class PlotGenerator:
         x_label = x_label or get_metric_display_name(x_col)
         y_label = y_label or get_metric_display_name(y_metric)
 
-        # Get NVIDIA color scheme for percentile lines
+        # Get theme-specific color palette for percentile lines
         n_percentiles = len(percentile_cols)
-        percentile_colors = get_nvidia_color_scheme(
-            n_percentiles, self.colors["secondary"]
-        )
+        percentile_colors = self._get_palette_colors(n_percentiles)
 
         # Individual request scatter points (semi-transparent)
         fig.add_trace(

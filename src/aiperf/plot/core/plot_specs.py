@@ -115,7 +115,7 @@ class PlotSpec(AIPerfBaseModel):
 
 
 class TimeSlicePlotSpec(PlotSpec):
-    """Specification for timeslice histogram plots."""
+    """Specification for timeslice scatter plots."""
 
     use_slice_duration: bool = Field(
         default=True,
@@ -189,7 +189,7 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
                 stat="avg",
             ),
         ],
-        title="Time to First Token Across Time Slices",
+        title="Average Time to First Token Across Time Slices",
         filename="timeslices_ttft.png",
         use_slice_duration=True,
     ),
@@ -205,7 +205,7 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
                 stat="avg",
             ),
         ],
-        title="Inter Token Latency Across Time Slices",
+        title="Average Inter Token Latency Across Time Slices",
         filename="timeslices_itl.png",
         use_slice_duration=True,
     ),
@@ -221,7 +221,7 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
                 stat="avg",
             ),
         ],
-        title="Request Throughput Across Time Slices",
+        title="Average Request Throughput Across Time Slices",
         filename="timeslices_throughput.png",
         use_slice_duration=True,
     ),
@@ -237,7 +237,7 @@ TIMESLICE_PLOT_SPECS: list[TimeSlicePlotSpec] = [
                 stat="avg",
             ),
         ],
-        title="Request Latency Across Time Slices",
+        title="Average Request Latency Across Time Slices",
         filename="timeslices_latency.png",
         use_slice_duration=True,
     ),

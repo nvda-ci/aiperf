@@ -1097,3 +1097,116 @@ class TestDataLoaderLoadGPUTelemetryJSONL:
 
         # telemetry_data should not be a nested column
         assert "telemetry_data" not in df.columns
+
+
+class TestRunDataGetMetric:
+    """Tests for RunData.get_metric method."""
+
+    def test_get_metric_from_nested_metrics_dict(self, tmp_path: Path) -> None:
+        """Test getting metric from nested 'metrics' structure with dict."""
+        aggregated = {
+            "metrics": {
+                "time_to_first_token": {"avg": 45.0, "unit": "ms", "std": 5.0},
+                "request_latency": {"avg": 500.0, "unit": "ms", "std": 50.0},
+            }
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        metric = run_data.get_metric("time_to_first_token")
+        assert metric is not None
+        assert metric["avg"] == 45.0
+        assert metric["unit"] == "ms"
+        assert metric["std"] == 5.0
+
+    def test_get_metric_from_flat_structure_dict(self, tmp_path: Path) -> None:
+        """Test getting metric from flat top-level structure with dict."""
+        aggregated = {
+            "time_to_first_token": {"avg": 45.0, "unit": "ms", "std": 5.0},
+            "request_latency": {"avg": 500.0, "unit": "ms", "std": 50.0},
+            "input_config": {"some": "config"},
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        metric = run_data.get_metric("time_to_first_token")
+        assert metric is not None
+        assert metric["avg"] == 45.0
+        assert metric["unit"] == "ms"
+
+    def test_get_metric_returns_none_for_missing_metric(self, tmp_path: Path) -> None:
+        """Test that get_metric returns None for metric that doesn't exist."""
+        aggregated = {
+            "time_to_first_token": {"avg": 45.0, "unit": "ms"},
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        metric = run_data.get_metric("nonexistent_metric")
+        assert metric is None
+
+    def test_get_metric_returns_none_for_empty_aggregated(self, tmp_path: Path) -> None:
+        """Test that get_metric returns None when aggregated is empty."""
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated={},
+        )
+
+        metric = run_data.get_metric("time_to_first_token")
+        assert metric is None
+
+    def test_get_metric_prefers_nested_metrics_over_flat(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that nested 'metrics' structure is preferred over flat when both exist."""
+        aggregated = {
+            "time_to_first_token": {"avg": 100.0, "unit": "ms"},
+            "metrics": {
+                "time_to_first_token": {"avg": 45.0, "unit": "ms", "std": 5.0},
+            },
+        }
+
+        run_data = RunData(
+            metadata=RunMetadata(
+                run_name="test", run_path=tmp_path, duration_seconds=None
+            ),
+            requests=None,
+            aggregated=aggregated,
+        )
+
+        metric = run_data.get_metric("time_to_first_token")
+        assert metric is not None
+        assert metric["avg"] == 45.0
+
+    def test_get_metric_handles_metric_result_objects(
+        self, tmp_path: Path, single_run_dir: Path
+    ) -> None:
+        """Test get_metric with MetricResult objects from real data."""
+        loader = DataLoader()
+        run = loader.load_run(single_run_dir)
+
+        if "metrics" in run.aggregated:
+            metric = run.get_metric("time_to_first_token")
+            assert metric is not None
+            assert hasattr(metric, "avg") or "avg" in metric
