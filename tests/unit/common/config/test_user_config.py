@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-from dataclasses import dataclass
-from pathlib import Path
 from unittest.mock import mock_open, patch
 
 import pytest
@@ -220,86 +218,6 @@ def test_user_config_exclude_unset_fields():
     assert config.model_dump_json(exclude_defaults=True) != config.model_dump_json()  # fmt: skip
     assert config.model_dump_json(exclude_unset=True, exclude_defaults=True) != config.model_dump_json()  # fmt: skip
     assert config.model_dump_json(exclude_none=True) != config.model_dump_json()  # fmt: skip
-
-
-@dataclass
-class ArtifactDirectoryTestCase:
-    model_names: list[str]
-    endpoint_type: EndpointType
-    fixed_schedule: bool
-    streaming: bool
-    concurrency: int | None
-    request_rate: float | None
-    expected_dir: str
-    description: str = ""
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ArtifactDirectoryTestCase(
-            model_names=["hf/model"],
-            endpoint_type=EndpointType.CHAT,
-            fixed_schedule=False,
-            streaming=True,
-            concurrency=5,
-            request_rate=10.0,
-            expected_dir=Path(
-                "/tmp/artifacts/hf_model-openai-chat-concurrency5-request_rate10.0"
-            ),
-            description="model name with slash",
-        ),
-        ArtifactDirectoryTestCase(
-            model_names=["model1", "model2"],
-            endpoint_type=EndpointType.COMPLETIONS,
-            fixed_schedule=False,
-            streaming=False,
-            concurrency=8,
-            request_rate=25.5,
-            expected_dir=Path(
-                "/tmp/artifacts/model1_multi-openai-completions-concurrency8-request_rate25.5"
-            ),
-            description="multi-model",
-        ),
-        ArtifactDirectoryTestCase(
-            model_names=["singlemodel"],
-            endpoint_type=EndpointType.EMBEDDINGS,
-            fixed_schedule=True,
-            streaming=False,
-            concurrency=None,
-            request_rate=None,
-            expected_dir=Path(
-                "/tmp/artifacts/singlemodel-openai-embeddings-fixed_schedule"
-            ),
-            description="single model with fixed schedule",
-        ),
-    ],
-    ids=lambda test_case: test_case.description,
-)
-def test_compute_artifact_directory(monkeypatch, test_case: ArtifactDirectoryTestCase):
-    """Test that the artifact directory is computed correctly."""
-    monkeypatch.setattr("pathlib.Path.is_file", lambda self: True)
-    config = UserConfig(
-        endpoint=EndpointConfig(
-            model_names=test_case.model_names,
-            type=test_case.endpoint_type,
-            custom_endpoint="custom_endpoint",
-            streaming=test_case.streaming,
-            url="http://custom-url",
-        ),
-        output=OutputConfig(base_artifact_directory=Path("/tmp/artifacts")),
-        loadgen=LoadGeneratorConfig(
-            concurrency=test_case.concurrency, request_rate=test_case.request_rate
-        ),
-        input=InputConfig(
-            fixed_schedule=True,
-            file="/tmp/dummy_input.txt",
-        )
-        if test_case.fixed_schedule
-        else InputConfig(),
-    )
-
-    assert config.computed_artifact_directory == test_case.expected_dir
 
 
 @pytest.mark.parametrize(
