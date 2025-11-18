@@ -84,8 +84,8 @@ class TestGpuTelemetry:
         assert result.has_gpu_telemetry
 
         # Verify GPU telemetry export JSONL file exists
-        export_file = result.artifacts_dir / "gpu_telemetry_export.jsonl"
-        assert export_file.exists(), "GPU telemetry export file should exist"
+        export_file = result._find_file("**/*profile_export_gpu_telemetry.jsonl")
+        assert export_file is not None, "GPU telemetry export file should exist"
 
         # Read and validate JSONL content
         content = export_file.read_text()
@@ -140,8 +140,8 @@ class TestGpuTelemetry:
         )
 
         # Verify custom filename is used
-        export_file = result.artifacts_dir / "custom_test_gpu_telemetry.jsonl"
-        if export_file.exists():
+        export_file = result._find_file("**/*custom_test_gpu_telemetry.jsonl")
+        if export_file is not None:
             # Verify content is valid
             content = export_file.read_text()
             lines = content.splitlines()
