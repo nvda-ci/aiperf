@@ -450,9 +450,11 @@ Type of UI to use.
 <br>_Choices: [`none`, `simple`, `dashboard`]_
 <br>_Default: `dashboard`_
 
+<hr>
+
 ## `aiperf plot`
 
-## Parameters Options
+## Parameters
 
 #### `--paths`, `--empty-paths` `<list>`
 
