@@ -82,7 +82,7 @@ FROM base AS env-builder
 
 WORKDIR /workspace
 
-# Build ffmpeg from source with libvpx and install chromium for kaleido
+# Build ffmpeg from source with libvpx and install Chrome dependencies for kaleido
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
@@ -91,7 +91,30 @@ RUN apt-get update -y && \
         wget \
         yasm \
         libvpx-dev \
-        chromium \
+        libnss3 \
+        libnspr4 \
+        libdbus-1-3 \
+        libatk-1.0-0 \
+        libatk-bridge-2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libxcb1 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libasound2 \
+        libatspi2.0-0 \
+        libx11-6 \
+        libxext6 \
+        libexpat1 \
+        libglib2.0-0 \
+        libgio-2.0-0 \
+        libgobject-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and build ffmpeg with libvpx (VP9 codec)
@@ -126,6 +149,9 @@ RUN mkdir -p /app /app/artifacts /app/.cache \
 COPY pyproject.toml .
 RUN uv sync --active --no-install-project
 
+# Download Chrome for kaleido into the venv
+RUN python -c "import kaleido; kaleido.get_chrome_sync()"
+
 # Copy the rest of the application
 COPY --from=wheel-builder /dist /dist
 RUN uv pip install /dist/aiperf-*.whl \
@@ -147,10 +173,9 @@ COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
 ENV PATH="/opt/ffmpeg/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
 
-# Copy chromium binaries and libraries for kaleido
-COPY --from=env-builder --chown=1000:1000 /usr/bin/chromium /usr/bin/chromium
-COPY --from=env-builder --chown=1000:1000 /usr/lib/chromium /usr/lib/chromium
-COPY --from=env-builder --chown=1000:1000 /usr/share/chromium /usr/share/chromium
+# Copy shared libraries for Chrome (Chrome itself is in venv from kaleido.get_chrome_sync())
+COPY --from=env-builder --chown=1000:1000 /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
+COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 
 # Setup the directories with permissions for nvs user
 COPY --from=env-builder --chown=1000:1000 /app /app
@@ -162,7 +187,7 @@ COPY --from=env-builder --chown=1000:1000 /opt/aiperf/venv /opt/aiperf/venv
 
 ENV VIRTUAL_ENV=/opt/aiperf/venv \
     PATH="/opt/aiperf/venv/bin:${PATH}" \
-    CHROME_BIN=/usr/bin/chromium \
+    BROWSER_PATH=/opt/aiperf/venv/lib/python3.13/site-packages/choreographer/cli/browser_exe/chrome-linux64/chrome \
     CHROMIUM_FLAGS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
 
 # Set bash as entrypoint
