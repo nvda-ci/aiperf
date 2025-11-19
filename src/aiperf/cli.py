@@ -33,3 +33,27 @@ def profile(
 
         service_config = service_config or load_service_config()
         run_system_controller(user_config, service_config)
+
+
+@app.command(name="plot")
+def plot(
+    paths: list[str] | None = None,
+    output: str | None = None,
+    theme: str = "light",
+) -> None:
+    """Generate PNG visualizations from AIPerf profiling data.
+
+    TODO [AIP-546 and AIP-549]: Update for HTML and hosted options.
+    Currently creates static PNG plot images from profiling results. Automatically detects
+    whether to generate multi-run comparison plots or single-run time series plots
+    based on the directory structure.
+
+    Args:
+        paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
+        output: Directory to save generated plots. Defaults to <first_path>/plots if not specified.
+        theme: Plot theme to use: 'light' (white background) or 'dark' (dark background). Defaults to 'light'.
+    """
+    with exit_on_error(title="Error Running Plot Command"):
+        from aiperf.plot.cli_runner import run_plot_controller
+
+        run_plot_controller(paths, output, theme=theme)

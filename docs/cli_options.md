@@ -8,6 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 ## `aiperf` Commands
 
 - [`profile`](#aiperf-profile) - Run the Profile subcommand.
+- [`plot`](#aiperf-plot) - Generate PNG visualizations from AIPerf profiling data.
 
 ## `aiperf profile`
 
@@ -448,3 +449,22 @@ Number of services to spawn for processing records. The higher the request rate,
 Type of UI to use.
 <br>_Choices: [`none`, `simple`, `dashboard`]_
 <br>_Default: `dashboard`_
+
+<hr>
+
+## `aiperf plot`
+
+## Parameters
+
+#### `--paths`, `--empty-paths` `<list>`
+
+Paths to profiling run directories. Defaults to ./artifacts if not specified.
+
+#### `--output` `<str>`
+
+Directory to save generated plots. Defaults to <first_path>/plots if not specified.
+
+#### `--theme` `<str>`
+
+Plot theme to use: 'light' (white background) or 'dark' (dark background). Defaults to 'light'.
+<br>_Default: `light`_
