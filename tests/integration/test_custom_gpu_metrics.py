@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Integration tests for custom GPU metrics CSV loading functionality."""
 
+import platform
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,10 @@ from tests.integration.conftest import AIPerfCLI
 from tests.integration.models import AIPerfMockServer
 
 
+@pytest.mark.skipif(
+    platform.system() == "Darwin",
+    reason="Requires NVIDIA GPUs for DCGM telemetry (only available on Linux CI).",
+)
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestCustomGpuMetrics:
