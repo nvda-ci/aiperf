@@ -94,8 +94,8 @@ RUN apt-get update -y && \
         libnss3 \
         libnspr4 \
         libdbus-1-3 \
-        libatk-1.0-0 \
-        libatk-bridge-2.0-0 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
         libcups2 \
         libdrm2 \
         libxkbcommon0 \
@@ -113,8 +113,6 @@ RUN apt-get update -y && \
         libxext6 \
         libexpat1 \
         libglib2.0-0 \
-        libgio-2.0-0 \
-        libgobject-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and build ffmpeg with libvpx (VP9 codec)
@@ -174,6 +172,8 @@ ENV PATH="/opt/ffmpeg/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
 
 # Copy shared libraries for Chrome (Chrome itself is in venv from kaleido.get_chrome_sync())
+# Note: Copying full lib directories to include all transitive dependencies
+# TODO: Optimize by copying only required libraries + their dependencies
 COPY --from=env-builder --chown=1000:1000 /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
 COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
 
