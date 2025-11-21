@@ -1,16 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import asyncio
 import time
 from collections.abc import Awaitable, Callable
 
-import aiohttp
 from prometheus_client.parser import text_string_to_metric_families
 
 from aiperf.common.environment import Environment
-from aiperf.common.hooks import background_task, on_init, on_stop
-from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
+from aiperf.common.mixins import BaseMetricsCollectorMixin
 from aiperf.common.models import ErrorDetails, TelemetryMetrics, TelemetryRecord
 from aiperf.gpu_telemetry.constants import (
     DCGM_TO_FIELD_MAPPING,
@@ -20,21 +17,19 @@ from aiperf.gpu_telemetry.constants import (
 __all__ = ["TelemetryDataCollector"]
 
 
-class TelemetryDataCollector(AIPerfLifecycleMixin):
+class TelemetryDataCollector(BaseMetricsCollectorMixin[TelemetryRecord]):
     """Collects telemetry metrics from DCGM metrics endpoint using async architecture.
 
     Modern async collector that fetches GPU metrics from DCGM exporter and converts them to
-    TelemetryRecord objects. Uses AIPerf lifecycle management and background tasks.
-    - Extends AIPerfLifecycleMixin for proper lifecycle management
-    - Uses aiohttp for async HTTP requests
+    TelemetryRecord objects. Uses BaseMetricsCollectorMixin for HTTP collection patterns.
+    - Extends BaseMetricsCollectorMixin for async HTTP collection
     - Uses prometheus_client for robust metric parsing
-    - Uses @background_task for periodic collection
     - Sends TelemetryRecord list via callback function
-    - No local storage (follows centralized architecture)
 
     Args:
         dcgm_url: URL of the DCGM metrics endpoint (e.g., "http://localhost:9400/metrics")
-        collection_interval: Interval in seconds between metric collections (default: 1.0)
+        collection_interval: Interval in seconds between metric collections (default: from Environment)
+        reachability_timeout: Timeout in seconds for reachability checks (default: from Environment)
         record_callback: Optional async callback to receive collected records.
             Signature: async (records: list[TelemetryRecord], collector_id: str) -> None
         error_callback: Optional async callback to receive collection errors.
@@ -46,174 +41,40 @@ class TelemetryDataCollector(AIPerfLifecycleMixin):
         self,
         dcgm_url: str,
         collection_interval: float | None = None,
+        reachability_timeout: float | None = None,
         record_callback: Callable[[list[TelemetryRecord], str], Awaitable[None]]
         | None = None,
         error_callback: Callable[[ErrorDetails, str], Awaitable[None]] | None = None,
         collector_id: str = "telemetry_collector",
     ) -> None:
-        self._dcgm_url = dcgm_url
-        self._collection_interval = (
-            collection_interval
-            if collection_interval is not None
-            else Environment.GPU.COLLECTION_INTERVAL
-        )
-        self._record_callback = record_callback
-        self._error_callback = error_callback
         self._scaling_factors = SCALING_FACTORS
-        self._session: aiohttp.ClientSession | None = None
-
-        super().__init__(id=collector_id)
-
-    @on_init
-    async def _initialize_http_client(self) -> None:
-        """Initialize the aiohttp client session.
-
-        Called automatically by AIPerfLifecycleMixin during initialization phase.
-        Creates an aiohttp ClientSession with appropriate timeout settings.
-        """
-        timeout = aiohttp.ClientTimeout(total=Environment.GPU.REACHABILITY_TIMEOUT)
-        self._session = aiohttp.ClientSession(timeout=timeout)
-
-    @on_stop
-    async def _cleanup_http_client(self) -> None:
-        """Clean up the aiohttp client session.
-
-        Called automatically by AIPerfLifecycleMixin during shutdown phase.
-        Race conditions with background tasks are handled by checking
-        self.stop_requested in the background task itself.
-
-        Raises:
-            Exception: Any exception from session.close() is allowed to propagate
-        """
-        if self._session:
-            await self._session.close()
-            self._session = None
-
-    async def is_url_reachable(self) -> bool:
-        """Check if DCGM metrics endpoint is accessible.
-
-        Attempts HEAD request first for efficiency, falls back to GET if HEAD is not supported.
-        Uses existing session if available, otherwise creates a temporary session.
-
-        Returns:
-            bool: True if endpoint responds with HTTP 200, False for any error or other status
-        """
-        if not self._dcgm_url:
-            return False
-
-        # Use existing session if available, otherwise create a temporary one
-        if self._session:
-            try:
-                # Try HEAD first for efficiency
-                async with self._session.head(
-                    self._dcgm_url, allow_redirects=False
-                ) as response:
-                    if response.status == 200:
-                        return True
-                # Fall back to GET if HEAD is not supported
-                async with self._session.get(self._dcgm_url) as response:
-                    return response.status == 200
-            except (aiohttp.ClientError, asyncio.TimeoutError):
-                return False
-        else:
-            # Create a temporary session for reachability check
-            timeout = aiohttp.ClientTimeout(total=Environment.GPU.REACHABILITY_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as temp_session:
-                try:
-                    # Try HEAD first for efficiency
-                    async with temp_session.head(
-                        self._dcgm_url, allow_redirects=False
-                    ) as response:
-                        if response.status == 200:
-                            return True
-                    # Fall back to GET if HEAD is not supported
-                    async with temp_session.get(self._dcgm_url) as response:
-                        return response.status == 200
-                except (aiohttp.ClientError, asyncio.TimeoutError):
-                    return False
-
-    @background_task(immediate=True, interval=lambda self: self._collection_interval)
-    async def _collect_telemetry_task(self) -> None:
-        """Background task for collecting telemetry data at regular intervals.
-
-        This uses the @background_task decorator which automatically handles
-        lifecycle management and stopping when the collector is stopped.
-        The interval is set to the collection_interval so this runs periodically.
-
-        Errors during collection are caught and sent via error_callback if configured.
-        CancelledError is propagated to allow graceful shutdown.
-
-        Raises:
-            asyncio.CancelledError: Propagated to signal task cancellation during shutdown
-        """
-        try:
-            await self._collect_and_process_metrics()
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            if self._error_callback:
-                try:
-                    await self._error_callback(ErrorDetails.from_exception(e), self.id)
-                except Exception as callback_error:
-                    self.error(f"Failed to send error via callback: {callback_error}")
-            else:
-                self.error(f"Telemetry collection error: {e}")
+        super().__init__(
+            endpoint_url=dcgm_url,
+            collection_interval=collection_interval
+            or Environment.GPU.COLLECTION_INTERVAL,
+            reachability_timeout=reachability_timeout
+            or Environment.GPU.REACHABILITY_TIMEOUT,
+            record_callback=record_callback,
+            error_callback=error_callback,
+            id=collector_id,
+        )
 
     async def _collect_and_process_metrics(self) -> None:
         """Collect metrics from DCGM endpoint and process them into TelemetryRecord objects.
 
-        Orchestrates the full collection flow:
-        1. Fetches raw metrics data from DCGM endpoint
-        2. Parses Prometheus-format data into TelemetryRecord objects
-        3. Sends records via callback (if configured and records are not empty)
+        Implements the abstract method from BaseMetricsCollectorMixin.
 
-        Callback failures are caught and logged as warnings without stopping collection.
+        Orchestrates the full collection flow:
+        1. Fetches raw metrics data from DCGM endpoint (via mixin's _fetch_metrics_text)
+        2. Parses Prometheus-format data into TelemetryRecord objects
+        3. Sends records via callback (via mixin's _send_records_via_callback)
 
         Raises:
             Exception: Any exception from fetch or parse is logged and re-raised
         """
-        try:
-            metrics_data = await self._fetch_metrics()
-            records = self._parse_metrics_to_records(metrics_data)
-
-            if records and self._record_callback:
-                try:
-                    await self._record_callback(records, self.id)
-                except Exception as e:
-                    self.warning(f"Failed to send telemetry records via callback: {e}")
-
-        except Exception as e:
-            self.error(f"Error collecting and processing metrics: {e}")
-            raise
-
-    async def _fetch_metrics(self) -> str:
-        """Fetch raw metrics data from DCGM endpoint using aiohttp.
-
-        Performs safety checks before making HTTP request:
-        - Verifies stop_requested flag to allow graceful shutdown
-        - Checks session is initialized and not closed
-
-        Returns:
-            str: Raw metrics text in Prometheus exposition format
-
-        Raises:
-            RuntimeError: If HTTP session is not initialized
-            aiohttp.ClientError: If HTTP request fails (4xx, 5xx, network errors)
-            asyncio.CancelledError: If collector is being stopped or session is closed
-        """
-        if self.stop_requested:
-            raise asyncio.CancelledError
-
-        if not self._session:
-            raise RuntimeError("HTTP session not initialized. Call initialize() first.")
-
-        if self._session.closed:
-            raise asyncio.CancelledError
-
-        async with self._session.get(self._dcgm_url) as response:
-            response.raise_for_status()
-            text = await response.text()
-            return text
+        metrics_data = await self._fetch_metrics_text()
+        records = self._parse_metrics_to_records(metrics_data)
+        await self._send_records_via_callback(records)
 
     def _parse_metrics_to_records(self, metrics_data: str) -> list[TelemetryRecord]:
         """Parse DCGM metrics text into TelemetryRecord objects using prometheus_client.
@@ -286,7 +147,7 @@ class TelemetryDataCollector(AIPerfLifecycleMixin):
 
             record = TelemetryRecord(
                 timestamp_ns=current_timestamp,
-                dcgm_url=self._dcgm_url,
+                dcgm_url=self.endpoint_url,
                 gpu_index=gpu_index,
                 gpu_uuid=metadata.get("uuid", f"unknown-gpu-{gpu_index}"),
                 gpu_model_name=metadata.get("model_name", f"GPU {gpu_index}"),

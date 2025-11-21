@@ -38,8 +38,8 @@ class TestTelemetryDataCollectorCore:
             collector_id="test_collector",
         )
 
-        assert collector._dcgm_url == "http://localhost:9401/metrics"
-        assert collector._collection_interval == 0.1
+        assert collector.endpoint_url == "http://localhost:9401/metrics"
+        assert collector.collection_interval == 0.1
         assert collector.id == "test_collector"
         assert collector._session is None  # Not initialized yet
         assert not collector.was_initialized
@@ -54,8 +54,8 @@ class TestTelemetryDataCollectorCore:
         """
         collector = TelemetryDataCollector("http://localhost:9401/metrics")
 
-        assert collector._dcgm_url == "http://localhost:9401/metrics"
-        assert collector._collection_interval == 0.33  # Default collection interval
+        assert collector.endpoint_url == "http://localhost:9401/metrics"
+        assert collector.collection_interval == 0.33  # Default collection interval
         assert collector.id == "telemetry_collector"  # Default ID
         assert collector._record_callback is None
         assert collector._error_callback is None
@@ -274,7 +274,7 @@ class TestHttpCommunication:
 
             await collector.initialize()
 
-            result = await collector._fetch_metrics()
+            result = await collector._fetch_metrics_text()
             assert result == sample_dcgm_data
 
             await collector.stop()
@@ -291,7 +291,7 @@ class TestHttpCommunication:
 
         # Should raise CancelledError due to closed session
         with pytest.raises(asyncio.CancelledError):
-            await collector._fetch_metrics()
+            await collector._fetch_metrics_text()
 
     @pytest.mark.asyncio
     async def test_fetch_metrics_when_stop_requested(self):
@@ -305,7 +305,7 @@ class TestHttpCommunication:
 
         # Should raise CancelledError
         with pytest.raises(asyncio.CancelledError):
-            await collector._fetch_metrics()
+            await collector._fetch_metrics_text()
 
         # Clean up
         collector.stop_requested = False
@@ -318,7 +318,7 @@ class TestHttpCommunication:
 
         # Don't initialize - session is None
         with pytest.raises(RuntimeError, match="HTTP session not initialized"):
-            await collector._fetch_metrics()
+            await collector._fetch_metrics_text()
 
 
 class TestCollectionLifecycle:
@@ -375,8 +375,8 @@ class TestCollectionLifecycle:
 
             await collector.initialize()
 
-            await collector._collect_telemetry_task()
-            await collector._collect_telemetry_task()
+            await collector._collect_metrics_task()
+            await collector._collect_metrics_task()
 
             await collector.stop()
 
@@ -575,7 +575,7 @@ class TestDataProcessingEdgeCases:
             mock_get.side_effect = aiohttp.ClientError("Connection failed")
 
             await collector.initialize()
-            await collector._collect_telemetry_task()
+            await collector._collect_metrics_task()
             await collector.stop()
 
             mock_error_callback.assert_called_once()
