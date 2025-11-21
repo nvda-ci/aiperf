@@ -122,6 +122,41 @@ class MockServerConfig(BaseSettings):
         Parameter(name="--dcgm-seed"),
     ] = None
 
+    # Prometheus Faker Options
+    prom_enabled: Annotated[
+        bool,
+        Field(description="Enable Prometheus metrics endpoints"),
+        Parameter(name="--prom-enabled"),
+    ] = True
+
+    prom_server_type: Annotated[
+        Literal["small", "medium", "large", "vllm", "dynamo"],
+        Field(description="Server size configuration for metrics"),
+        Parameter(name="--prom-server-type"),
+    ] = "medium"
+
+    prom_num_servers: Annotated[
+        int,
+        Field(description="Number of server instances to simulate", ge=1, le=8),
+        Parameter(name="--prom-num-servers"),
+    ] = 2
+
+    prom_initial_load: Annotated[
+        float,
+        Field(
+            description="Initial server load level (0.0=idle, 1.0=max)",
+            ge=0.0,
+            le=1.0,
+        ),
+        Parameter(name="--prom-initial-load"),
+    ] = 0.7
+
+    prom_seed: Annotated[
+        int | None,
+        Field(description="Random seed for Prometheus metrics"),
+        Parameter(name="--prom-seed"),
+    ] = None
+
 
 server_config: MockServerConfig = MockServerConfig()
 

@@ -15,6 +15,7 @@ from aiperf_mock_server.models import (
     Message,
     RankingRequest,
 )
+from aiperf_mock_server.prometheus_faker import SERVER_CONFIGS, PrometheusFaker
 from aiperf_mock_server.tokens import TokenizedText, Tokenizer
 from fastapi.testclient import TestClient
 
@@ -55,6 +56,20 @@ def dcgm_faker():
 def gpu_config():
     """Get H200 GPU configuration."""
     return GPU_CONFIGS["h200"]
+
+
+@pytest.fixture
+def prometheus_faker():
+    """Create a PrometheusFaker instance with default settings."""
+    return PrometheusFaker(
+        server_type="medium", num_servers=2, seed=42, initial_load=0.7
+    )
+
+
+@pytest.fixture
+def server_config():
+    """Get medium server configuration."""
+    return SERVER_CONFIGS["medium"]
 
 
 @pytest.fixture

@@ -25,6 +25,7 @@ from aiperf_mock_server.models import (
     TextChoice,
     TextCompletionResponse,
 )
+from aiperf_mock_server.prometheus_faker import PrometheusFaker
 from aiperf_mock_server.utils import (
     RequestContext,
     stream_chat_completion,
@@ -35,6 +36,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 dcgm_fakers: list[DCGMFaker] = []
+prom_fakers: dict[str, object] = {}
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,17 @@ def _create_dcgm_faker(seed: int | None) -> DCGMFaker:
         seed=seed,
         hostname=server_config.dcgm_hostname,
         initial_load=server_config.dcgm_initial_load,
+    )
+
+
+def _create_prom_faker(metric_type: str, seed: int | None):
+    """Create a Prometheus faker instance with current config."""
+    return PrometheusFaker(
+        server_type=server_config.prom_server_type,
+        num_servers=server_config.prom_num_servers,
+        seed=seed,
+        initial_load=server_config.prom_initial_load,
+        metric_type=metric_type,
     )
 
 
@@ -68,6 +81,29 @@ async def lifespan(_: FastAPI):
         server_config.dcgm_num_gpus,
         server_config.dcgm_gpu_name,
     )
+
+    if server_config.prom_enabled:
+        metric_types = [
+            "generic",
+            "vllm",
+            "triton",
+            "sglang",
+            "kvbm",
+            "dynamo_frontend",
+            "dynamo_component",
+        ]
+        for i, metric_type in enumerate(metric_types):
+            seed = (
+                None if server_config.prom_seed is None else server_config.prom_seed + i
+            )
+            prom_fakers[metric_type] = _create_prom_faker(metric_type, seed)
+        logger.info(
+            "Prometheus fakers initialized: types=%s, server_type=%s, num_servers=%d",
+            metric_types,
+            server_config.prom_server_type,
+            server_config.prom_num_servers,
+        )
+
     yield
 
 
@@ -422,3 +458,38 @@ async def dcgm_metrics(instance_id: int) -> PlainTextResponse:
     if index < 0 or index >= len(dcgm_fakers):
         raise HTTPException(status_code=404, detail="Invalid DCGM instance")
     return PlainTextResponse(dcgm_fakers[index].generate(), media_type="text/plain")
+
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+
+@app.get("/{metric_type}/metrics")
+async def prometheus_metrics(metric_type: str) -> PlainTextResponse:
+    """Prometheus metrics endpoint for server metrics.
+
+    Available metric types:
+    - generic: Generic HTTP server metrics
+    - vllm: vLLM-specific metrics
+    - triton: NVIDIA Triton Inference Server metrics
+    - sglang: SGLang metrics
+    - kvbm: NVIDIA KVBM (KV Block Manager) metrics
+    - dynamo_frontend: AI Dynamo frontend metrics
+    - dynamo_component: AI Dynamo component metrics
+    """
+    if not server_config.prom_enabled:
+        raise HTTPException(
+            status_code=404, detail="Prometheus metrics endpoints not enabled"
+        )
+
+    if metric_type not in prom_fakers:
+        available_types = list(prom_fakers.keys())
+        raise HTTPException(
+            status_code=404,
+            detail=f"Invalid metric type: {metric_type}. Available: {available_types}",
+        )
+
+    return PlainTextResponse(
+        prom_fakers[metric_type].generate(), media_type="text/plain"
+    )

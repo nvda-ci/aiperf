@@ -410,6 +410,12 @@ The delay in seconds before cancelling requests. This is used when --request-can
 
 Enable GPU telemetry console display and optionally specify: (1) 'dashboard' for realtime dashboard mode, (2) custom DCGM exporter URLs (e.g., http://node1:9401/metrics), (3) custom metrics CSV file (e.g., custom_gpu_metrics.csv). Default endpoints localhost:9400 and localhost:9401 are always attempted. Example: --gpu-telemetry dashboard node1:9400 custom.csv.
 
+## Server Metrics Options
+
+#### `--server-metrics` `<list>`
+
+Enable server metrics collection and optionally specify custom Prometheus-compatible endpoint URLs (e.g., http://node1:8081/metrics, http://node2:9090/metrics). By default, automatically adds the inference endpoint base URL + /metrics (e.g., if --url http://localhost:8000/v1/chat, adds http://localhost:8000/metrics). You can also specify base URLs (e.g., node1:8081) which will have /metrics appended. Example: --server-metrics (uses inference endpoint) or --server-metrics node1:8081 node2:9090/metrics.
+
 ## ZMQ Communication Options
 
 #### `--zmq-host` `<str>`
