@@ -5,7 +5,7 @@ from pydantic import Field
 
 from aiperf.common.enums import CreditPhase, MessageType
 from aiperf.common.messages.service_messages import BaseServiceMessage
-from aiperf.common.models import Conversation, Turn
+from aiperf.common.models import Conversation, DatasetMetadata, Turn
 from aiperf.common.types import MessageTypeT
 
 
@@ -14,12 +14,10 @@ class ConversationRequestMessage(BaseServiceMessage):
 
     message_type: MessageTypeT = MessageType.CONVERSATION_REQUEST
 
-    conversation_id: str | None = Field(
-        default=None, description="The session ID of the conversation"
-    )
+    conversation_id: str = Field(..., description="The session ID of the conversation")
     credit_phase: CreditPhase | None = Field(
         default=None,
-        description="The type of credit phase (either warmup or profiling). If not provided, the timing manager will use the default credit phase.",
+        description="The type of credit phase (either warmup or profiling). If not provided, the dataset manager will use the default credit phase.",
     )
 
 
@@ -54,24 +52,12 @@ class ConversationTurnResponseMessage(BaseServiceMessage):
     turn: Turn = Field(..., description="The turn data")
 
 
-class DatasetTimingRequest(BaseServiceMessage):
-    """Message for a dataset timing request."""
-
-    message_type: MessageTypeT = MessageType.DATASET_TIMING_REQUEST
-
-
-class DatasetTimingResponse(BaseServiceMessage):
-    """Message for a dataset timing response."""
-
-    message_type: MessageTypeT = MessageType.DATASET_TIMING_RESPONSE
-
-    timing_data: list[tuple[int, str]] = Field(
-        ...,
-        description="The timing data of the dataset. Tuple of (timestamp, conversation_id)",
-    )
-
-
 class DatasetConfiguredNotification(BaseServiceMessage):
     """Notification sent to notify other services that the dataset has been configured."""
 
     message_type: MessageTypeT = MessageType.DATASET_CONFIGURED_NOTIFICATION
+
+    metadata: DatasetMetadata = Field(
+        ...,
+        description="The metadata of the dataset.",
+    )

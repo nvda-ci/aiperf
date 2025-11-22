@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the TimingManager service."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,15 +10,16 @@ from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import TimingMode
 from aiperf.common.environment import Environment
 from aiperf.common.messages import (
-    DatasetTimingRequest,
-    DatasetTimingResponse,
+    DatasetConfiguredNotification,
     ProfileConfigureCommand,
 )
+from aiperf.common.models import DatasetMetadata
 from aiperf.timing.timing_manager import TimingManager
+from tests.unit.timing.conftest import create_mock_dataset_metadata_with_schedule
 
 
-class TestTimingManagerDatasetTimeout:
-    """Test suite for TimingManager dataset request timeout behavior."""
+class TestTimingManagerDatasetConfiguration:
+    """Test suite for TimingManager dataset configuration via notification."""
 
     def _create_timing_manager(
         self, service_config: ServiceConfig, user_config: UserConfig
@@ -52,96 +53,175 @@ class TestTimingManagerDatasetTimeout:
         )
 
     @pytest.fixture
-    def mock_dataset_client(self):
-        """Create a mock dataset request client with a sample response."""
-        client = AsyncMock()
-        response = DatasetTimingResponse(
-            service_id="test-dataset-manager",
-            timing_data=[(0, "conv1"), (100, "conv2")],
+    def mock_dataset_metadata(self) -> DatasetMetadata:
+        """Create mock dataset metadata with schedule."""
+        return create_mock_dataset_metadata_with_schedule(
+            schedule=[(0, "conv1"), (100, "conv2"), (200, "conv3")]
         )
-        client.request = AsyncMock(return_value=response)
-        return client
 
     @pytest.mark.asyncio
-    async def test_profile_configure_uses_dataset_timeout_for_fixed_schedule(
-        self, service_config, user_config_fixed_schedule, mock_dataset_client
+    async def test_profile_configure_waits_for_dataset_notification_fixed_schedule(
+        self,
+        service_config,
+        user_config_fixed_schedule,
+        mock_dataset_metadata,
     ):
-        """Test that profile configure command uses DATASET.CONFIGURATION_TIMEOUT for fixed schedule mode."""
+        """Test that profile configure command waits for dataset notification for fixed schedule mode."""
         manager = self._create_timing_manager(
             service_config, user_config_fixed_schedule
         )
-        manager.dataset_request_client = mock_dataset_client
 
         with patch(
             "aiperf.timing.timing_manager.CreditIssuingStrategyFactory.create_instance"
         ) as mock_factory:
             mock_factory.return_value = MagicMock()
 
-            command = ProfileConfigureCommand.model_construct(
-                service_id="test-system-controller",
-                config={},
+            # Start configure command in background (it will wait for notification)
+            import asyncio
+
+            configure_task = asyncio.create_task(
+                manager._profile_configure_command(
+                    ProfileConfigureCommand.model_construct(
+                        service_id="test-system-controller",
+                        config={},
+                    )
+                )
             )
 
-            await manager._profile_configure_command(command)
+            # Wait a bit to ensure the command is waiting
+            await asyncio.sleep(0.1)
 
-            # Verify dataset request client was called with correct timeout
-            mock_dataset_client.request.assert_called_once()
-            call_args = mock_dataset_client.request.call_args
-
-            assert (
-                call_args.kwargs["timeout"] == Environment.DATASET.CONFIGURATION_TIMEOUT
+            # Send dataset configured notification
+            await manager._on_dataset_configured_notification(
+                DatasetConfiguredNotification(
+                    service_id="test-dataset-manager",
+                    metadata=mock_dataset_metadata,
+                )
             )
-            assert isinstance(call_args.kwargs["message"], DatasetTimingRequest)
-            assert call_args.kwargs["message"].service_id == "test-timing-manager"
+
+            # Wait for configure command to complete
+            await configure_task
+
+            # Verify the dataset metadata was set
+            assert manager._dataset_metadata == mock_dataset_metadata
+
+            # Verify the strategy factory was called with dataset metadata
+            mock_factory.assert_called_once()
+            call_kwargs = mock_factory.call_args.kwargs
+            assert "dataset_metadata" in call_kwargs
+            assert call_kwargs["dataset_metadata"] == mock_dataset_metadata
 
     @pytest.mark.asyncio
-    async def test_profile_configure_does_not_call_dataset_for_request_rate(
-        self, service_config, user_config_request_rate
+    async def test_profile_configure_waits_for_dataset_notification_request_rate(
+        self,
+        service_config,
+        user_config_request_rate,
+        mock_dataset_metadata,
     ):
-        """Test that profile configure command does not call dataset manager for non-fixed-schedule modes."""
+        """Test that profile configure command waits for dataset notification for request rate mode."""
         manager = self._create_timing_manager(service_config, user_config_request_rate)
 
-        mock_dataset_client = AsyncMock()
-        manager.dataset_request_client = mock_dataset_client
-
         with patch(
             "aiperf.timing.timing_manager.CreditIssuingStrategyFactory.create_instance"
         ) as mock_factory:
             mock_factory.return_value = MagicMock()
 
-            command = ProfileConfigureCommand.model_construct(
-                service_id="test-system-controller",
-                config={},
+            # Start configure command in background (it will wait for notification)
+            import asyncio
+
+            configure_task = asyncio.create_task(
+                manager._profile_configure_command(
+                    ProfileConfigureCommand.model_construct(
+                        service_id="test-system-controller",
+                        config={},
+                    )
+                )
             )
 
-            await manager._profile_configure_command(command)
+            # Wait a bit to ensure the command is waiting
+            await asyncio.sleep(0.1)
 
-            # Verify dataset request client was NOT called for request rate mode
-            mock_dataset_client.request.assert_not_called()
+            # Send dataset configured notification
+            await manager._on_dataset_configured_notification(
+                DatasetConfiguredNotification(
+                    service_id="test-dataset-manager",
+                    metadata=mock_dataset_metadata,
+                )
+            )
+
+            # Wait for configure command to complete
+            await configure_task
+
+            # Verify the dataset metadata was set
+            assert manager._dataset_metadata == mock_dataset_metadata
+
+            # Verify the strategy factory was called with dataset metadata
+            mock_factory.assert_called_once()
+            call_kwargs = mock_factory.call_args.kwargs
+            assert "dataset_metadata" in call_kwargs
+            assert call_kwargs["dataset_metadata"] == mock_dataset_metadata
 
     @pytest.mark.asyncio
-    async def test_dataset_timeout_uses_environment_constant(
-        self, service_config, user_config_fixed_schedule, mock_dataset_client
+    async def test_dataset_configuration_timeout(
+        self, service_config, user_config_fixed_schedule
     ):
-        """Test that the timeout value used is exactly Environment.DATASET.CONFIGURATION_TIMEOUT."""
+        """Test that profile configure command times out if dataset notification is not received."""
         manager = self._create_timing_manager(
             service_config, user_config_fixed_schedule
         )
-        manager.dataset_request_client = mock_dataset_client
 
+        # Mock the timeout to be very short for testing
+        import asyncio
+
+        with (
+            patch.object(Environment.DATASET, "CONFIGURATION_TIMEOUT", 0.1),
+            pytest.raises(asyncio.TimeoutError),
+        ):
+            await manager._profile_configure_command(
+                ProfileConfigureCommand.model_construct(
+                    service_id="test-system-controller",
+                    config={},
+                )
+            )
+
+    @pytest.mark.asyncio
+    async def test_dataset_notification_before_configure(
+        self,
+        service_config,
+        user_config_fixed_schedule,
+        mock_dataset_metadata,
+    ):
+        """Test that dataset notification can be received before profile configure command."""
+        manager = self._create_timing_manager(
+            service_config, user_config_fixed_schedule
+        )
+
+        # Send dataset configured notification BEFORE configure command
+        await manager._on_dataset_configured_notification(
+            DatasetConfiguredNotification(
+                service_id="test-dataset-manager",
+                metadata=mock_dataset_metadata,
+            )
+        )
+
+        # Verify the dataset metadata was set
+        assert manager._dataset_metadata == mock_dataset_metadata
+
+        # Now send configure command - it should proceed immediately
         with patch(
             "aiperf.timing.timing_manager.CreditIssuingStrategyFactory.create_instance"
         ) as mock_factory:
             mock_factory.return_value = MagicMock()
 
-            command = ProfileConfigureCommand.model_construct(
-                service_id="test-system-controller",
-                config={},
+            await manager._profile_configure_command(
+                ProfileConfigureCommand.model_construct(
+                    service_id="test-system-controller",
+                    config={},
+                )
             )
-            await manager._profile_configure_command(command)
 
-            # Verify timeout matches the dataset configuration timeout constant
-            call_args = mock_dataset_client.request.call_args
-            assert (
-                call_args.kwargs["timeout"] == Environment.DATASET.CONFIGURATION_TIMEOUT
-            )
+            # Verify the strategy factory was called with dataset metadata
+            mock_factory.assert_called_once()
+            call_kwargs = mock_factory.call_args.kwargs
+            assert "dataset_metadata" in call_kwargs
+            assert call_kwargs["dataset_metadata"] == mock_dataset_metadata

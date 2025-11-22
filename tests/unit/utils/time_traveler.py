@@ -69,6 +69,8 @@ class TimeTraveler:
             "time.perf_counter_ns": self.perf_counter_ns,
             "time.monotonic": self.monotonic,
             "time.monotonic_ns": self.monotonic_ns,
+            # Patch yield_to_event_loop where it's imported and used
+            "aiperf.timing.fixed_schedule_strategy.yield_to_event_loop": self.mock_yield_to_event_loop,
         }
 
         for patch_target, side_effect in patches_config.items():
@@ -86,6 +88,19 @@ class TimeTraveler:
         await self._real_sleep(seconds)
 
     async def yield_to_event_loop(self) -> None:
+        await self._real_sleep(0)
+
+    async def mock_yield_to_event_loop(self) -> None:
+        """Mock version of yield_to_event_loop that advances time slightly.
+
+        This is needed for tight loops that check perf_counter and call yield_to_event_loop.
+        Without advancing time, such loops would hang forever in mocked time.
+        We advance by 10 microseconds (0.01ms) to allow the loop to progress efficiently
+        while maintaining sub-millisecond precision. Since the tight loop waits at most 1ms,
+        this requires at most 100 iterations.
+        """
+        # Advance time by 10 microseconds (10,000 nanoseconds = 0.01ms)
+        self.advance_time(0.00001)
         await self._real_sleep(0)
 
     @contextmanager
