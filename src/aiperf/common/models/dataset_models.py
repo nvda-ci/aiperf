@@ -105,7 +105,12 @@ class ConversationMetadata(AIPerfBaseModel):
 
 
 class DatasetMetadata(AIPerfBaseModel):
-    """Metadata of a dataset."""
+    """Metadata of a dataset.
+
+    Contains two types of information:
+    1. Dataset structure metadata (conversations, timing) - used by strategies
+    2. Data access metadata (mmap paths) - used by workers to access backing store
+    """
 
     conversations: list[ConversationMetadata] = Field(
         default_factory=list,
@@ -118,6 +123,14 @@ class DatasetMetadata(AIPerfBaseModel):
     has_timing_data: bool = Field(
         default=False,
         description="Whether the dataset has timing data.",
+    )
+    mmap_data_file_path: str | None = Field(
+        default=None,
+        description="Path to the memory-mapped data file for worker access to backing store.",
+    )
+    mmap_index_file_path: str | None = Field(
+        default=None,
+        description="Path to the memory-mapped index file for worker access to backing store.",
     )
 
     @property

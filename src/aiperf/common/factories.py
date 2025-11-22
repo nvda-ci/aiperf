@@ -23,7 +23,11 @@ from aiperf.common.enums import (
     TransportType,
     ZMQProxyType,
 )
-from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
+from aiperf.common.enums.dataset_enums import (
+    DatasetBackingStoreType,
+    DatasetClientStoreType,
+    DatasetSamplingStrategy,
+)
 from aiperf.common.exceptions import (
     FactoryCreationError,
     InvalidOperationError,
@@ -55,6 +59,8 @@ if TYPE_CHECKING:
         CommunicationProtocol,
         ConsoleExporterProtocol,
         DataExporterProtocol,
+        DatasetBackingStoreProtocol,
+        DatasetClientStoreProtocol,
         DatasetSamplingStrategyProtocol,
         RecordProcessorProtocol,
         RequestRateGeneratorProtocol,
@@ -471,6 +477,62 @@ class DatasetSamplingStrategyFactory(
     ) -> "DatasetSamplingStrategyProtocol":
         return super().create_instance(
             class_type, conversation_ids=conversation_ids, **kwargs
+        )
+
+
+class DatasetBackingStoreFactory(
+    AIPerfFactory[DatasetBackingStoreType, "DatasetBackingStoreProtocol"]
+):
+    """Factory for creating DatasetBackingStoreProtocol instances (DatasetManager side).
+    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
+    """
+
+    @classmethod
+    def create_instance(  # type: ignore[override]
+        cls,
+        class_type: DatasetBackingStoreType | str,
+        **kwargs,
+    ) -> "DatasetBackingStoreProtocol":
+        """Create a dataset backing store instance.
+
+        After creation, use add_conversation(s) to load data, then finalize().
+
+        Args:
+            class_type: Type of backing store to create
+            **kwargs: Implementation-specific configuration
+
+        Returns:
+            DatasetBackingStoreProtocol implementation
+        """
+        return super().create_instance(class_type, **kwargs)
+
+
+class DatasetClientStoreFactory(
+    AIPerfFactory[DatasetClientStoreType, "DatasetClientStoreProtocol"]
+):
+    """Factory for creating DatasetClientStoreProtocol instances (Worker side).
+    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
+    """
+
+    @classmethod
+    def create_instance(  # type: ignore[override]
+        cls,
+        class_type: DatasetClientStoreType | str,
+        client_metadata: dict[str, Any],
+        **kwargs,
+    ) -> "DatasetClientStoreProtocol":
+        """Create a dataset client store instance.
+
+        Args:
+            class_type: Type of client store to create
+            client_metadata: Connection info from DatasetBackingStore.get_client_metadata()
+            **kwargs: Additional client-specific configuration
+
+        Returns:
+            DatasetClientStoreProtocol implementation
+        """
+        return super().create_instance(
+            class_type, client_metadata=client_metadata, **kwargs
         )
 
 

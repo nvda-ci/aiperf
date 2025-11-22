@@ -12,11 +12,16 @@ from aiperf.common.enums import (
     CommAddress,
     CommandType,
     ComposerType,
+    DatasetBackingStoreType,
     MessageType,
     ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.factories import ComposerFactory, ServiceFactory
+from aiperf.common.factories import (
+    ComposerFactory,
+    DatasetBackingStoreFactory,
+    ServiceFactory,
+)
 from aiperf.common.hooks import on_command, on_request
 from aiperf.common.messages import (
     ConversationRequestMessage,
@@ -35,7 +40,7 @@ from aiperf.common.models import (
     RequestInfo,
     SessionPayloads,
 )
-from aiperf.common.protocols import ServiceProtocol
+from aiperf.common.protocols import DatasetBackingStoreProtocol, ServiceProtocol
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
 
@@ -64,11 +69,21 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         )
         self.user_config = user_config
         self.tokenizer: Tokenizer | None = None
-        self.dataset: dict[str, Conversation] = {}  # session ID -> Conversation mapping
+        self.dataset: dict[
+            str, Conversation
+        ] = {}  # session ID -> Conversation mapping (for backward compatibility)
         self.dataset_metadata: DatasetMetadata | None = None
         self._session_ids_cache: list[str] = []
         self._has_timing_data: bool = False
         self.dataset_configured = asyncio.Event()
+
+        # Initialize backing store (default to MEMORY_MAP for efficient large dataset handling)
+        # TODO: Add user_config option to choose backing store type (IN_MEMORY, MEMORY_MAP)
+        self._backing_store: DatasetBackingStoreProtocol = (
+            DatasetBackingStoreFactory.create_instance(
+                DatasetBackingStoreType.MEMORY_MAP
+            )
+        )
 
     @on_command(CommandType.PROFILE_CONFIGURE)
     async def _profile_configure_command(
@@ -236,10 +251,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         else:
             conversations = self._load_synthetic_dataset()
 
-        self.dataset = {conv.session_id: conv for conv in conversations}
-        self._session_ids_cache = [
-            conversation.session_id for conversation in conversations
-        ]
         # Check if all conversations have timing data (first turn must have a timestamp)
         # Empty conversations list should be treated as having no timing data
         # TODO: This is a temporary solution to check if the dataset has timing data (to be used with fixed schedule strategy)
@@ -248,17 +259,49 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             for conversation in conversations
         )
 
+        # Initialize and populate backing store
+        await self._backing_store.initialize()
+        self.info("Streaming conversations to backing store")
+        conversations_dict = {conv.session_id: conv for conv in conversations}
+        await self._backing_store.add_conversations(conversations_dict)
+        await self._backing_store.finalize()
+        self.info(f"Backing store finalized with {len(conversations)} conversations")
+
+        # Get client metadata from backing store
+        client_metadata = self._backing_store.get_client_metadata()
+
+        # For IN_MEMORY stores, populate self.dataset for backward compatibility with ZMQ_REMOTE access
+        # For MEMORY_MAP stores, self.dataset stays empty (workers use MEMORY_MAP client store)
+        if (
+            client_metadata.get("store_type") == "in_memory"
+            and "dataset" in client_metadata
+        ):
+            self.dataset = client_metadata["dataset"]
+        else:
+            # MEMORY_MAP: Workers will access via memory-mapped files directly
+            self.dataset = {}
+
+        self._session_ids_cache = [
+            conversation.session_id for conversation in conversations
+        ]
+
+        # Create dataset metadata with:
+        # 1. Structure metadata (conversations, timing) - for strategies
+        # 2. Access metadata (mmap paths) - for workers to access backing store
         self.dataset_metadata = DatasetMetadata(
             conversations=[conversation.metadata() for conversation in conversations],
             sampling_strategy=self.user_config.input.dataset_sampling_strategy,
             has_timing_data=self._has_timing_data,
+            mmap_data_file_path=client_metadata.get("data_file_path"),
+            mmap_index_file_path=client_metadata.get("index_file_path"),
         )
         metadata = self.dataset_metadata
         self.info(
             f"Dataset metadata: has timing data: {metadata.has_timing_data}, "
             f"sampling strategy: {metadata.sampling_strategy}, "
             f"unique conversations: {len(metadata.conversations)}, "
-            f"unique turn count: {sum(len(conversation.turns) for conversation in metadata.conversations)}"
+            f"unique turn count: {metadata.total_turn_count}, "
+            f"backing store: {'MEMORY_MAP' if metadata.mmap_data_file_path else 'IN_MEMORY'}"
         )
         self.dataset_configured.set()
         await self.publish(

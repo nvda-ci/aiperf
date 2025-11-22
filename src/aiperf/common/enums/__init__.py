@@ -32,6 +32,8 @@ from aiperf.common.enums.dataset_enums import (
     AudioFormat,
     ComposerType,
     CustomDatasetType,
+    DatasetBackingStoreType,
+    DatasetClientStoreType,
     DatasetSamplingStrategy,
     ImageFormat,
     PromptSource,
@@ -102,6 +104,7 @@ from aiperf.common.enums.telemetry_enums import (
 )
 from aiperf.common.enums.timing_enums import (
     CreditPhase,
+    CreditScope,
     RequestRateMode,
     TimingMode,
 )
@@ -126,8 +129,11 @@ __all__ = [
     "ComposerType",
     "ConsoleExporterType",
     "CreditPhase",
+    "CreditScope",
     "CustomDatasetType",
     "DataExporterType",
+    "DatasetBackingStoreType",
+    "DatasetClientStoreType",
     "DatasetSamplingStrategy",
     "EndpointType",
     "EnergyMetricUnit",

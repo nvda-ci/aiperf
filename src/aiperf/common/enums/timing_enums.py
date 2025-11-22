@@ -40,3 +40,28 @@ class CreditPhase(CaseInsensitiveStrEnum):
     PROFILING = "profiling"
     """The credit phase while profiling is active. This is the primary phase of the
     benchmark, and what is used to calculate the final results."""
+
+
+class CreditScope(CaseInsensitiveStrEnum):
+    """The scope of a credit - whether it represents a single turn or an entire conversation.
+
+    This determines how workers process credits and when they return them:
+    - TURN: Credit represents 1 turn (1 request). Worker processes the turn and returns immediately.
+            Used by REQUEST_RATE mode for precise concurrency control at the request level.
+    - CONVERSATION: Credit represents an entire conversation (N turns). Worker processes all turns
+                    sequentially with inter-turn delays and returns when conversation completes.
+                    Used by FIXED_SCHEDULE and other modes to avoid blocking TimingManager.
+    """
+
+    TURN = "turn"
+    """Credit represents a single turn (1 request).
+    Worker processes one turn and returns the credit immediately after completion.
+    Concurrency control operates at the turn/request level.
+    Used by REQUEST_RATE mode."""
+
+    CONVERSATION = "conversation"
+    """Credit represents an entire conversation (N turns).
+    Worker processes all turns sequentially (with inter-turn delays) and returns
+    the credit only after the entire conversation completes.
+    Concurrency control operates at the conversation level.
+    Used by FIXED_SCHEDULE and other timing modes."""

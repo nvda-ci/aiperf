@@ -59,3 +59,29 @@ class DatasetSamplingStrategy(CaseInsensitiveStrEnum):
     SHUFFLE = "shuffle"
     """Shuffle the dataset and iterate through it. Will randomly sample without replacement.
     Once the end of the dataset is reached, shuffle the dataset again and start over."""
+
+
+class DatasetBackingStoreType(CaseInsensitiveStrEnum):
+    """Types of dataset backing stores (DatasetManager side).
+
+    Defines how DatasetManager stores and manages the dataset.
+    """
+
+    IN_MEMORY = "in_memory"
+    """Store dataset in memory only (workers use ZMQ_REMOTE to access)"""
+
+    MEMORY_MAP = "memory_map"
+    """Store dataset in local memory-mapped files (single machine, workers use MEMORY_MAP to access)"""
+
+
+class DatasetClientStoreType(CaseInsensitiveStrEnum):
+    """Types of dataset client stores (Worker side).
+
+    Defines how Workers access the dataset created by DatasetManager.
+    """
+
+    MEMORY_MAP = "memory_map"
+    """Read from local memory-mapped files (single machine)"""
+
+    ZMQ_REMOTE = "zmq_remote"
+    """Request conversations via ZMQ from DatasetManager"""
