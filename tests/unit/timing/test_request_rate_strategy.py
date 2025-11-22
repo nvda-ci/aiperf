@@ -25,6 +25,7 @@ from aiperf.timing.request_rate_strategy import (
 )
 from tests.unit.timing.conftest import (
     MockCreditManager,
+    create_mock_dataset_metadata,
     profiling_phase_stats_from_config,
 )
 from tests.unit.utils.time_traveler import TimeTraveler
@@ -89,7 +90,10 @@ class TestRequestRateStrategyPoissonDistribution:
         rng.init(random_seed)
         phase_stats = profiling_phase_stats_from_config(config)
 
-        strategy = RequestRateStrategy(config, mock_credit_manager)
+        dataset_metadata = create_mock_dataset_metadata(
+            conversation_ids=[f"conv{i}" for i in range(request_count)]
+        )
+        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
         await strategy._execute_single_phase(phase_stats)
 
         # Wait for all background tasks to complete
@@ -374,7 +378,10 @@ class TestRequestRateStrategyMaxConcurrency:
         config, _ = request_rate_config(
             request_rate=10.0, request_count=10, concurrency=concurrency
         )
-        strategy = RequestRateStrategy(config, mock_credit_manager)
+        dataset_metadata = create_mock_dataset_metadata(
+            conversation_ids=[f"conv{i}" for i in range(10)]
+        )
+        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
 
         if expected_semaphore_value is None:
             assert strategy._semaphore is None
@@ -406,7 +413,10 @@ class TestRequestRateStrategyMaxConcurrency:
             request_rate=10.0, request_count=10, concurrency=2
         )
 
-        strategy = RequestRateStrategy(config, mock_credit_manager)
+        dataset_metadata = create_mock_dataset_metadata(
+            conversation_ids=[f"conv{i}" for i in range(10)]
+        )
+        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
 
         original_semaphore_value = strategy._semaphore._value
         # Simulate credit return

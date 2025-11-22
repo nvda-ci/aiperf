@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+import asyncio
+
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
@@ -17,6 +19,7 @@ from aiperf.common.exceptions import InvalidStateError
 from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import (
     on_command,
+    on_message,
     on_pull_message,
     on_stop,
 )
@@ -25,20 +28,18 @@ from aiperf.common.messages import (
     CommandMessage,
     CreditDropMessage,
     CreditReturnMessage,
-    DatasetTimingRequest,
-    DatasetTimingResponse,
+    DatasetConfiguredNotification,
     ProfileCancelCommand,
     ProfileConfigureCommand,
 )
 from aiperf.common.mixins import PullClientMixin
+from aiperf.common.models import DatasetMetadata
 from aiperf.common.protocols import (
     PushClientProtocol,
-    RequestClientProtocol,
     ServiceProtocol,
 )
 from aiperf.timing.config import (
     TimingManagerConfig,
-    TimingMode,
 )
 from aiperf.timing.credit_issuing_strategy import (
     CreditIssuingStrategy,
@@ -71,11 +72,9 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         self.debug("Timing manager __init__")
         self.config = TimingManagerConfig.from_user_config(self.user_config)
 
-        self.dataset_request_client: RequestClientProtocol = (
-            self.comms.create_request_client(
-                CommAddress.DATASET_MANAGER_PROXY_FRONTEND,
-            )
-        )
+        self._dataset_configured_event = asyncio.Event()
+        self._dataset_metadata: DatasetMetadata | None = None
+
         self.credit_drop_push_client: PushClientProtocol = (
             self.comms.create_push_client(
                 CommAddress.CREDIT_DROP,
@@ -85,45 +84,39 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
 
         self._credit_issuing_strategy: CreditIssuingStrategy | None = None
 
+    @on_message(MessageType.DATASET_CONFIGURED_NOTIFICATION)
+    async def _on_dataset_configured_notification(
+        self, message: DatasetConfiguredNotification
+    ) -> None:
+        """Handle the dataset configured notification."""
+        self.debug(f"Received dataset configured notification: {message}")
+        self._dataset_metadata = message.metadata
+        self._dataset_configured_event.set()
+
     @on_command(CommandType.PROFILE_CONFIGURE)
     async def _profile_configure_command(
         self, message: ProfileConfigureCommand
     ) -> None:
         """Configure the timing manager."""
-        self.debug(f"Configuring credit issuing strategy for {self.service_id}")
+        self.info(
+            "Waiting for dataset to be configured before configuring credit issuing strategy"
+        )
+        await asyncio.wait_for(
+            self._dataset_configured_event.wait(),
+            timeout=Environment.DATASET.CONFIGURATION_TIMEOUT,
+        )
 
-        if self.config.timing_mode == TimingMode.FIXED_SCHEDULE:
-            # This will block until the dataset is ready and the timing response is received
-            dataset_timing_response: DatasetTimingResponse = await self.dataset_request_client.request(
-                message=DatasetTimingRequest(
-                    service_id=self.service_id,
-                ),
-                # NOTE: We use the dataset configuration timeout here because the dataset manager
-                # may take longer than a normal request timeout to respond to this request. This is
-                # because it blocks until the dataset is configured.
-                timeout=Environment.DATASET.CONFIGURATION_TIMEOUT,
-            )
-            self.debug(
-                lambda: f"Received dataset timing response: {dataset_timing_response}"
-            )
-            self.info("Using fixed schedule strategy")
-            self._credit_issuing_strategy = (
-                CreditIssuingStrategyFactory.create_instance(
-                    TimingMode.FIXED_SCHEDULE,
-                    config=self.config,
-                    credit_manager=self,
-                    schedule=dataset_timing_response.timing_data,
-                )
-            )
-        else:
-            self.info(f"Using {self.config.timing_mode.title()} strategy")
-            self._credit_issuing_strategy = (
-                CreditIssuingStrategyFactory.create_instance(
-                    self.config.timing_mode,
-                    config=self.config,
-                    credit_manager=self,
-                )
-            )
+        if not self._dataset_metadata:
+            raise InvalidStateError("Dataset metadata is not available")
+
+        self.debug(f"Configuring credit issuing strategy for {self.service_id}")
+        self.info(f"Using {self.config.timing_mode.title()} strategy")
+        self._credit_issuing_strategy = CreditIssuingStrategyFactory.create_instance(
+            self.config.timing_mode,
+            config=self.config,
+            credit_manager=self,
+            dataset_metadata=self._dataset_metadata,
+        )
 
         if not self._credit_issuing_strategy:
             raise InvalidStateError("No credit issuing strategy configured")
