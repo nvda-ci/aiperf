@@ -35,6 +35,10 @@ class MarkdownParser:
         logger.info(f"Parsing markdown files in {directory}")
 
         for file_path in Path(directory).rglob("*.md"):
+            # Skip the documentation file for this test framework
+            if file_path.name == "DOC_CI_TEST_README.md":
+                logger.info(f"Skipping documentation file: {file_path}")
+                continue
             logger.info(f"Parsing file: {file_path}")
             self._parse_file(str(file_path))
 

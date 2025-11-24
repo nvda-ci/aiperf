@@ -5,16 +5,6 @@ SPDX-License-Identifier: Apache-2.0
 
 # Adding New End-to-End Tests for Documentation Examples
 
-## IMPORTANT: Code Examples in This File
-
-**The bash code examples in this documentation use backslashes (`\`) before the triple backticks** to prevent them from being parsed as actual test commands by the test framework.
-
-**When copying examples from this file, you MUST remove the backslashes (`\`) before using them.**
-
-For example, this file shows examples like `\```bash` but you should write `​```bash` (without the backslash).
-
----
-
 This guide explains how to add new end-to-end tests for server examples in the AIPerf documentation.
 
 ## Overview
@@ -46,16 +36,14 @@ To add tests for a new server, you need to add three types of tagged commands to
 
 Tag the bash command that starts your server:
 
-```markdown
 <!-- setup-myserver-endpoint-server -->
-\```bash
+```bash
 # Start your server
 docker run --gpus all -p 8000:8000 myserver/image:latest \
   --model my-model \
   --host 0.0.0.0 --port 8000
-\```
-<!-- /setup-myserver-endpoint-server -->
 ```
+<!-- /setup-myserver-endpoint-server -->
 
 **Important notes:**
 - The server name (`myserver` in this example) must be consistent across all three tag types
@@ -67,13 +55,11 @@ docker run --gpus all -p 8000:8000 myserver/image:latest \
 
 Tag a bash command that waits for your server to be ready:
 
-```markdown
 <!-- health-check-myserver-endpoint-server -->
-\```bash
+```bash
 timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/health -H "Content-Type: application/json")" != "200" ]; do sleep 2; done' || { echo "Server not ready after 15min"; exit 1; }
-\```
-<!-- /health-check-myserver-endpoint-server -->
 ```
+<!-- /health-check-myserver-endpoint-server -->
 
 **Important notes:**
 - The health check should poll the server until it responds successfully
@@ -85,9 +71,8 @@ timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost
 
 Tag one or more AIPerf benchmark commands:
 
-```markdown
 <!-- aiperf-run-myserver-endpoint-server -->
-\```bash
+```bash
 aiperf profile \
     --model my-model \
     --endpoint-type chat \
@@ -96,15 +81,13 @@ aiperf profile \
     --streaming \
     --num-prompts 10 \
     --max-tokens 100
-\```
-<!-- /aiperf-run-myserver-endpoint-server -->
 ```
+<!-- /aiperf-run-myserver-endpoint-server -->
 
-You can have multiple `aiperf-run` commands for the same server. Each will be executed sequentially:
+You can have multiple `aiperf-run` commands for the same server. Each will be executed sequentially against the same running server instance (the server is NOT restarted between commands):
 
-```markdown
 <!-- aiperf-run-myserver-endpoint-server -->
-\```bash
+```bash
 # First test: streaming mode
 aiperf profile \
     --model my-model \
@@ -113,11 +96,11 @@ aiperf profile \
     --service-kind openai \
     --streaming \
     --num-prompts 10
-\```
+```
 <!-- /aiperf-run-myserver-endpoint-server -->
 
 <!-- aiperf-run-myserver-endpoint-server -->
-\```bash
+```bash
 # Second test: non-streaming mode
 aiperf profile \
     --model my-model \
@@ -125,46 +108,45 @@ aiperf profile \
     --endpoint /v1/chat/completions \
     --service-kind openai \
     --num-prompts 10
-\```
-<!-- /aiperf-run-myserver-endpoint-server -->
 ```
+<!-- /aiperf-run-myserver-endpoint-server -->
 
 **Important notes:**
 - Do NOT include `--ui-type` flag - the test framework adds `--ui-type simple` automatically
 - Each command is executed inside the AIPerf Docker container
 - Commands should complete in a reasonable time (default timeout: 300 seconds)
 - Use small values for `--num-prompts` and `--max-tokens` to keep tests fast
+- The server is NOT restarted between multiple aiperf commands - all commands run against the same server instance
 
 ## Complete Example
 
 Here's a complete example for a new server called "fastapi":
 
-```markdown
 ### Running FastAPI Server
 
 Start the FastAPI server:
 
 <!-- setup-fastapi-endpoint-server -->
-\```bash
+```bash
 docker run --gpus all -p 8000:8000 mycompany/fastapi-llm:latest \
   --model-name meta-llama/Llama-3.2-1B \
   --host 0.0.0.0 \
   --port 8000
-\```
+```
 <!-- /setup-fastapi-endpoint-server -->
 
 Wait for the server to be ready:
 
 <!-- health-check-fastapi-endpoint-server -->
-\```bash
+```bash
 timeout 600 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/models)" != "200" ]; do sleep 2; done' || { echo "FastAPI server not ready after 10min"; exit 1; }
-\```
+```
 <!-- /health-check-fastapi-endpoint-server -->
 
 Profile the model:
 
 <!-- aiperf-run-fastapi-endpoint-server -->
-\```bash
+```bash
 aiperf profile \
     --model meta-llama/Llama-3.2-1B \
     --endpoint-type chat \
@@ -173,9 +155,8 @@ aiperf profile \
     --streaming \
     --num-prompts 20 \
     --max-tokens 50
-\```
-<!-- /aiperf-run-fastapi-endpoint-server -->
 ```
+<!-- /aiperf-run-fastapi-endpoint-server -->
 
 ## Running the Tests
 
@@ -216,30 +197,31 @@ For each server, the test runner:
 1. **Build Phase**: Builds the AIPerf Docker container (once for all tests)
 2. **Setup Phase**: Starts the server in the background
 3. **Health Check Phase**: Waits for server to be ready (runs in parallel with setup)
-4. **Test Phase**: Executes all AIPerf commands sequentially
+4. **Test Phase**: Executes all AIPerf commands sequentially against the same running server instance
 5. **Cleanup Phase**: Gracefully shuts down the server and cleans up Docker resources
+
+**Note**: The server remains running throughout all AIPerf commands. It is only shut down once during the cleanup phase after all tests complete.
 
 ## Common Patterns
 
 ### Pattern: OpenAI-compatible API
 
-```markdown
 <!-- setup-myserver-endpoint-server -->
-\```bash
+```bash
 docker run --gpus all -p 8000:8000 myserver:latest \
   --model model-name \
   --host 0.0.0.0 --port 8000
-\```
+```
 <!-- /setup-myserver-endpoint-server -->
 
 <!-- health-check-myserver-endpoint-server -->
-\```bash
+```bash
 timeout 900 bash -c 'while [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"model-name\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}],\"max_tokens\":1}")" != "200" ]; do sleep 2; done' || { echo "Server not ready"; exit 1; }
-\```
+```
 <!-- /health-check-myserver-endpoint-server -->
 
 <!-- aiperf-run-myserver-endpoint-server -->
-\```bash
+```bash
 aiperf profile \
     --model model-name \
     --endpoint-type chat \
@@ -248,9 +230,8 @@ aiperf profile \
     --streaming \
     --num-prompts 10 \
     --max-tokens 100
-\```
-<!-- /aiperf-run-myserver-endpoint-server -->
 ```
+<!-- /aiperf-run-myserver-endpoint-server -->
 
 ## Troubleshooting
 
