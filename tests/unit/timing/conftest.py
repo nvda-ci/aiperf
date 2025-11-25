@@ -264,7 +264,7 @@ def create_mock_dataset_metadata(
             first_timestamp = (
                 first_turn_timestamps[i] if first_turn_timestamps else None
             )
-            turns.append(TurnMetadata(timestamp=first_timestamp, delay=None))
+            turns.append(TurnMetadata(timestamp_ms=first_timestamp, delay_ms=None))
 
             # Create subsequent turns with delays
             if turn_count > 1:
@@ -278,15 +278,17 @@ def create_mock_dataset_metadata(
                             timestamp = first_timestamp + sum(delays[: j + 1])
                         else:
                             timestamp = None
-                        turns.append(TurnMetadata(timestamp=timestamp, delay=delay))
+                        turns.append(
+                            TurnMetadata(timestamp_ms=timestamp, delay_ms=delay)
+                        )
                 else:
                     # No delays provided, create turns without timing info
                     for _ in range(turn_count - 1):
-                        turns.append(TurnMetadata(timestamp=None, delay=None))
+                        turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
         else:
             # No timing data, create empty turns
             for _ in range(turn_count):
-                turns.append(TurnMetadata(timestamp=None, delay=None))
+                turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
 
         metadata = ConversationMetadata(
             conversation_id=conv_id,
@@ -328,11 +330,11 @@ def create_mock_dataset_metadata_with_schedule(
         for i, timestamp in enumerate(timestamps_list):
             if i == 0:
                 # First turn has no delay
-                turns.append(TurnMetadata(timestamp=timestamp, delay=None))
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=None))
             else:
                 # Subsequent turns have delay relative to previous turn
                 delay = timestamp - timestamps_list[i - 1]
-                turns.append(TurnMetadata(timestamp=timestamp, delay=delay))
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=delay))
 
         metadata = ConversationMetadata(
             conversation_id=conv_id,

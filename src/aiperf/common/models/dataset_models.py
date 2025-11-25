@@ -48,11 +48,11 @@ class Video(Media):
 class TurnMetadata(AIPerfBaseModel):
     """Metadata of a turn."""
 
-    timestamp: int | float | None = Field(
+    timestamp_ms: int | float | None = Field(
         default=None,
         description="The absolute timestamp of the turn in milliseconds.",
     )
-    delay: int | float | None = Field(
+    delay_ms: int | float | None = Field(
         default=None,
         description="The delay of the turn in the conversation (in milliseconds).",
     )
@@ -67,6 +67,14 @@ class Turn(TurnMetadata):
 
     model: str | None = Field(default=None, description="Model name used for the turn.")
     role: str | None = Field(default=None, description="Role of the turn.")
+    timestamp: int | float | None = Field(
+        default=None,
+        description="The absolute timestamp of the turn in milliseconds.",
+    )
+    delay: int | float | None = Field(
+        default=None,
+        description="The delay of the turn in the conversation (in milliseconds).",
+    )
     max_tokens: int | None = Field(
         default=None, description="Maximum number of tokens to generate for this turn."
     )
@@ -86,8 +94,8 @@ class Turn(TurnMetadata):
     def metadata(self) -> TurnMetadata:
         """Get the metadata of the turn."""
         return TurnMetadata(
-            timestamp=self.timestamp,
-            delay=self.delay,
+            timestamp_ms=self.timestamp,
+            delay_ms=self.delay,
         )
 
 

@@ -43,10 +43,10 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
         # Reconstruct the full schedule from first_turn_timestamp and turn_delays
         self._schedule: list[tuple[int | float, str]] = []
         for conversation in dataset_metadata.conversations:
-            if conversation.turns[0].timestamp is not None:
+            if conversation.turns[0].timestamp_ms is not None:
                 # Add first turn
                 self._schedule.append(
-                    (conversation.turns[0].timestamp, conversation.conversation_id)
+                    (conversation.turns[0].timestamp_ms, conversation.conversation_id)
                 )
             else:
                 raise ValueError(
