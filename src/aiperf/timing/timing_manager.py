@@ -89,7 +89,11 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         self, message: DatasetConfiguredNotification
     ) -> None:
         """Handle the dataset configured notification."""
-        self.debug(f"Received dataset configured notification: {message}")
+        self.debug(
+            lambda: f"Received dataset configured notification: {len(message.metadata.conversations)} conversations, "
+            f"{message.metadata.sampling_strategy.value} sampling strategy"
+        )
+
         self._dataset_metadata = message.metadata
         self._dataset_configured_event.set()
 

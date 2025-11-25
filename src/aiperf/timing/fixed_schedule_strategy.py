@@ -40,11 +40,11 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
         # NOTE: This all needs to be set before the super call, because the base class will call
         # _setup_profiling_phase_config() which uses it to set the total expected requests.
 
-        # Reconstruct the full schedule from first_turn_timestamp and turn_delays
+        # Reconstruct the full schedule from the first turn timestamps
         self._schedule: list[tuple[int | float, str]] = []
         for conversation in dataset_metadata.conversations:
             if conversation.turns[0].timestamp_ms is not None:
-                # Add first turn
+                # Add first turn only, as the credit is for the whole conversation
                 self._schedule.append(
                     (conversation.turns[0].timestamp_ms, conversation.conversation_id)
                 )

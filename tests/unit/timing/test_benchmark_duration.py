@@ -66,6 +66,17 @@ def mixed_config(
     )
 
 
+def create_strategy(
+    config: TimingManagerConfig,
+    mock_credit_manager: MockCreditManager,
+) -> RequestRateStrategy:
+    """Create a RequestRateStrategy with mock dataset metadata based on config."""
+    dataset_metadata = create_mock_dataset_metadata(
+        conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
+    )
+    return RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+
+
 class TestBenchmarkDurationConfiguration:
     """Test configuration validation and behavior of benchmark duration."""
 
@@ -207,11 +218,7 @@ class TestBenchmarkDurationRequestRateStrategy:
         """Test that RequestRateStrategy respects benchmark duration."""
         config = benchmark_duration_config(benchmark_duration=2.0)
 
-        # Create strategy and check profiling phase config
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Check that the profiling phase is configured correctly
         assert len(strategy.ordered_phase_configs) > 0
@@ -228,11 +235,7 @@ class TestBenchmarkDurationRequestRateStrategy:
     ):
         """Test that request count is ignored when duration is specified."""
         config = mixed_config(request_count=50, benchmark_duration=1.5)
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         profiling_config = strategy.ordered_phase_configs[-1]
 
@@ -245,11 +248,7 @@ class TestBenchmarkDurationRequestRateStrategy:
     ):
         """Test that strategy falls back to request count when no duration."""
         config = mixed_config(request_count=25, benchmark_duration=None)
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         profiling_config = strategy.ordered_phase_configs[-1]
 
@@ -264,11 +263,7 @@ class TestBenchmarkDurationRequestRateStrategy:
         config = benchmark_duration_config(
             benchmark_duration=4.0, warmup_request_count=10
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Should have warmup and profiling phases
         assert len(strategy.ordered_phase_configs) == 2
@@ -294,11 +289,7 @@ class TestBenchmarkDurationIntegration:
     ):
         """Test strategy with duration and concurrency settings."""
         config = benchmark_duration_config(benchmark_duration=3.0, concurrency=5)
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         assert config.benchmark_duration == 3.0
         assert config.concurrency == 5
@@ -335,11 +326,7 @@ class TestBenchmarkDurationIntegration:
         config = benchmark_duration_config(
             benchmark_duration=duration, warmup_request_count=warmup_count
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Verify configuration is correct
         assert config.benchmark_duration == duration
@@ -438,10 +425,7 @@ class TestBenchmarkDurationPhaseSetup:
     ):
         """Test profiling phase setup when duration is specified."""
         config = benchmark_duration_config(benchmark_duration=8.0)
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Find the profiling phase config
         profiling_config = next(
@@ -462,10 +446,7 @@ class TestBenchmarkDurationPhaseSetup:
     ):
         """Test profiling phase setup when duration is not specified."""
         config = mixed_config(request_count=40, benchmark_duration=None)
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Find the profiling phase config
         profiling_config = next(
@@ -488,10 +469,7 @@ class TestBenchmarkDurationPhaseSetup:
         config = benchmark_duration_config(
             benchmark_duration=12.0, warmup_request_count=15
         )
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Find the warmup phase config
         warmup_config = next(
@@ -646,10 +624,7 @@ class TestBenchmarkDurationTimeout:
         # Create a time-based phase that has already exceeded duration
         config = benchmark_duration_config(benchmark_duration=1.0)
         mock_credit_manager = MockCreditManager(time_traveler=time_traveler)
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a phase stats that would normally have in-flight requests
         phase_stats = CreditPhaseStats(
@@ -686,10 +661,7 @@ class TestBenchmarkDurationTimeout:
         """Test that _wait_for_phase_completion respects duration timeout."""
         config = benchmark_duration_config(benchmark_duration=2.0)
         mock_credit_manager = MockCreditManager(time_traveler=time_traveler)
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a time-based phase that is close to expiring
         start_time = time_traveler.time_ns()
@@ -729,10 +701,7 @@ class TestBenchmarkDurationTimeout:
         mock_credit_manager = MockCreditManager(
             time_traveler=None
         )  # No time manipulation needed
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a request-count-based phase
         phase_stats = CreditPhaseStats(
@@ -836,11 +805,7 @@ class TestBenchmarkGracePeriod:
         config = benchmark_duration_config(
             benchmark_duration=2.0, benchmark_grace_period=15.0
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         assert strategy.config.benchmark_grace_period == 15.0
         assert strategy.config.benchmark_duration == 2.0
@@ -853,11 +818,7 @@ class TestBenchmarkGracePeriod:
             benchmark_duration=1.0,  # Short duration for testing
             benchmark_grace_period=5.0,
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Should have profiling phase with duration configuration
         profiling_config = strategy.ordered_phase_configs[-1]
@@ -879,11 +840,7 @@ class TestBenchmarkGracePeriod:
         config = benchmark_duration_config(
             benchmark_duration=1.0, benchmark_grace_period=5.0
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a profiling phase that completes quickly
         phase_stats = CreditPhaseStats(
@@ -912,11 +869,7 @@ class TestBenchmarkGracePeriod:
         config = benchmark_duration_config(
             benchmark_duration=1.0, benchmark_grace_period=2.0
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a profiling phase with in-flight requests
         phase_stats = CreditPhaseStats(
@@ -959,11 +912,7 @@ class TestBenchmarkGracePeriod:
         config = benchmark_duration_config(
             benchmark_duration=1.0, benchmark_grace_period=0.0
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a profiling phase with in-flight requests
         phase_stats = CreditPhaseStats(
@@ -993,11 +942,7 @@ class TestBenchmarkGracePeriod:
         config = benchmark_duration_config(
             benchmark_duration=1.0, benchmark_grace_period=5.0
         )
-
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=[f"conv{i}" for i in range(config.request_count or 10)]
-        )
-        strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
+        strategy = create_strategy(config, mock_credit_manager)
 
         # Create a profiling phase with in-flight requests
         phase_stats = CreditPhaseStats(
