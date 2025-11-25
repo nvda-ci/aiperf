@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from tqdm import tqdm
 
+from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import AIPerfUIType
 from aiperf.common.environment import Environment
@@ -15,6 +16,8 @@ from aiperf.common.hooks import (
 from aiperf.common.models import RecordsStats, RequestsStats
 from aiperf.common.protocols import AIPerfUIProtocol
 from aiperf.ui.base_ui import BaseAIPerfUI
+
+_logger = AIPerfLogger(__name__)
 
 
 class ProgressBar:
@@ -49,7 +52,10 @@ class ProgressBar:
             return
         pct = (progress / self.total) * 100.0
         if pct >= self.last_percent + self.update_threshold:
-            self.bar.update(progress - self.last_value)
+            try:
+                self.bar.update(progress - self.last_value)
+            except Exception:
+                _logger.exception(f"Failed to update progress bar: {progress}")
             self.last_percent = pct
             self.last_value = progress
 

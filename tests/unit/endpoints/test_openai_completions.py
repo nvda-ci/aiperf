@@ -10,8 +10,8 @@ from aiperf.common.models.model_endpoint_info import (
     ModelInfo,
     ModelListInfo,
 )
-from aiperf.common.models.record_models import RequestInfo
 from aiperf.endpoints.openai_completions import CompletionsEndpoint
+from tests.unit.endpoints.conftest import create_request_info
 
 
 class TestCompletionsEndpoint:
@@ -38,7 +38,7 @@ class TestCompletionsEndpoint:
         # Use the first turn from the sample_conversations fixture
         turn = sample_conversations["session_1"].turns[0]
         turns = [turn]
-        request_info = RequestInfo(model_endpoint=model_endpoint, turns=turns)
+        request_info = create_request_info(model_endpoint=model_endpoint, turns=turns)
         payload = endpoint.format_payload(request_info)
         print(f"Payload: {payload}")
         expected_payload = {
@@ -58,7 +58,7 @@ class TestCompletionsEndpoint:
         turns[0].max_tokens = 50
         model_endpoint.endpoint.streaming = True
         model_endpoint.endpoint.extra = [("ignore_eos", True)]
-        request_info = RequestInfo(model_endpoint=model_endpoint, turns=turns)
+        request_info = create_request_info(model_endpoint=model_endpoint, turns=turns)
         payload = endpoint.format_payload(request_info)
         print(f"Payload: {payload}")
         expected_payload = {

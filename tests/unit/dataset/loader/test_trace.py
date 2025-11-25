@@ -375,19 +375,19 @@ class TestMooncakeTraceDatasetLoader:
         conv1 = conversations[0]
         assert conv1.session_id == "session-1"
         assert len(conv1.turns) == 1
-        assert conv1.turns[0].timestamp == 1000
+        assert conv1.turns[0].timestamp_ms == 1000
 
         # Check second conversation
         conv2 = conversations[1]
         assert conv2.session_id == "session-2"
         assert len(conv2.turns) == 1
-        assert conv2.turns[0].timestamp == 2000
+        assert conv2.turns[0].timestamp_ms == 2000
 
         # Check third conversation
         conv3 = conversations[2]
         assert conv3.session_id == "session-3"
         assert len(conv3.turns) == 1
-        assert conv3.turns[0].timestamp == 3000
+        assert conv3.turns[0].timestamp_ms == 3000
 
     def test_convert_to_conversations_empty_data(
         self, mock_prompt_generator, default_user_config

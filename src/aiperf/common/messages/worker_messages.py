@@ -31,6 +31,27 @@ class WorkerHealthMessage(BaseServiceMessage):
         return self.task_stats.failed / self.task_stats.total
 
 
+class WorkerReadyMessage(BaseServiceMessage):
+    """
+    Message sent by worker via DEALER socket to announce readiness.
+
+    Sent immediately after connecting to ROUTER.
+    service_id from BaseServiceMessage contains worker_id
+    """
+
+    message_type: MessageTypeT = MessageType.WORKER_READY
+
+
+class WorkerShutdownMessage(BaseServiceMessage):
+    """
+    Message sent by worker via DEALER socket before graceful shutdown.
+
+    service_id from BaseServiceMessage contains worker_id
+    """
+
+    message_type: MessageTypeT = MessageType.WORKER_SHUTDOWN
+
+
 class WorkerStatusSummaryMessage(BaseServiceMessage):
     """Message for a worker status summary."""
 

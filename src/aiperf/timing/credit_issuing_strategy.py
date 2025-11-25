@@ -9,11 +9,16 @@ from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.enums import CreditPhase, TimingMode
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import ConfigurationError
-from aiperf.common.factories import AIPerfFactory
+from aiperf.common.factories import AIPerfFactory, DatasetSamplingStrategyFactory
 from aiperf.common.messages import CreditReturnMessage
 from aiperf.common.mixins import TaskManagerMixin
 from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats, DatasetMetadata
 from aiperf.timing.config import TimingManagerConfig
+from aiperf.timing.conversation_provider import (
+    BaseConversationProvider,
+    LiveConversationProvider,
+    PreSampledConversationProvider,
+)
 from aiperf.timing.credit_manager import CreditManagerProtocol
 from aiperf.timing.request_cancellation_strategy import RequestCancellationStrategy
 
@@ -35,6 +40,15 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         self.dataset_metadata = dataset_metadata
 
         self.cancellation_strategy = RequestCancellationStrategy(config)
+        self._dataset_sampler = DatasetSamplingStrategyFactory.create_instance(
+            dataset_metadata.sampling_strategy,
+            conversation_ids=[
+                conversation.conversation_id
+                for conversation in dataset_metadata.conversations
+            ],
+        )
+        self.warmup_conversation_provider: BaseConversationProvider | None = None
+        self.profiling_conversation_provider: BaseConversationProvider | None = None
 
         # This event is set when all phases are complete
         self.all_phases_complete_event = asyncio.Event()
@@ -46,7 +60,9 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         self.phase_stats: dict[CreditPhase, CreditPhaseStats] = {}
 
         # The phases to run including their configuration, in order of execution.
-        self.ordered_phase_configs: list[CreditPhaseConfig] = []
+        self.ordered_phase_configs: list[
+            tuple[CreditPhaseConfig, BaseConversationProvider]
+        ] = []
 
         self._setup_phase_configs()
         self._validate_phase_configs()
@@ -63,10 +79,21 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
     def _setup_warmup_phase_config(self) -> None:
         """Setup the warmup phase. This can be overridden in subclasses to modify the warmup phase."""
         if self.config.warmup_request_count > 0:
+            self.warmup_conversation_provider = PreSampledConversationProvider(
+                self.dataset_metadata, self._dataset_sampler
+            )
+            total_expected_requests = (
+                self.warmup_conversation_provider.pre_sample_conversation_ids(
+                    self.config.warmup_request_count
+                )
+            )
             self.ordered_phase_configs.append(
-                CreditPhaseConfig(
-                    type=CreditPhase.WARMUP,
-                    total_expected_requests=self.config.warmup_request_count,
+                (
+                    CreditPhaseConfig(
+                        type=CreditPhase.WARMUP,
+                        total_expected_requests=total_expected_requests,
+                    ),
+                    self.warmup_conversation_provider,
                 )
             )
 
@@ -74,36 +101,53 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         """Setup the profiling phase. This can be overridden in subclasses to modify the profiling phase."""
         if self.config.benchmark_duration is not None:
             self.debug(
-                f"Setting up duration-based profiling phase: expected_duration_sec={self.config.benchmark_duration}"
+                lambda: f"Setting up duration-based profiling phase: expected_duration_sec={self.config.benchmark_duration}"
+            )
+            self.profiling_conversation_provider = LiveConversationProvider(
+                self.dataset_metadata, self._dataset_sampler
             )
             self.ordered_phase_configs.append(
-                CreditPhaseConfig(
-                    type=CreditPhase.PROFILING,
-                    expected_duration_sec=self.config.benchmark_duration,
+                (
+                    CreditPhaseConfig(
+                        type=CreditPhase.PROFILING,
+                        expected_duration_sec=self.config.benchmark_duration,
+                    ),
+                    self.profiling_conversation_provider,
                 )
             )
         else:
-            debug_message = (
-                "Setting up count-based profiling phase: total_expected_requests="
+            if self.config.num_sessions is not None:
+                self.profiling_conversation_provider = PreSampledConversationProvider(
+                    self.dataset_metadata, self._dataset_sampler
+                )
+                total_expected_requests = (
+                    self.profiling_conversation_provider.pre_sample_conversation_ids(
+                        self.config.num_sessions
+                    )
+                )
+            else:
+                self.profiling_conversation_provider = LiveConversationProvider(
+                    self.dataset_metadata, self._dataset_sampler
+                )
+                total_expected_requests = self.config.request_count
+
+            self.debug(
+                lambda: f"Setting up count-based profiling phase: total_expected_requests={total_expected_requests}"
             )
-            total_expected_requests = (
-                self.config.num_sessions
-                if self.config.num_sessions is not None
-                else self.config.request_count
-            )
-            debug_message += f"{total_expected_requests}"
-            self.debug(debug_message)
 
             self.ordered_phase_configs.append(
-                CreditPhaseConfig(
-                    type=CreditPhase.PROFILING,
-                    total_expected_requests=total_expected_requests,
+                (
+                    CreditPhaseConfig(
+                        type=CreditPhase.PROFILING,
+                        total_expected_requests=total_expected_requests,
+                    ),
+                    self.profiling_conversation_provider,
                 )
             )
 
     def _validate_phase_configs(self) -> None:
         """Validate the phase configs."""
-        for phase_config in self.ordered_phase_configs:
+        for phase_config, _ in self.ordered_phase_configs:
             if not phase_config.is_valid:
                 raise ConfigurationError(
                     f"Phase {phase_config.type} is not valid. It must have either a valid total_expected_requests or expected_duration_sec set"
@@ -132,7 +176,7 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
 
     async def _execute_phases(self) -> None:
         """Execute the all of the credit phases sequentially. This can be overridden in subclasses to modify the execution of the phases."""
-        for phase_config in self.ordered_phase_configs:
+        for phase_config, conversation_provider in self.ordered_phase_configs:
             self.phase_complete_event.clear()
 
             phase_stats = CreditPhaseStats.from_phase_config(phase_config)
@@ -150,7 +194,7 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
             )
 
             # This is implemented in subclasses
-            await self._execute_single_phase(phase_stats)
+            await self._execute_single_phase(phase_stats, conversation_provider)
 
             # We have sent all the credits for this phase, but we still will need to wait for the credits to be returned
             phase_stats.sent_end_ns = time.time_ns()
@@ -270,7 +314,7 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
                     phase_stats.type,
                     phase_stats.completed,
                     phase_stats.end_ns,
-                    phase_stats.requests_sent,
+                    phase_stats.sent,
                     timeout_triggered=True,
                 )
             )
@@ -284,7 +328,11 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
             self.phase_stats.pop(phase_stats.type)
 
     @abstractmethod
-    async def _execute_single_phase(self, phase_stats: CreditPhaseStats) -> None:
+    async def _execute_single_phase(
+        self,
+        phase_stats: CreditPhaseStats,
+        conversation_provider: BaseConversationProvider,
+    ) -> None:
         """Execute a single phase. Should not return until the phase sending is complete. Must be implemented in subclasses."""
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -292,18 +340,26 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         """Stop the credit issuing strategy."""
         await self.cancel_all_tasks()
 
-    async def _on_credit_return(self, message: CreditReturnMessage) -> None:
-        """This is called by the credit manager when a credit is returned. It can be
-        overridden in subclasses to handle the credit return."""
-        if message.phase not in self.phase_stats:
+    async def _on_credit_return(
+        self, worker_id: str, message: CreditReturnMessage
+    ) -> None:
+        """
+        Handle credit return from worker via StickyCreditRouter.
+
+        This is called when a credit is returned. Can be overridden in subclasses.
+
+        Args:
+            message: Credit return message
+        """
+        phase = message.credit.phase
+        if phase not in self.phase_stats:
             self.debug(
-                f"Credit return message received for phase {message.phase} but no phase stats found"
+                f"Credit return message received for phase {phase} but no phase stats found"
             )
             return
 
-        phase_stats = self.phase_stats[message.phase]
+        phase_stats = self.phase_stats[phase]
         phase_stats.completed += 1
-        phase_stats.requests_sent += message.requests_sent
 
         # Check if this phase is complete
         is_phase_complete = False
@@ -324,10 +380,10 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
 
             self.execute_async(
                 self.credit_manager.publish_phase_complete(
-                    message.phase,
+                    phase,
                     phase_stats.completed,
                     phase_stats.end_ns,
-                    phase_stats.requests_sent,
+                    phase_stats.sent,
                 )
             )
 
@@ -338,7 +394,7 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
                 self.all_phases_complete_event.set()
 
             # We don't need to keep track of the phase stats anymore
-            self.phase_stats.pop(message.phase)
+            self.phase_stats.pop(phase)
 
     async def _progress_report_loop(self) -> None:
         """Report the progress at a fixed interval."""

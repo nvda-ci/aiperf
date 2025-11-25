@@ -5,20 +5,15 @@ Comprehensive unit tests for the RequestRateStrategy class.
 """
 
 import math
+import uuid
 
 import numpy as np
 import pytest
-from pydantic import ValidationError
 from scipy import stats
 
 from aiperf.common import random_generator as rng
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.enums import CreditPhase, RequestRateMode, TimingMode
-
-try:
-    from aiperf.common.enums import CreditMode
-except ImportError:
-    CreditMode = None  # Not available in this branch
+from aiperf.common.enums import CreditMode, CreditPhase, RequestRateMode, TimingMode
 from aiperf.common.messages import CreditReturnMessage
 from aiperf.common.models import CreditPhaseStats
 from aiperf.timing.config import TimingManagerConfig
@@ -99,8 +94,7 @@ class TestRequestRateStrategyPoissonDistribution:
             conversation_ids=[f"conv{i}" for i in range(request_count)]
         )
         strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
-        conversation_provider = strategy.ordered_phase_configs[0][1]
-        await strategy._execute_single_phase(phase_stats, conversation_provider)
+        await strategy._execute_single_phase(phase_stats)
 
         # Wait for all background tasks to complete
         await strategy.wait_for_tasks()
@@ -403,9 +397,8 @@ class TestRequestRateStrategyMaxConcurrency:
         strategy, mock_semaphore = mock_credit_manager.create_strategy(
             config, RequestRateStrategy, auto_return_delay=1.0
         )
-        conversation_provider = strategy.ordered_phase_configs[0][1]
 
-        await strategy._execute_single_phase(phase_stats, conversation_provider)
+        await strategy._execute_single_phase(phase_stats)
         await strategy.wait_for_tasks()
 
         # Verify that acquire was called for each credit drop
@@ -429,23 +422,16 @@ class TestRequestRateStrategyMaxConcurrency:
 
         # First acquire the semaphore to simulate a credit being issued
         await strategy._semaphore.acquire()
+        strategy._semaphore_acquired_count += 1
 
         # Now simulate credit return
-        from aiperf.common.messages.credit_messages import Credit
-
-        credit = Credit(
-            phase=CreditPhase.PROFILING,
-            num=1,
-            conversation_id="conv0",
-            x_correlation_id="test-corr-id",
-            turn_index=0,
-            is_final_turn=True,
-        )
         credit_return = CreditReturnMessage(
             service_id="test-service",
-            credit=credit,
+            phase=CreditPhase.PROFILING,
+            credit_drop_id=str(uuid.uuid4()),
+            requests_sent=1,
         )
-        await strategy._on_credit_return("worker-1", credit_return)
+        await strategy._on_credit_return(credit_return)
 
         # Check that release was called and value is back to original
         assert strategy._semaphore._value == original_semaphore_value
@@ -459,9 +445,8 @@ class TestRequestRateStrategyMaxConcurrency:
         strategy, mock_semaphore = mock_credit_manager.create_strategy(
             config, RequestRateStrategy, auto_return_delay=1.0
         )
-        conversation_provider = strategy.ordered_phase_configs[0][1]
 
-        await strategy._execute_single_phase(phase_stats, conversation_provider)
+        await strategy._execute_single_phase(phase_stats)
         await strategy.wait_for_tasks()
 
         # With concurrency=1 we should have to wait for all but the first credit
@@ -478,9 +463,8 @@ class TestRequestRateStrategyMaxConcurrency:
         strategy, mock_semaphore = mock_credit_manager.create_strategy(
             config, RequestRateStrategy, auto_return_delay=1.0
         )
-        conversation_provider = strategy.ordered_phase_configs[0][1]
 
-        await strategy._execute_single_phase(phase_stats, conversation_provider)
+        await strategy._execute_single_phase(phase_stats)
         await strategy.wait_for_tasks()
 
         # Should process all credits without blocking since count equals concurrency
@@ -665,10 +649,9 @@ class TestRequestRateStrategyEarlyExit:
         strategy, mock_semaphore = mock_credit_manager.create_strategy(
             config, RequestRateStrategy, auto_return_delay=0.1
         )
-        conversation_provider = strategy.ordered_phase_configs[0][1]
 
         start_time = time_traveler.time()
-        await strategy._execute_single_phase(phase_stats, conversation_provider)
+        await strategy._execute_single_phase(phase_stats)
         await strategy.wait_for_tasks()
         end_time = time_traveler.time()
 
@@ -679,163 +662,249 @@ class TestRequestRateStrategyEarlyExit:
         assert end_time - start_time == 1.0
 
 
-class TestMultiTurnStructure:
-    """Test multi-turn conversation structure and initialization."""
+@pytest.mark.asyncio
+class TestRequestRateStrategyRateMode:
+    """Tests for rate mode (CONVERSATION vs REQUEST) in RequestRateStrategy."""
 
-    def test_conversation_metadata_lookup_created(
-        self,
-        mock_credit_manager: MockCreditManager,
+    def test_conversation_mode_uses_request_rate_directly(
+        self, mock_credit_manager: MockCreditManager
     ):
-        """Test that conversation metadata lookup is built correctly."""
+        """Test that CONVERSATION mode uses request_rate as conversation rate without adjustment."""
         config = TimingManagerConfig(
             timing_mode=TimingMode.REQUEST_RATE,
-            request_rate=10.0,
-            request_count=4,
+            request_rate=100.0,
+            rate_mode=CreditMode.CONVERSATION,
             request_rate_mode=RequestRateMode.CONSTANT,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=["conv1", "conv2"],
-            has_timing_data=True,
-            first_turn_timestamps=[0, 0],
-            turn_delays=[[100], [150]],
-            turn_counts=[2, 2],
-        )
+        strategy = RequestRateStrategy(config, mock_credit_manager)
 
-        strategy = RequestRateStrategy(
-            config=config,
-            credit_manager=mock_credit_manager,
-            dataset_metadata=dataset_metadata,
-        )
+        # In CONVERSATION mode, effective_rate should equal request_rate
+        assert strategy._effective_rate == 100.0
+        assert strategy._rate_mode == CreditMode.CONVERSATION
 
-        # Lookup table should be populated
-        assert len(strategy._conversation_metadata_lookup) == 2
-        assert "conv1" in strategy._conversation_metadata_lookup
-        assert "conv2" in strategy._conversation_metadata_lookup
-
-        # Check conversation metadata structure
-        conv1 = strategy._conversation_metadata_lookup["conv1"]
-        assert len(conv1.turns) == 2
-        assert conv1.turns[1].delay_ms == 100
-
-    def test_queued_turns_initialized_empty(
-        self,
-        mock_credit_manager: MockCreditManager,
+    def test_request_mode_adjusts_rate_by_expected_turns(
+        self, mock_credit_manager: MockCreditManager
     ):
-        """Test that queued_turns deque is initialized empty."""
+        """Test that REQUEST mode adjusts credit issuing rate based on expected turns per conversation."""
         config = TimingManagerConfig(
             timing_mode=TimingMode.REQUEST_RATE,
-            request_rate=10.0,
-            request_count=2,
+            request_rate=100.0,
+            rate_mode=CreditMode.REQUEST,
             request_rate_mode=RequestRateMode.CONSTANT,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=["conv1"],
-        )
+        strategy = RequestRateStrategy(config, mock_credit_manager)
 
-        strategy = RequestRateStrategy(
-            config=config,
-            credit_manager=mock_credit_manager,
-            dataset_metadata=dataset_metadata,
-        )
+        # In REQUEST mode, effective_rate = request_rate / expected_turns
+        # 100.0 req/sec / 5 turns/conv = 20.0 conv/sec
+        assert strategy._effective_rate == 20.0
+        assert strategy._expected_turns_per_conversation == 5.0
+        assert strategy._rate_mode == CreditMode.REQUEST
 
-        assert len(strategy._queued_turns) == 0
-
-
-class TestTwoModesBehavior:
-    """Test conversation-centric vs rate-centric mode differences."""
-
-    def test_with_concurrency_creates_semaphore(
+    @pytest.mark.parametrize(  # fmt: skip
+        "request_rate, conversation_turn_mean, expected_effective_rate",
+        [
+            (100.0, 1, 100.0),  # Single-turn: no adjustment
+            (100.0, 2, 50.0),  # 2 turns: halve the rate
+            (100.0, 5, 20.0),  # 5 turns: 1/5 of rate
+            (100.0, 10, 10.0),  # 10 turns: 1/10 of rate
+            (50.0, 5, 10.0),  # Different base rate
+            (200.0, 4, 50.0),  # Higher base rate
+            (10.0, 3, 10.0 / 3),  # Non-integer result
+        ],
+    )
+    def test_request_mode_rate_adjustment_math(
         self,
         mock_credit_manager: MockCreditManager,
+        request_rate: float,
+        conversation_turn_mean: int,
+        expected_effective_rate: float,
     ):
-        """WITH concurrency: semaphore is created."""
+        """Test that rate adjustment math is correct for various configurations."""
         config = TimingManagerConfig(
             timing_mode=TimingMode.REQUEST_RATE,
-            request_rate=10.0,
-            request_count=5,
-            concurrency=10,
+            request_rate=request_rate,
+            rate_mode=CreditMode.REQUEST,
             request_rate_mode=RequestRateMode.CONSTANT,
+            conversation_turn_mean=conversation_turn_mean,
+            request_count=10,
         )
 
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=["conv1"],
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+
+        assert strategy._effective_rate == pytest.approx(expected_effective_rate)
+
+    def test_conversation_mode_concurrency_unchanged(
+        self, mock_credit_manager: MockCreditManager
+    ):
+        """Test that CONVERSATION mode uses concurrency value directly without adjustment."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=100.0,
+            rate_mode=CreditMode.CONVERSATION,
+            request_rate_mode=RequestRateMode.CONSTANT,
+            concurrency=50,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
-        strategy = RequestRateStrategy(
-            config=config,
-            credit_manager=mock_credit_manager,
-            dataset_metadata=dataset_metadata,
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+
+        # In CONVERSATION mode, semaphore value should equal concurrency
+        assert strategy._semaphore is not None
+        assert strategy._semaphore._value == 50
+
+    def test_request_mode_adjusts_concurrency_statistically(
+        self, mock_credit_manager: MockCreditManager
+    ):
+        """Test that REQUEST mode adjusts concurrency based on expected turns (statistical approach)."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=100.0,
+            rate_mode=CreditMode.REQUEST,
+            request_rate_mode=RequestRateMode.CONSTANT,
+            concurrency=50,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+
+        # In REQUEST mode, effective_concurrency = concurrency / expected_turns
+        # 50 concurrent requests / 5 turns/conv = 10 concurrent conversations
         assert strategy._semaphore is not None
         assert strategy._semaphore._value == 10
 
-    def test_without_concurrency_no_semaphore(
+    @pytest.mark.parametrize(  # fmt: skip
+        "concurrency, conversation_turn_mean, expected_effective_concurrency",
+        [
+            (50, 1, 50),  # Single-turn: no adjustment
+            (50, 2, 25),  # 2 turns: halve concurrency
+            (50, 5, 10),  # 5 turns: 1/5 of concurrency
+            (100, 10, 10),  # 10 turns: 1/10 of concurrency
+            (30, 3, 10),  # Different values
+            (20, 4, 5),  # Smaller concurrency
+            (10, 3, 4),  # Non-integer division (ceils to 4)
+            (5, 10, 1),  # Ceil to minimum of 1
+            (2, 5, 1),  # Ceil to minimum of 1
+        ],
+    )
+    def test_request_mode_concurrency_adjustment_math(
         self,
         mock_credit_manager: MockCreditManager,
+        concurrency: int,
+        conversation_turn_mean: int,
+        expected_effective_concurrency: int,
     ):
-        """WITHOUT concurrency: no semaphore created."""
+        """Test that concurrency adjustment math is correct for various configurations."""
         config = TimingManagerConfig(
             timing_mode=TimingMode.REQUEST_RATE,
-            request_rate=10.0,
-            request_count=5,
-            concurrency=None,
+            request_rate=100.0,
+            rate_mode=CreditMode.REQUEST,
             request_rate_mode=RequestRateMode.CONSTANT,
+            concurrency=concurrency,
+            conversation_turn_mean=conversation_turn_mean,
+            request_count=10,
         )
 
-        dataset_metadata = create_mock_dataset_metadata(
-            conversation_ids=["conv1"],
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+
+        assert strategy._semaphore is not None
+        assert strategy._semaphore._value == expected_effective_concurrency
+
+    def test_request_mode_without_concurrency_has_no_semaphore(
+        self, mock_credit_manager: MockCreditManager
+    ):
+        """Test that REQUEST mode without concurrency doesn't create a semaphore (true open-loop)."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=100.0,
+            rate_mode=CreditMode.REQUEST,
+            request_rate_mode=RequestRateMode.CONSTANT,
+            concurrency=None,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
-        strategy = RequestRateStrategy(
-            config=config,
-            credit_manager=mock_credit_manager,
-            dataset_metadata=dataset_metadata,
-        )
+        strategy = RequestRateStrategy(config, mock_credit_manager)
 
+        # No semaphore should be created when concurrency is None
         assert strategy._semaphore is None
+        # But rate should still be adjusted
+        assert strategy._effective_rate == 20.0
 
-
-class TestTurnToSendModel:
-    """Test the TurnToSend data model."""
-
-    def test_turn_to_send_creation(self):
-        """Test TurnToSend can be created with all required fields."""
-        from aiperf.timing.request_rate_strategy import TurnToSend
-
-        turn = TurnToSend(
-            conversation_id="conv1",
-            x_correlation_id="corr-123",
-            turn_index=0,
-            is_final_turn=True,
+    def test_backward_compatibility_default_is_conversation_mode(
+        self, mock_credit_manager: MockCreditManager
+    ):
+        """Test that default rate_mode is CONVERSATION for backward compatibility."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=100.0,
+            # rate_mode not specified, should default to CONVERSATION
+            request_rate_mode=RequestRateMode.CONSTANT,
+            conversation_turn_mean=5,
+            request_count=10,
         )
 
-        assert turn.conversation_id == "conv1"
-        assert turn.x_correlation_id == "corr-123"
-        assert turn.turn_index == 0
-        assert turn.is_final_turn is True
+        strategy = RequestRateStrategy(config, mock_credit_manager)
 
-    def test_turn_to_send_validates_turn_index(self):
-        """Test TurnToSend validates turn_index >= 0."""
-        from aiperf.timing.request_rate_strategy import TurnToSend
+        # Should default to CONVERSATION mode
+        assert strategy._rate_mode == CreditMode.CONVERSATION
+        # Should NOT adjust rate
+        assert strategy._effective_rate == 100.0
 
-        # Valid
-        turn = TurnToSend(
-            conversation_id="conv1",
-            x_correlation_id="corr1",
-            turn_index=5,
-            is_final_turn=False,
+    def test_request_mode_with_request_rate_none_uses_none(
+        self, mock_credit_manager: MockCreditManager
+    ):
+        """Test that REQUEST mode with request_rate=None doesn't crash (for concurrency-burst mode)."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=None,
+            rate_mode=CreditMode.REQUEST,
+            request_rate_mode=RequestRateMode.CONCURRENCY_BURST,
+            concurrency=10,
+            conversation_turn_mean=5,
+            request_count=10,
         )
-        assert turn.turn_index == 5
 
-        # Invalid (negative)
-        with pytest.raises(ValidationError):  # Pydantic validation
-            turn = TurnToSend(
-                conversation_id="conv1",
-                x_correlation_id="corr1",
-                turn_index=-1,  # type: ignore[arg-type]
-                is_final_turn=False,
-            )
-            turn.model_validate()
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+
+        # effective_rate should be None when request_rate is None
+        assert strategy._effective_rate is None
+        # But concurrency should still be adjusted
+        assert strategy._semaphore is not None
+        assert strategy._semaphore._value == 2  # 10 / 5 = 2
+
+    async def test_request_mode_generates_correct_credit_rate(
+        self, mock_credit_manager: MockCreditManager, time_traveler: TimeTraveler
+    ):
+        """Integration test: verify REQUEST mode generates credits at adjusted rate."""
+        config = TimingManagerConfig(
+            timing_mode=TimingMode.REQUEST_RATE,
+            request_rate=100.0,
+            rate_mode=CreditMode.REQUEST,
+            request_rate_mode=RequestRateMode.CONSTANT,
+            conversation_turn_mean=5,
+            request_count=20,
+        )
+        phase_stats = profiling_phase_stats_from_config(config)
+
+        strategy = RequestRateStrategy(config, mock_credit_manager)
+        await strategy._execute_single_phase(phase_stats)
+        await strategy.wait_for_tasks()
+
+        # Should have issued 20 credits
+        assert phase_stats.sent == 20
+
+        # Calculate actual credit issuing rate
+        timestamps = mock_credit_manager.dropped_timestamps
+        duration = (timestamps[-1] - timestamps[0]) / NANOS_PER_SECOND
+        actual_credit_rate = (len(timestamps) - 1) / duration if duration > 0 else 0
+
+        # Should be close to 20 conv/sec (100 req/sec / 5 turns/conv)
+        assert actual_credit_rate == pytest.approx(20.0, rel=0.01)

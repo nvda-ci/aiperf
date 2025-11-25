@@ -7,79 +7,112 @@ from pydantic import Field
 
 from aiperf.common.enums import CreditPhase, MessageType
 from aiperf.common.messages.service_messages import BaseServiceMessage
+from aiperf.common.models import AIPerfBaseModel, ErrorDetails
 from aiperf.common.types import MessageTypeT
 
 
-class CreditDropMessage(BaseServiceMessage):
-    """Message indicating that a credit has been dropped.
-    This message is sent by the timing manager to workers to indicate that credit(s)
-    have been dropped.
-    """
+class Credit(AIPerfBaseModel):
+    """Credit representing the right to make a single request to an inference server."""
 
-    message_type: MessageTypeT = MessageType.CREDIT_DROP
-
-    request_id: str = Field(  # type: ignore
+    id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description="The ID of the credit drop, that will be used as the X-Correlation-ID header.",
+        description="Unique ID for this credit.",
     )
     phase: CreditPhase = Field(
         ..., description="The type of credit phase, such as warmup or profiling."
     )
-    credit_num: int = Field(
+    num: int = Field(
         ...,
         ge=0,
-        description="The sequential number of the credit in the credit phase. This is used to track the progress of the credit phase,"
-        " as well as the order that requests are sent in.",
+        description="The sequential number of the credit in the credit phase. "
+        "This is used to track the order that requests are sent in.",
     )
-    conversation_id: str | None = Field(
-        default=None, description="The ID of the conversation, if applicable."
-    )
-    credit_drop_ns: int | None = Field(
+    cancel_after_ns: int | None = Field(
         default=None,
-        description="Timestamp of the credit drop, if applicable. None means send ASAP.",
-    )
-    should_cancel: bool = Field(
-        default=False,
-        description="Whether this request should be cancelled after the specified delay.",
-    )
-    cancel_after_ns: int = Field(
-        default=0,
         ge=0,
         description="Delay in nanoseconds after which the request should be cancelled. Only applicable if should_cancel is True.",
+    )
+    conversation_id: str = Field(
+        ...,
+        description="The ID of the conversation that this credit belongs to.",
+    )
+    x_correlation_id: str = Field(
+        ...,
+        description="Conversation instance ID. Shared across all turns. Used by StickyCreditRouter for sticky routing.",
+    )
+    turn_index: int = Field(
+        ...,
+        ge=0,
+        description="Turn index within conversation (0-based).",
+    )
+    is_final_turn: bool = Field(
+        default=False,
+        description="True if this is the last turn of the conversation. Used for cache eviction and assignment cleanup.",
+    )
+
+    @property
+    def should_cancel(self) -> bool:
+        """Whether this credit should be cancelled."""
+        return self.cancel_after_ns is not None
+
+
+class CreditDropMessage(BaseServiceMessage):
+    """Message indicating that a credit has been dropped.
+
+    This message is sent by the TimingManager to the Worker to indicate that some work needs to be done.
+    """
+
+    message_type: MessageTypeT = MessageType.CREDIT_DROP
+
+    credit: Credit = Field(
+        ...,
+        description="The credit data.",
     )
 
 
 class CreditReturnMessage(BaseServiceMessage):
     """Message indicating that a credit has been returned.
+
     This message is sent by a worker to the timing manager to indicate that work has
     been completed.
     """
 
     message_type: MessageTypeT = MessageType.CREDIT_RETURN
 
-    phase: CreditPhase = Field(
+    credit: Credit = Field(
         ...,
-        description="The Credit Phase of the credit drop. This is so the TimingManager can track the progress of the credit phase.",
+        description="The original credit data.",
     )
-    credit_drop_id: str = Field(
-        ...,
-        description="ID of the credit drop, that defines the X-Correlation-ID header.",
-    )
-    delayed_ns: int | None = Field(
+    error: ErrorDetails | None = Field(
         default=None,
-        ge=1,
-        description="The number of nanoseconds the credit drop was delayed by, or None if the credit was sent on time. "
-        "NOTE: This is only applicable if the original credit_drop_ns was not None.",
-    )
-    requests_sent: int = Field(
-        ...,
-        ge=0,
-        description="The number of requests that were sent for this credit drop. This can be more than one in multi turn conversations.",
+        description="The error details if the request failed.",
     )
 
-    @property
-    def delayed(self) -> bool:
-        return self.delayed_ns is not None
+
+class CreditContext(AIPerfBaseModel):
+    """Context for a credit."""
+
+    credit: Credit = Field(
+        ...,
+        description="The credit data.",
+    )
+    drop_perf_ns: int = Field(
+        ...,
+        ge=0,
+        description="The perf_ns timestamp when the credit was dropped. This is the time the credit was received by the worker.",
+    )
+    error: ErrorDetails | None = Field(
+        default=None,
+        description="The error details if the request failed.",
+    )
+
+    def to_return_message(self, service_id: str) -> CreditReturnMessage:
+        """Convert the credit context to a credit return message."""
+        return CreditReturnMessage(
+            service_id=service_id,
+            credit=self.credit,
+            error=self.error,
+        )
 
 
 class CreditPhaseStartMessage(BaseServiceMessage):

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import time
+import uuid
 
 import orjson
 
@@ -12,6 +13,7 @@ from aiperf.common.enums import (
     CommAddress,
     CommandType,
     ComposerType,
+    CreditPhase,
     MessageType,
     ServiceType,
 )
@@ -128,7 +130,14 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
 
             for i, turn in enumerate(conversation.turns):
                 request_info = RequestInfo(
-                    model_endpoint=model_endpoint, turns=[turn], turn_index=i
+                    model_endpoint=model_endpoint,
+                    turns=[turn],
+                    turn_index=i,
+                    credit_num=i,
+                    credit_phase=CreditPhase.PROFILING,
+                    x_request_id=str(uuid.uuid4()),
+                    x_correlation_id=str(uuid.uuid4()),
+                    conversation_id=conversation.session_id,
                 )
                 request_info.endpoint_headers = endpoint.get_endpoint_headers(
                     request_info

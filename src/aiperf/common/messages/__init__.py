@@ -35,6 +35,8 @@ from aiperf.common.messages.command_messages import (
     TargetedServiceMessage,
 )
 from aiperf.common.messages.credit_messages import (
+    Credit,
+    CreditContext,
     CreditDropMessage,
     CreditPhaseCompleteMessage,
     CreditPhaseProgressMessage,
@@ -80,6 +82,8 @@ from aiperf.common.messages.telemetry_messages import (
 )
 from aiperf.common.messages.worker_messages import (
     WorkerHealthMessage,
+    WorkerReadyMessage,
+    WorkerShutdownMessage,
     WorkerStatusSummaryMessage,
 )
 
@@ -99,6 +103,8 @@ __all__ = [
     "ConversationResponseMessage",
     "ConversationTurnRequestMessage",
     "ConversationTurnResponseMessage",
+    "Credit",
+    "CreditContext",
     "CreditDropMessage",
     "CreditPhaseCompleteMessage",
     "CreditPhaseProgressMessage",
@@ -139,5 +145,7 @@ __all__ = [
     "TelemetryRecordsMessage",
     "TelemetryStatusMessage",
     "WorkerHealthMessage",
+    "WorkerReadyMessage",
+    "WorkerShutdownMessage",
     "WorkerStatusSummaryMessage",
 ]

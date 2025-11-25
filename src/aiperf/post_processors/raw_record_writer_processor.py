@@ -92,12 +92,23 @@ class RawRecordWriterProcessor(BufferedJSONLWriterMixin[RawRecordInfo]):
     ) -> RawRecordInfo:
         """Build the export record for a single record."""
 
-        payload = self._endpoint.format_payload(
-            RequestInfo(
+        # Use existing request_info if available, otherwise create minimal one
+        request_info = record.request.request_info
+        if request_info is None:
+            # Fallback for records without complete request_info
+            # This should rarely happen after proper request_info propagation
+            request_info = RequestInfo(
                 model_endpoint=self._model_endpoint,
                 turns=record.request.turns,
+                turn_index=metadata.turn_index or 0,
+                credit_num=metadata.session_num,
+                credit_phase=metadata.benchmark_phase,
+                x_request_id=metadata.x_request_id or "",
+                x_correlation_id=metadata.x_correlation_id or "",
+                conversation_id=metadata.conversation_id or "",
             )
-        )
+
+        payload = self._endpoint.format_payload(request_info)
         return RawRecordInfo(
             metadata=metadata,
             start_perf_ns=record.request.start_perf_ns,

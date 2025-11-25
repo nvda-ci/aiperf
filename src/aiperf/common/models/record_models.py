@@ -351,31 +351,83 @@ class SSEMessage(BaseInferenceServerResponse):
             return None
 
 
-class RequestRecord(AIPerfBaseModel):
-    """Record of a request with its associated responses."""
+class RequestInfo(AIPerfBaseModel):
+    """Info about a request."""
 
-    turns: list[Turn] | None = Field(
-        default=None,
-        description="The turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",
+    model_endpoint: ModelEndpointInfo = Field(
+        ...,
+        description="The model endpoint that the request was sent to.",
     )
-    request_headers: dict[str, str] | None = Field(
-        default=None,
-        description="The headers of the request.",
+    turns: list[Turn] = Field(
+        default_factory=list,
+        description="The actual turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",
     )
-    credit_num: int | None = Field(
-        default=None,
+    turn_index: int = Field(
+        ...,
+        description="The index of the turn in the conversation (if applicable).",
+    )
+    endpoint_headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Endpoint-specific headers (auth, API keys, custom headers).",
+    )
+    endpoint_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Endpoint-specific URL query parameters.",
+    )
+    credit_num: int = Field(
+        ...,
         ge=0,
         description="The sequential number of the credit in the credit phase. This is used to track the progress of the credit phase,"
         " as well as the order that requests are sent in.",
     )
-    conversation_id: str | None = Field(
-        default=None,
-        description="The ID of the conversation (if applicable).",
+    credit_phase: CreditPhase = Field(
+        ...,
+        description="The type of credit phase (either warmup or profiling)",
     )
-    turn_index: int | None = Field(
+    cancel_after_ns: int | None = Field(
         default=None,
         ge=0,
-        description="The index of the turn in the conversation (if applicable).",
+        description="The delay in nanoseconds after which the request should be cancelled, as specified in the credit drop message.",
+    )
+    x_request_id: str = Field(
+        ...,
+        description="The X-Request-ID header of the request. This is a unique ID for the request.",
+    )
+    x_correlation_id: str = Field(
+        ...,
+        description="The X-Correlation-ID header of the request. This is the ID of the credit drop.",
+    )
+    conversation_id: str = Field(
+        ...,
+        description="The ID of the conversation (if applicable).",
+    )
+    drop_perf_ns: int | None = Field(
+        default=None,
+        ge=0,
+        description="The time in nanoseconds (perf_counter_ns) when the credit was dropped by the timing manager. "
+        "This is used to calculate the credit drop latency.",
+    )
+
+    @property
+    def should_cancel(self) -> bool:
+        """Whether this request should be cancelled after the specified delay."""
+        return self.cancel_after_ns is not None
+
+
+class RequestRecord(AIPerfBaseModel):
+    """Record of a request with its associated responses."""
+
+    request_info: RequestInfo | None = Field(
+        default=None,
+        description="The original request info.",
+    )
+    turns: list[Turn] = Field(
+        default_factory=list,
+        description="The actual turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",
+    )
+    request_headers: dict[str, str] | None = Field(
+        default=None,
+        description="The headers of the request.",
     )
     model_name: str | None = Field(
         default=None,
@@ -415,49 +467,27 @@ class RequestRecord(AIPerfBaseModel):
         default=None,
         description="The error details if the request failed.",
     )
-    delayed_ns: int | None = Field(
-        default=None,
-        ge=0,
-        description="The number of nanoseconds the request was delayed from when it was expected to be sent, "
-        "or None if the request was sent on time, or did not have a credit_drop_ns timestamp.",
-    )
-    credit_phase: CreditPhase = Field(
-        default=CreditPhase.PROFILING,
-        description="The type of credit phase (either warmup or profiling)",
-    )
     credit_drop_latency: int | None = Field(
         default=None,
         description="The latency of the credit drop in nanoseconds from when it was first received by a Worker to when the inference request was actually sent. "
         "This can be used to trace internal latency in order to identify bottlenecks or other issues.",
         ge=0,
     )
-    was_cancelled: bool = Field(
-        default=False,
-        description="Whether the request was cancelled during execution.",
-    )
-    cancel_after_ns: int = Field(
-        default=0,
-        ge=0,
-        description="The delay in nanoseconds after which the request should be cancelled, as specified in the credit drop message.",
-    )
     cancellation_perf_ns: int | None = Field(
         default=None,
         ge=0,
         description="The time in nanoseconds (perf_counter_ns) when the request was actually cancelled, if applicable.",
     )
-    x_request_id: str | None = Field(
-        default=None,
-        description="The X-Request-ID header of the request. This is a unique ID for the request.",
-    )
-    x_correlation_id: str | None = Field(
-        default=None,
-        description="The X-Correlation-ID header of the request. This is the ID of the credit drop.",
-    )
 
     @property
-    def delayed(self) -> bool:
-        """Check if the request was delayed."""
-        return self.delayed_ns is not None and self.delayed_ns > 0
+    def was_cancelled(self) -> bool:
+        """Check if the request was cancelled."""
+        return self.cancellation_perf_ns is not None
+
+    @property
+    def should_cancel(self) -> bool:
+        """Check if the request should be cancelled."""
+        return self.cancel_after_ns is not None
 
     # TODO: Most of these properties will be removed once we have proper record handling and metrics.
 
@@ -818,62 +848,6 @@ class ParsedResponseRecord(AIPerfBaseModel):
                         f"Response {i} perf ns timestamp is invalid: {response.perf_ns}"
                     )
             self.request.error = ErrorDetails.from_exception(err)
-
-
-class RequestInfo(AIPerfBaseModel):
-    """Info about a request."""
-
-    model_endpoint: ModelEndpointInfo = Field(
-        ...,
-        description="The model endpoint that the request was sent to.",
-    )
-    turns: list[Turn] = Field(
-        default_factory=list,
-        description="The actual turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",
-    )
-    turn_index: int | None = Field(
-        default=None,
-        description="The index of the turn in the conversation (if applicable).",
-    )
-    endpoint_headers: dict[str, str] = Field(
-        default_factory=dict,
-        description="Endpoint-specific headers (auth, API keys, custom headers).",
-    )
-    endpoint_params: dict[str, str] = Field(
-        default_factory=dict,
-        description="Endpoint-specific URL query parameters.",
-    )
-    credit_num: int | None = Field(
-        default=None,
-        ge=0,
-        description="The sequential number of the credit in the credit phase. This is used to track the progress of the credit phase,"
-        " as well as the order that requests are sent in.",
-    )
-    credit_phase: CreditPhase = Field(
-        default=CreditPhase.PROFILING,
-        description="The type of credit phase (either warmup or profiling)",
-    )
-    should_cancel: bool = Field(
-        default=False,
-        description="Whether this request should be cancelled after the specified delay.",
-    )
-    cancel_after_ns: int = Field(
-        default=0,
-        ge=0,
-        description="The delay in nanoseconds after which the request should be cancelled, as specified in the credit drop message.",
-    )
-    x_request_id: str | None = Field(
-        default=None,
-        description="The X-Request-ID header of the request. This is a unique ID for the request.",
-    )
-    x_correlation_id: str | None = Field(
-        default=None,
-        description="The X-Correlation-ID header of the request. This is the ID of the credit drop.",
-    )
-    conversation_id: str | None = Field(
-        default=None,
-        description="The ID of the conversation (if applicable).",
-    )
 
 
 class MetricRecordInfo(AIPerfBaseModel):

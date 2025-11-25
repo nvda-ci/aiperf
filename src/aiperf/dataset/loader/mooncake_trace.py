@@ -143,7 +143,7 @@ class MooncakeTraceDatasetLoader(BaseFileLoader):
                     )
 
                 turn = Turn(
-                    timestamp=trace.timestamp,
+                    timestamp_ms=trace.timestamp,
                     delay=trace.delay,
                     texts=[Text(name="text", contents=[prompt])],
                     max_tokens=trace.output_length,

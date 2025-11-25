@@ -83,7 +83,6 @@ class TestRecordProcessorCreateMetricRecordMetadata:
         sample_request_record.end_perf_ns = (
             sample_request_record.start_perf_ns + 100_000
         )
-        sample_request_record.was_cancelled = True
         sample_request_record.cancellation_perf_ns = cancellation_perf_ns
         sample_request_record.credit_num = 3
 
@@ -105,11 +104,7 @@ class TestRecordProcessorCreateMetricRecordMetadata:
     @pytest.mark.parametrize(
         "field_name,field_value,expected_metadata_field",
         [
-            ("conversation_id", None, "conversation_id"),
-            ("turn_index", None, "turn_index"),
             ("recv_start_perf_ns", None, "request_ack_ns"),
-            ("x_request_id", None, "x_request_id"),
-            ("x_correlation_id", None, "x_correlation_id"),
         ],
     )
     def test_create_metadata_with_optional_fields_none(

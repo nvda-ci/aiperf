@@ -23,17 +23,6 @@ class CreditManagerProtocol(PubClientProtocol, Protocol):
     in a decoupled way.
     """
 
-    async def drop_credit(
-        self,
-        credit_phase: CreditPhase,
-        credit_num: int,
-        conversation_id: str | None = None,
-        credit_drop_ns: int | None = None,
-        *,
-        should_cancel: bool = False,
-        cancel_after_ns: int = 0,
-    ) -> None: ...
-
     async def publish_progress(
         self, phase: CreditPhase, sent: int, completed: int
     ) -> None: ...

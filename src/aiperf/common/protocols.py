@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
     from aiperf.common.config import ServiceConfig, UserConfig
     from aiperf.common.enums import DatasetSamplingStrategy
+    from aiperf.common.messages import CreditDropMessage
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
     from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
@@ -651,6 +652,36 @@ class RequestRateGeneratorProtocol(Protocol):
     def __init__(self, config: "TimingManagerConfig") -> None: ...
 
     def next_interval(self) -> float: ...
+
+
+@runtime_checkable
+class StickyCreditRouterProtocol(Protocol):
+    """Protocol for smart credit routing with load balancing."""
+
+    async def send_credit(self, credit: "CreditDropMessage") -> None:
+        """
+        Route and send credit to optimal worker.
+
+        Args:
+            credit: Credit to route and send
+        """
+        ...
+
+    async def register_worker(self, worker_id: str) -> None:
+        """Register worker for routing."""
+        ...
+
+    async def unregister_worker(self, worker_id: str) -> None:
+        """Unregister worker."""
+        ...
+
+    def get_stats(self) -> dict[str, int]:
+        """Get routing statistics."""
+        ...
+
+    def get_worker_loads(self) -> dict[str, int]:
+        """Get current load for all workers."""
+        ...
 
 
 @runtime_checkable

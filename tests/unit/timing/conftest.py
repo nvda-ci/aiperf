@@ -10,6 +10,8 @@ import pytest
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.enums import CreditPhase, DatasetSamplingStrategy
 from aiperf.common.messages import (
+    ConversationRequestMessage,
+    ConversationResponseMessage,
     CreditDropMessage,
     CreditPhaseCompleteMessage,
     CreditPhaseProgressMessage,
@@ -20,9 +22,11 @@ from aiperf.common.messages import (
 )
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models import (
+    Conversation,
     ConversationMetadata,
     CreditPhaseStats,
     DatasetMetadata,
+    Turn,
     TurnMetadata,
 )
 from aiperf.timing import CreditIssuingStrategy
@@ -76,6 +80,31 @@ class MockSemaphore:
         return self.value <= 0
 
 
+class MockDatasetRequestClient:
+    """Mock dataset request client for testing."""
+
+    async def request(
+        self, message: ConversationRequestMessage
+    ) -> ConversationResponseMessage:
+        """Mock request method that returns a simple conversation."""
+        # Return a simple single-turn conversation
+        return ConversationResponseMessage(
+            service_id="test-service",
+            conversation=Conversation(
+                turns=[
+                    Turn(
+                        role="user",
+                        texts=[
+                            str(
+                                contents=[f"Test message for {message.conversation_id}"]
+                            )
+                        ],
+                    )
+                ]
+            ),
+        )
+
+
 class MockCreditManager(AIPerfLifecycleMixin):
     """Mock implementation of CreditManagerProtocol for testing."""
 
@@ -91,6 +120,8 @@ class MockCreditManager(AIPerfLifecycleMixin):
         self.credit_strategy: CreditIssuingStrategy | None = None
         self.time_traveler = time_traveler
         self.publish_calls = []
+        self.service_id = "test-service"
+        self.dataset_request_client = MockDatasetRequestClient()  # Mock dataset client
 
     def create_strategy(
         self,
@@ -117,29 +148,17 @@ class MockCreditManager(AIPerfLifecycleMixin):
         """Mock publish method."""
         self.publish_calls.append(message)
 
-    async def drop_credit(
-        self,
-        credit_phase: CreditPhase,
-        credit_num: int,
-        conversation_id: str | None = None,
-        credit_drop_ns: int | None = None,
-        should_cancel: bool = False,
-        cancel_after_ns: int = 0,
-    ) -> None:
-        """Mock drop_credit method."""
+    async def route_credit(self, credit: CreditDropMessage) -> None:
+        """Mock route_credit method - routes credits via SmartRouter."""
         drop_time_ns = self.time_traveler.time_ns()
         self.dropped_timestamps.append(drop_time_ns)
-        self.dropped_credits.append(
-            CreditDropMessage(
-                service_id="test-service",
-                phase=credit_phase,
-                credit_num=credit_num,
-                conversation_id=conversation_id,
-                credit_drop_ns=credit_drop_ns,
-                should_cancel=should_cancel,
-                cancel_after_ns=cancel_after_ns,
-            )
-        )
+        self.dropped_credits.append(credit)
+
+    async def send_credit(self, credit) -> None:
+        """Mock send_credit method - accepts Credit objects."""
+        drop_time_ns = self.time_traveler.time_ns()
+        self.dropped_timestamps.append(drop_time_ns)
+        self.dropped_credits.append(credit)
 
     async def publish_progress(
         self, phase: CreditPhase, sent: int, completed: int
@@ -264,7 +283,7 @@ def create_mock_dataset_metadata(
             first_timestamp = (
                 first_turn_timestamps[i] if first_turn_timestamps else None
             )
-            turns.append(TurnMetadata(timestamp=first_timestamp, delay=None))
+            turns.append(TurnMetadata(timestamp_ms=first_timestamp, delay_ms=None))
 
             # Create subsequent turns with delays
             if turn_count > 1:
@@ -278,15 +297,17 @@ def create_mock_dataset_metadata(
                             timestamp = first_timestamp + sum(delays[: j + 1])
                         else:
                             timestamp = None
-                        turns.append(TurnMetadata(timestamp=timestamp, delay=delay))
+                        turns.append(
+                            TurnMetadata(timestamp_ms=timestamp, delay_ms=delay)
+                        )
                 else:
                     # No delays provided, create turns without timing info
                     for _ in range(turn_count - 1):
-                        turns.append(TurnMetadata(timestamp=None, delay=None))
+                        turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
         else:
             # No timing data, create empty turns
             for _ in range(turn_count):
-                turns.append(TurnMetadata(timestamp=None, delay=None))
+                turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
 
         metadata = ConversationMetadata(
             conversation_id=conv_id,
@@ -328,11 +349,11 @@ def create_mock_dataset_metadata_with_schedule(
         for i, timestamp in enumerate(timestamps_list):
             if i == 0:
                 # First turn has no delay
-                turns.append(TurnMetadata(timestamp=timestamp, delay=None))
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=None))
             else:
                 # Subsequent turns have delay relative to previous turn
                 delay = timestamp - timestamps_list[i - 1]
-                turns.append(TurnMetadata(timestamp=timestamp, delay=delay))
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=delay))
 
         metadata = ConversationMetadata(
             conversation_id=conv_id,

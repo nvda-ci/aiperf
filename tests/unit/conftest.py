@@ -25,6 +25,7 @@ from aiperf.common.models import (
     Conversation,
     ParsedResponse,
     ParsedResponseRecord,
+    RequestInfo,
     RequestRecord,
     Text,
     TextResponseData,
@@ -356,11 +357,42 @@ def sample_conversations() -> dict[str, Conversation]:
 
 
 @pytest.fixture
-def sample_request_record() -> RequestRecord:
+def sample_request_info() -> RequestInfo:
+    """Create a sample RequestInfo for testing."""
+    from aiperf.common.enums import CreditPhase, EndpointType, ModelSelectionStrategy
+    from aiperf.common.models.model_endpoint_info import (
+        EndpointInfo,
+        ModelEndpointInfo,
+        ModelInfo,
+        ModelListInfo,
+    )
+
+    return RequestInfo(
+        model_endpoint=ModelEndpointInfo(
+            models=ModelListInfo(
+                models=[ModelInfo(name="test-model")],
+                model_selection_strategy=ModelSelectionStrategy.ROUND_ROBIN,
+            ),
+            endpoint=EndpointInfo(
+                type=EndpointType.CHAT,
+                base_url="http://localhost:8000/v1/test",
+            ),
+        ),
+        turns=[Turn(texts=[Text(contents=["test prompt"])], role="user")],
+        turn_index=0,
+        credit_num=0,
+        credit_phase=CreditPhase.PROFILING,
+        x_request_id="test-request-id",
+        x_correlation_id="test-correlation-id",
+        conversation_id="test-conversation",
+    )
+
+
+@pytest.fixture
+def sample_request_record(sample_request_info: RequestInfo) -> RequestRecord:
     """Create a sample RequestRecord for testing."""
     return RequestRecord(
-        conversation_id="test-conversation",
-        turn_index=0,
+        request_info=sample_request_info,
         model_name="test-model",
         start_perf_ns=DEFAULT_START_TIME_NS,
         timestamp_ns=DEFAULT_START_TIME_NS,

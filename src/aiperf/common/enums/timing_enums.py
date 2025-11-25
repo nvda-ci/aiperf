@@ -11,8 +11,9 @@ class TimingMode(CaseInsensitiveStrEnum):
     """A mode where the TimingManager will send requests according to a fixed schedule."""
 
     REQUEST_RATE = "request_rate"
-    """A mode where the TimingManager will send requests using a request rate generator based on various modes.
-    Optionally, a max concurrency limit can be specified as well.
+    """A mode where the TimingManager issues 1 credit per turn (request) for perfect request-rate control.
+    Uses smart routing with fair load balancing for first turns and sticky routing for subsequent turns.
+    Enables worker conversation caching and optimal resource utilization.
     """
 
 

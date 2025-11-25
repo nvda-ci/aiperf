@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models import (
     InputsFile,
     JsonExportData,
@@ -258,3 +259,24 @@ class AIPerfResults:
         assert self.has_all_outputs, "Not all output files exist"
         assert self.request_count > 0, "Request count should be greater than 0"
         self.validate_pydantic_models()
+
+    @property
+    def average_inter_send_time(self) -> float:
+        """Calculate the average inter-send time (time between requests)."""
+        start_times_ns = sorted(
+            record.metadata.request_start_ns for record in self.jsonl
+        )
+        inter_send_times_s = [
+            (start_times_ns[i] - start_times_ns[i - 1]) / NANOS_PER_SECOND
+            for i in range(1, len(start_times_ns))
+        ]
+        return sum(inter_send_times_s) / len(inter_send_times_s)
+
+    @property
+    def average_request_send_rate(self) -> float:
+        """Calculate the average request rate."""
+        start_times_ns = sorted(
+            record.metadata.request_start_ns for record in self.jsonl
+        )
+        duration_s = (start_times_ns[-1] - start_times_ns[0]) / NANOS_PER_SECOND
+        return (len(start_times_ns) - 1) / duration_s

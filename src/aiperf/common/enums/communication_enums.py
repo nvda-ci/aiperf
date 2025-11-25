@@ -30,11 +30,8 @@ class CommAddress(CaseInsensitiveStrEnum):
     EVENT_BUS_PROXY_BACKEND = "event_bus_proxy_backend"
     """Backend address for services to subscribe to messages."""
 
-    CREDIT_DROP = "credit_drop"
-    """Address to send CreditDrop messages from the TimingManager to the Worker."""
-
-    CREDIT_RETURN = "credit_return"
-    """Address to send CreditReturn messages from the Worker to the TimingManager."""
+    CREDIT_ROUTER = "credit_router"
+    """Address for bidirectional ROUTER-DEALER credit routing (all timing modes)."""
 
     RECORDS = "records"
     """Address to send parsed records from InferenceParser to RecordManager."""

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from aiperf.common.enums import TransportType
+from aiperf.common.enums import CreditPhase, TransportType
 from aiperf.common.models.record_models import RequestInfo, RequestRecord
 from aiperf.transports.aiohttp_transport import AioHttpTransport
 from tests.unit.transports.conftest import create_model_endpoint_info
@@ -48,8 +48,12 @@ class TestAioHttpTransport:
             turns=[],
             endpoint_headers=endpoint_headers or {},
             endpoint_params=endpoint_params or {},
-            x_request_id=x_request_id,
-            x_correlation_id=x_correlation_id,
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
+            x_request_id=x_request_id or "test-request-id",
+            x_correlation_id=x_correlation_id or "test-correlation-id",
+            conversation_id="test-conversation-id",
         )
 
     def _extract_call_args(self, mock_call_args):
@@ -116,7 +120,7 @@ class TestAioHttpTransport:
     def test_get_transport_headers(self, transport, streaming, expected_accept):
         """Test transport headers for different streaming modes."""
         model_endpoint = create_model_endpoint_info(streaming=streaming)
-        request_info = RequestInfo(model_endpoint=model_endpoint, turns=[])
+        request_info = self._create_request_info(model_endpoint)
         headers = transport.get_transport_headers(request_info)
 
         assert headers["Content-Type"] == "application/json"
@@ -143,9 +147,7 @@ class TestAioHttpTransport:
         model_endpoint_non_streaming.endpoint.custom_endpoint = custom_endpoint
 
         transport = AioHttpTransport(model_endpoint=model_endpoint_non_streaming)
-        request_info = RequestInfo(
-            model_endpoint=model_endpoint_non_streaming, turns=[]
-        )
+        request_info = self._create_request_info(model_endpoint_non_streaming)
         url = transport.get_url(request_info)
         assert url == expected_url
 
@@ -158,11 +160,9 @@ class TestAioHttpTransport:
         mock_record = RequestRecord(responses=[], error=None)
         transport.aiohttp_client.post_request = AsyncMock(return_value=mock_record)
 
-        request_info = RequestInfo(
-            model_endpoint=model_endpoint_non_streaming,
-            turns=[],
+        request_info = self._create_request_info(
+            model_endpoint_non_streaming,
             endpoint_headers={"Authorization": "Bearer token"},
-            endpoint_params={},
         )
         payload = {
             "model": "test-model",
@@ -287,12 +287,7 @@ class TestAioHttpTransport:
         mock_record = RequestRecord()
         transport.aiohttp_client.post_request = AsyncMock(return_value=mock_record)
 
-        request_info = RequestInfo(
-            model_endpoint=model_endpoint_streaming,
-            turns=[],
-            endpoint_headers={},
-            endpoint_params={},
-        )
+        request_info = self._create_request_info(model_endpoint_streaming)
         payload = {"stream": True}
 
         await transport.send_request(request_info, payload)
@@ -424,8 +419,12 @@ class TestAioHttpTransportIntegration:
                 "Custom-Header": "value",
             },
             endpoint_params={"api-version": "2024-10-01"},
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
             x_request_id="req-123",
             x_correlation_id="corr-456",
+            conversation_id="test-conversation-id",
         )
 
         mock_record = RequestRecord()

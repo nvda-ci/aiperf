@@ -10,7 +10,6 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
-    CreditPhase,
     MessageType,
     ServiceType,
 )
@@ -20,22 +19,18 @@ from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import (
     on_command,
     on_message,
-    on_pull_message,
     on_stop,
 )
 from aiperf.common.messages import (
     CommandAcknowledgedResponse,
     CommandMessage,
-    CreditDropMessage,
-    CreditReturnMessage,
     DatasetConfiguredNotification,
     ProfileCancelCommand,
     ProfileConfigureCommand,
 )
-from aiperf.common.mixins import PullClientMixin
+from aiperf.common.messages.credit_messages import Credit
 from aiperf.common.models import DatasetMetadata
 from aiperf.common.protocols import (
-    PushClientProtocol,
     ServiceProtocol,
 )
 from aiperf.timing.config import (
@@ -46,11 +41,12 @@ from aiperf.timing.credit_issuing_strategy import (
     CreditIssuingStrategyFactory,
 )
 from aiperf.timing.credit_manager import CreditPhaseMessagesMixin
+from aiperf.timing.sticky_router import StickyCreditRouter
 
 
 @implements_protocol(ServiceProtocol)
 @ServiceFactory.register(ServiceType.TIMING_MANAGER)
-class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMixin):
+class TimingManager(BaseComponentService, CreditPhaseMessagesMixin):
     """
     The TimingManager service is responsible to generate the schedule and issuing
     timing credits for requests.
@@ -66,8 +62,6 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
             service_config=service_config,
             user_config=user_config,
             service_id=service_id,
-            pull_client_address=CommAddress.CREDIT_RETURN,
-            pull_client_bind=True,
         )
         self.debug("Timing manager __init__")
         self.config = TimingManagerConfig.from_user_config(self.user_config)
@@ -75,11 +69,16 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         self._dataset_configured_event = asyncio.Event()
         self._dataset_metadata: DatasetMetadata | None = None
 
-        self.credit_drop_push_client: PushClientProtocol = (
-            self.comms.create_push_client(
-                CommAddress.CREDIT_DROP,
-                bind=True,
-            )
+        # StickyCreditRouter handles everything: routing, sending, returns, worker lifecycle
+        # Created early to handle worker connections immediately, as well as attaching to the lifecycle
+        self.sticky_router: StickyCreditRouter = StickyCreditRouter(
+            service_config=service_config
+        )
+        self.attach_child_lifecycle(self.sticky_router)
+
+        # Dataset request client for strategies to fetch conversations
+        self.dataset_request_client = self.comms.create_request_client(
+            CommAddress.DATASET_MANAGER_PROXY_FRONTEND
         )
 
         self._credit_issuing_strategy: CreditIssuingStrategy | None = None
@@ -118,6 +117,11 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
             dataset_metadata=self._dataset_metadata,
         )
 
+        self.sticky_router.set_return_callback(
+            self._credit_issuing_strategy._on_credit_return
+        )
+        self.info("Linked StickyCreditRouter to Strategy for credit returns")
+
         if not self._credit_issuing_strategy:
             raise InvalidStateError("No credit issuing strategy configured")
         self.debug(
@@ -152,6 +156,17 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         if self._credit_issuing_strategy:
             await self._credit_issuing_strategy.stop()
 
+    async def send_credit(self, credit: Credit) -> None:
+        """Route credit via StickyCreditRouter.
+
+        This method is called by credit issuing strategies to send credits to workers.
+        It delegates to the SmartRouter which handles load balancing and sticky routing.
+
+        Args:
+            credit: Credit to route to a worker
+        """
+        await self.sticky_router.send_credit(self.service_id, credit)
+
     @on_stop
     async def _timing_manager_stop(self) -> None:
         """Stop the timing manager."""
@@ -159,39 +174,6 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         if self._credit_issuing_strategy:
             await self._credit_issuing_strategy.stop()
         await self.cancel_all_tasks()
-
-    @on_pull_message(MessageType.CREDIT_RETURN)
-    async def _on_credit_return(self, message: CreditReturnMessage) -> None:
-        """Handle the credit return message."""
-        if self.is_debug_enabled:
-            self.debug(f"Timing manager received credit return message: {message}")
-        if self._credit_issuing_strategy:
-            await self._credit_issuing_strategy._on_credit_return(message)
-
-    async def drop_credit(
-        self,
-        credit_phase: CreditPhase,
-        credit_num: int,
-        *,
-        conversation_id: str | None = None,
-        credit_drop_ns: int | None = None,
-        should_cancel: bool = False,
-        cancel_after_ns: int = 0,
-    ) -> None:
-        """Drop a credit."""
-        self.execute_async(
-            self.credit_drop_push_client.push(
-                message=CreditDropMessage(
-                    service_id=self.service_id,
-                    phase=credit_phase,
-                    credit_num=credit_num,
-                    credit_drop_ns=credit_drop_ns,
-                    conversation_id=conversation_id,
-                    should_cancel=should_cancel,
-                    cancel_after_ns=cancel_after_ns,
-                ),
-            )
-        )
 
 
 def main() -> None:

@@ -387,12 +387,12 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert len(conversations[0].turns) == 2
 
         first_turn = conversations[0].turns[0]
-        assert first_turn.timestamp == 1000
+        assert first_turn.timestamp_ms == 1000
         assert first_turn.delay is None
         assert first_turn.role is None
 
         second_turn = conversations[0].turns[1]
-        assert second_turn.timestamp is None
+        assert second_turn.timestamp_ms is None
         assert second_turn.delay == 500
         assert second_turn.role == "user"
 

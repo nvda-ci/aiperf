@@ -4,7 +4,12 @@
 
 import pytest
 
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
+from aiperf.common.enums import (
+    CreditPhase,
+    EndpointType,
+    ModelSelectionStrategy,
+    TransportType,
+)
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -69,6 +74,12 @@ class TestBaseTransport:
             turns=[],
             endpoint_headers={},
             endpoint_params={},
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
+            x_request_id="test-request-id",
+            x_correlation_id="test-correlation-id",
+            conversation_id="test-conversation-id",
         )
 
     def test_metadata(self, transport):
@@ -195,6 +206,12 @@ class TestBaseTransport:
             turns=[],
             endpoint_headers={},
             endpoint_params={"new": "value"},
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
+            x_request_id="test-request-id",
+            x_correlation_id="test-correlation-id",
+            conversation_id="test-conversation-id",
         )
 
         url = transport.build_url(request_info)
@@ -213,6 +230,12 @@ class TestBaseTransport:
             turns=[],
             endpoint_headers={},
             endpoint_params={"key": "overridden"},
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
+            x_request_id="test-request-id",
+            x_correlation_id="test-correlation-id",
+            conversation_id="test-conversation-id",
         )
 
         url = transport.build_url(request_info)
@@ -248,6 +271,12 @@ class TestBaseTransport:
             turns=[],
             endpoint_headers={},
             endpoint_params={"d": "4", "b": "overridden"},  # Override 'b'
+            turn_index=0,
+            credit_num=1,
+            credit_phase=CreditPhase.PROFILING,
+            x_request_id="test-request-id",
+            x_correlation_id="test-correlation-id",
+            conversation_id="test-conversation-id",
         )
 
         url = transport.build_url(request_info)

@@ -30,8 +30,8 @@ class TestDatasetMetadataCreation:
 
         # Verify no timing data
         for conv in metadata.conversations:
-            assert conv.turns[0].timestamp is None if conv.turns else True
-            assert all(turn.delay is None for turn in conv.turns[1:])
+            assert conv.turns[0].timestamp_ms is None if conv.turns else True
+            assert all(turn.delay_ms is None for turn in conv.turns[1:])
             assert len(conv.turns) == 1
 
     def test_create_metadata_with_timing_data(self):
@@ -52,13 +52,13 @@ class TestDatasetMetadataCreation:
 
         # Verify conv1
         assert len(conv_dict["conv1"].turns) == 3
-        assert conv_dict["conv1"].turns[0].timestamp == 0
-        assert [turn.delay for turn in conv_dict["conv1"].turns[1:]] == [100, 100]
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
+        assert [turn.delay_ms for turn in conv_dict["conv1"].turns[1:]] == [100, 100]
 
         # Verify conv2
         assert len(conv_dict["conv2"].turns) == 2
-        assert conv_dict["conv2"].turns[0].timestamp == 50
-        assert [turn.delay for turn in conv_dict["conv2"].turns[1:]] == [100]
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 50
+        assert [turn.delay_ms for turn in conv_dict["conv2"].turns[1:]] == [100]
 
     def test_create_metadata_with_different_sampling_strategies(self):
         """Test creating metadata with different sampling strategies."""
@@ -88,19 +88,19 @@ class TestDatasetMetadataCreation:
 
         # Verify conv1 has 2 turns
         assert len(conv_dict["conv1"].turns) == 2
-        assert conv_dict["conv1"].turns[0].timestamp == 0
-        assert [turn.delay for turn in conv_dict["conv1"].turns[1:]] == [
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
+        assert [turn.delay_ms for turn in conv_dict["conv1"].turns[1:]] == [
             300
         ]  # 300 - 0 = 300
 
         # Verify conv2 has 1 turn
         assert len(conv_dict["conv2"].turns) == 1
-        assert conv_dict["conv2"].turns[0].timestamp == 100
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100
         assert len(conv_dict["conv2"].turns[1:]) == 0  # No delays
 
         # Verify conv3 has 1 turn
         assert len(conv_dict["conv3"].turns) == 1
-        assert conv_dict["conv3"].turns[0].timestamp == 200
+        assert conv_dict["conv3"].turns[0].timestamp_ms == 200
         assert len(conv_dict["conv3"].turns[1:]) == 0  # No delays
 
     def test_create_metadata_with_empty_conversation_list(self):
@@ -120,9 +120,9 @@ class TestConversationMetadataValidation:
     def test_conversation_metadata_with_all_fields(self):
         """Test creating conversation metadata with all fields."""
         turns = [
-            TurnMetadata(timestamp=0, delay=None),
-            TurnMetadata(timestamp=100, delay=100),
-            TurnMetadata(timestamp=200, delay=100),
+            TurnMetadata(timestamp_ms=0, delay_ms=None),
+            TurnMetadata(timestamp_ms=100, delay_ms=100),
+            TurnMetadata(timestamp_ms=200, delay_ms=100),
         ]
         metadata = ConversationMetadata(
             conversation_id="test-conv",
@@ -130,19 +130,19 @@ class TestConversationMetadataValidation:
         )
 
         assert metadata.conversation_id == "test-conv"
-        assert metadata.turns[0].timestamp == 0
-        assert [turn.delay for turn in metadata.turns[1:]] == [100, 100]
+        assert metadata.turns[0].timestamp_ms == 0
+        assert [turn.delay_ms for turn in metadata.turns[1:]] == [100, 100]
         assert len(metadata.turns) == 3
 
     def test_conversation_metadata_minimal_fields(self):
         """Test creating conversation metadata with minimal required fields."""
         metadata = ConversationMetadata(
             conversation_id="test-conv",
-            turns=[TurnMetadata(timestamp=None, delay=None)],
+            turns=[TurnMetadata(timestamp_ms=None, delay_ms=None)],
         )
 
         assert metadata.conversation_id == "test-conv"
-        assert metadata.turns[0].timestamp is None
+        assert metadata.turns[0].timestamp_ms is None
         assert len(metadata.turns[1:]) == 0  # No delays
         assert len(metadata.turns) == 1  # Default value
 
@@ -151,11 +151,12 @@ class TestConversationMetadataValidation:
 
         # Valid turn count
         ConversationMetadata(
-            conversation_id="test", turns=[TurnMetadata(timestamp=None, delay=None)]
+            conversation_id="test",
+            turns=[TurnMetadata(timestamp_ms=None, delay_ms=None)],
         )
         ConversationMetadata(
             conversation_id="test",
-            turns=[TurnMetadata(timestamp=None, delay=None) for _ in range(100)],
+            turns=[TurnMetadata(timestamp_ms=None, delay_ms=None) for _ in range(100)],
         )
 
         # Empty turns list is valid in Pydantic (we don't have a validator for this)
@@ -172,13 +173,13 @@ class TestDatasetMetadataValidation:
             ConversationMetadata(
                 conversation_id="conv1",
                 turns=[
-                    TurnMetadata(timestamp=0, delay=None),
-                    TurnMetadata(timestamp=100, delay=100),
+                    TurnMetadata(timestamp_ms=0, delay_ms=None),
+                    TurnMetadata(timestamp_ms=100, delay_ms=100),
                 ],
             ),
             ConversationMetadata(
                 conversation_id="conv2",
-                turns=[TurnMetadata(timestamp=50, delay=None)],
+                turns=[TurnMetadata(timestamp_ms=50, delay_ms=None)],
             ),
         ]
 
@@ -227,7 +228,7 @@ class TestDatasetMetadataHelperFunctions:
 
         for conv in metadata.conversations:
             assert len(conv.turns) == 1
-            assert conv.turns[0].timestamp is None
+            assert conv.turns[0].timestamp_ms is None
             assert len(conv.turns[1:]) == 0  # No delays
 
     def test_create_mock_dataset_metadata_with_custom_turn_counts(self):
@@ -257,10 +258,10 @@ class TestDatasetMetadataHelperFunctions:
 
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
-        assert conv_dict["conv1"].turns[0].timestamp == 0
-        assert [turn.delay for turn in conv_dict["conv1"].turns[1:]] == [100, 100]
-        assert conv_dict["conv2"].turns[0].timestamp == 50
-        assert [turn.delay for turn in conv_dict["conv2"].turns[1:]] == [100, 100]
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
+        assert [turn.delay_ms for turn in conv_dict["conv1"].turns[1:]] == [100, 100]
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 50
+        assert [turn.delay_ms for turn in conv_dict["conv2"].turns[1:]] == [100, 100]
 
     def test_create_mock_dataset_metadata_with_schedule_simple(self):
         """Test create_mock_dataset_metadata_with_schedule with simple schedule."""
@@ -273,13 +274,13 @@ class TestDatasetMetadataHelperFunctions:
 
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
-        assert conv_dict["conv1"].turns[0].timestamp == 0
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
         assert len(conv_dict["conv1"].turns[1:]) == 0  # No delays
         assert len(conv_dict["conv1"].turns) == 1
-        assert conv_dict["conv2"].turns[0].timestamp == 100
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100
         assert len(conv_dict["conv2"].turns[1:]) == 0  # No delays
         assert len(conv_dict["conv2"].turns) == 1
-        assert conv_dict["conv3"].turns[0].timestamp == 200
+        assert conv_dict["conv3"].turns[0].timestamp_ms == 200
         assert len(conv_dict["conv3"].turns[1:]) == 0  # No delays
         assert len(conv_dict["conv3"].turns) == 1
 
@@ -302,16 +303,16 @@ class TestDatasetMetadataHelperFunctions:
 
         # Verify conv1 has 3 turns
         assert len(conv_dict["conv1"].turns) == 3
-        assert conv_dict["conv1"].turns[0].timestamp == 0
-        assert [turn.delay for turn in conv_dict["conv1"].turns[1:]] == [
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
+        assert [turn.delay_ms for turn in conv_dict["conv1"].turns[1:]] == [
             150,
             50,
         ]  # 150-0=150, 200-150=50
 
         # Verify conv2 has 2 turns
         assert len(conv_dict["conv2"].turns) == 2
-        assert conv_dict["conv2"].turns[0].timestamp == 100
-        assert [turn.delay for turn in conv_dict["conv2"].turns[1:]] == [
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100
+        assert [turn.delay_ms for turn in conv_dict["conv2"].turns[1:]] == [
             150
         ]  # 250-100=150
 
@@ -351,9 +352,9 @@ class TestDatasetMetadataIntegration:
         # Simulate what FixedScheduleStrategy does
         extracted_schedule = []
         for conv in metadata.conversations:
-            if conv.turns and conv.turns[0].timestamp is not None:
+            if conv.turns and conv.turns[0].timestamp_ms is not None:
                 extracted_schedule.append(
-                    (conv.turns[0].timestamp, conv.conversation_id)
+                    (conv.turns[0].timestamp_ms, conv.conversation_id)
                 )
 
         # Sort by timestamp
@@ -409,45 +410,45 @@ class TestFloatingPointTimestampPreservation:
         test_timestamps = [0.0, 100.5, 150.75, 200.123, 250.456789, 999.999999]
 
         for timestamp in test_timestamps:
-            turn = TurnMetadata(timestamp=timestamp, delay=None)
-            assert turn.timestamp == timestamp
-            assert isinstance(turn.timestamp, int | float)
+            turn = TurnMetadata(timestamp_ms=timestamp, delay_ms=None)
+            assert turn.timestamp_ms == timestamp
+            assert isinstance(turn.timestamp_ms, int | float)
             # Verify exact value is preserved
             if "." in str(timestamp):
-                assert turn.timestamp == timestamp
+                assert turn.timestamp_ms == timestamp
 
     def test_turn_metadata_preserves_float_delays(self):
         """Test that TurnMetadata preserves floating point delays."""
         test_delays = [10.5, 25.75, 50.123, 100.456789]
 
         for delay in test_delays:
-            turn = TurnMetadata(timestamp=None, delay=delay)
-            assert turn.delay == delay
-            assert isinstance(turn.delay, int | float)
+            turn = TurnMetadata(timestamp_ms=None, delay_ms=delay)
+            assert turn.delay_ms == delay
+            assert isinstance(turn.delay_ms, int | float)
             # Verify exact value is preserved
-            assert turn.delay == delay
+            assert turn.delay_ms == delay
 
     def test_conversation_metadata_preserves_float_timestamps(self):
         """Test that ConversationMetadata preserves floating point timestamps in turns."""
         turns = [
-            TurnMetadata(timestamp=0.0, delay=None),
-            TurnMetadata(timestamp=100.5, delay=100.5),
-            TurnMetadata(timestamp=200.75, delay=100.25),
-            TurnMetadata(timestamp=300.123, delay=99.373),
+            TurnMetadata(timestamp_ms=0.0, delay_ms=None),
+            TurnMetadata(timestamp_ms=100.5, delay_ms=100.5),
+            TurnMetadata(timestamp_ms=200.75, delay_ms=100.25),
+            TurnMetadata(timestamp_ms=300.123, delay_ms=99.373),
         ]
 
         conv = ConversationMetadata(conversation_id="test-conv", turns=turns)
 
         # Verify all timestamps are preserved exactly
-        assert conv.turns[0].timestamp == 0.0
-        assert conv.turns[1].timestamp == 100.5
-        assert conv.turns[2].timestamp == 200.75
-        assert conv.turns[3].timestamp == 300.123
+        assert conv.turns[0].timestamp_ms == 0.0
+        assert conv.turns[1].timestamp_ms == 100.5
+        assert conv.turns[2].timestamp_ms == 200.75
+        assert conv.turns[3].timestamp_ms == 300.123
 
         # Verify all delays are preserved exactly
-        assert conv.turns[1].delay == 100.5
-        assert conv.turns[2].delay == 100.25
-        assert conv.turns[3].delay == 99.373
+        assert conv.turns[1].delay_ms == 100.5
+        assert conv.turns[2].delay_ms == 100.25
+        assert conv.turns[3].delay_ms == 99.373
 
     def test_dataset_metadata_preserves_float_timestamps(self):
         """Test that DatasetMetadata preserves floating point timestamps across conversations."""
@@ -464,17 +465,17 @@ class TestFloatingPointTimestampPreservation:
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
         # Verify conv1 timestamps preserved
-        assert conv_dict["conv1"].turns[0].timestamp == 0.0
-        assert conv_dict["conv1"].turns[1].timestamp == 150.75
-        assert conv_dict["conv1"].turns[1].delay == 150.75
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0.0
+        assert conv_dict["conv1"].turns[1].timestamp_ms == 150.75
+        assert conv_dict["conv1"].turns[1].delay_ms == 150.75
 
         # Verify conv2 timestamps preserved
-        assert conv_dict["conv2"].turns[0].timestamp == 100.5
-        assert conv_dict["conv2"].turns[1].timestamp == 250.456
-        assert conv_dict["conv2"].turns[1].delay == 149.956
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100.5
+        assert conv_dict["conv2"].turns[1].timestamp_ms == 250.456
+        assert conv_dict["conv2"].turns[1].delay_ms == 149.956
 
         # Verify conv3 timestamps preserved
-        assert conv_dict["conv3"].turns[0].timestamp == 200.123
+        assert conv_dict["conv3"].turns[0].timestamp_ms == 200.123
 
     def test_high_precision_float_timestamps_preserved(self):
         """Test that very high precision floating point timestamps are preserved."""
@@ -490,9 +491,9 @@ class TestFloatingPointTimestampPreservation:
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
         # Verify exact precision is maintained
-        assert conv_dict["conv1"].turns[0].timestamp == 0.123456789
-        assert conv_dict["conv2"].turns[0].timestamp == 100.987654321
-        assert conv_dict["conv3"].turns[0].timestamp == 200.111222333
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0.123456789
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100.987654321
+        assert conv_dict["conv3"].turns[0].timestamp_ms == 200.111222333
 
     def test_mixed_int_float_timestamps_preserved(self):
         """Test that mixed integer and float timestamps maintain their types."""
@@ -507,20 +508,20 @@ class TestFloatingPointTimestampPreservation:
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
         # Verify conv1 (int first timestamp)
-        assert conv_dict["conv1"].turns[0].timestamp == 0
-        assert isinstance(conv_dict["conv1"].turns[0].timestamp, int)
+        assert conv_dict["conv1"].turns[0].timestamp_ms == 0
+        assert isinstance(conv_dict["conv1"].turns[0].timestamp_ms, int)
 
         # Verify conv2 (float first timestamp)
-        assert conv_dict["conv2"].turns[0].timestamp == 100.5
-        assert isinstance(conv_dict["conv2"].turns[0].timestamp, float)
+        assert conv_dict["conv2"].turns[0].timestamp_ms == 100.5
+        assert isinstance(conv_dict["conv2"].turns[0].timestamp_ms, float)
 
         # Verify conv3 (int first timestamp)
-        assert conv_dict["conv3"].turns[0].timestamp == 200
-        assert isinstance(conv_dict["conv3"].turns[0].timestamp, int)
+        assert conv_dict["conv3"].turns[0].timestamp_ms == 200
+        assert isinstance(conv_dict["conv3"].turns[0].timestamp_ms, int)
 
         # Verify delays are preserved with correct types
-        assert conv_dict["conv1"].turns[1].delay == 50
-        assert conv_dict["conv1"].turns[2].delay == 75.5
-        assert conv_dict["conv2"].turns[1].delay == 100.25
-        assert conv_dict["conv2"].turns[2].delay == 150
-        assert conv_dict["conv3"].turns[1].delay == 200.123
+        assert conv_dict["conv1"].turns[1].delay_ms == 50
+        assert conv_dict["conv1"].turns[2].delay_ms == 75.5
+        assert conv_dict["conv2"].turns[1].delay_ms == 100.25
+        assert conv_dict["conv2"].turns[2].delay_ms == 150
+        assert conv_dict["conv3"].turns[1].delay_ms == 200.123

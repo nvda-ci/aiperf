@@ -9,6 +9,7 @@ from aiperf.common.enums import (
     AIPerfUIType,
     AudioFormat,
     CommunicationBackend,
+    DatasetSamplingStrategy,
     EndpointType,
     ExportLevel,
     ImageFormat,
@@ -19,7 +20,6 @@ from aiperf.common.enums import (
     VideoFormat,
     VideoSynthType,
 )
-from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
 
 
 #

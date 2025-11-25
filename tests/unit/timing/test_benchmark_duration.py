@@ -215,7 +215,7 @@ class TestBenchmarkDurationRequestRateStrategy:
 
         # Check that the profiling phase is configured correctly
         assert len(strategy.ordered_phase_configs) > 0
-        profiling_config = strategy.ordered_phase_configs[
+        profiling_config, _ = strategy.ordered_phase_configs[
             -1
         ]  # Last phase should be profiling
 
@@ -234,7 +234,7 @@ class TestBenchmarkDurationRequestRateStrategy:
         )
         strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
 
-        profiling_config = strategy.ordered_phase_configs[-1]
+        profiling_config, _ = strategy.ordered_phase_configs[-1]
 
         # Should use duration, not request count
         assert profiling_config.expected_duration_sec == 1.5
@@ -251,7 +251,7 @@ class TestBenchmarkDurationRequestRateStrategy:
         )
         strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
 
-        profiling_config = strategy.ordered_phase_configs[-1]
+        profiling_config, _ = strategy.ordered_phase_configs[-1]
 
         # Should use request count, not duration
         assert profiling_config.total_expected_requests == 25
@@ -274,13 +274,13 @@ class TestBenchmarkDurationRequestRateStrategy:
         assert len(strategy.ordered_phase_configs) == 2
 
         # Warmup phase should still use request count
-        warmup_config = strategy.ordered_phase_configs[0]
+        warmup_config, _ = strategy.ordered_phase_configs[0]
         assert warmup_config.type == CreditPhase.WARMUP
         assert warmup_config.total_expected_requests == 10
         assert warmup_config.expected_duration_sec is None
 
         # Profiling phase should use duration
-        profiling_config = strategy.ordered_phase_configs[1]
+        profiling_config, _ = strategy.ordered_phase_configs[1]
         assert profiling_config.type == CreditPhase.PROFILING
         assert profiling_config.expected_duration_sec == 4.0
         assert profiling_config.total_expected_requests is None
@@ -303,7 +303,7 @@ class TestBenchmarkDurationIntegration:
         assert config.benchmark_duration == 3.0
         assert config.concurrency == 5
 
-        profiling_config = strategy.ordered_phase_configs[-1]
+        profiling_config, _ = strategy.ordered_phase_configs[-1]
         assert profiling_config.expected_duration_sec == 3.0
 
     async def test_strategy_with_duration_and_request_rate(
@@ -348,10 +348,10 @@ class TestBenchmarkDurationIntegration:
         # Verify phase configurations
         assert len(strategy.ordered_phase_configs) == 2
 
-        warmup_config = strategy.ordered_phase_configs[0]
+        warmup_config, _ = strategy.ordered_phase_configs[0]
         assert warmup_config.total_expected_requests == warmup_count
 
-        profiling_config = strategy.ordered_phase_configs[1]
+        profiling_config, _ = strategy.ordered_phase_configs[1]
         assert profiling_config.expected_duration_sec == duration
 
 
@@ -447,7 +447,7 @@ class TestBenchmarkDurationPhaseSetup:
         profiling_config = next(
             (
                 cfg
-                for cfg in strategy.ordered_phase_configs
+                for cfg, _ in strategy.ordered_phase_configs
                 if cfg.type == CreditPhase.PROFILING
             ),
             None,
@@ -471,7 +471,7 @@ class TestBenchmarkDurationPhaseSetup:
         profiling_config = next(
             (
                 cfg
-                for cfg in strategy.ordered_phase_configs
+                for cfg, _ in strategy.ordered_phase_configs
                 if cfg.type == CreditPhase.PROFILING
             ),
             None,
@@ -497,7 +497,7 @@ class TestBenchmarkDurationPhaseSetup:
         warmup_config = next(
             (
                 cfg
-                for cfg in strategy.ordered_phase_configs
+                for cfg, _ in strategy.ordered_phase_configs
                 if cfg.type == CreditPhase.WARMUP
             ),
             None,
@@ -860,7 +860,7 @@ class TestBenchmarkGracePeriod:
         strategy = RequestRateStrategy(config, mock_credit_manager, dataset_metadata)
 
         # Should have profiling phase with duration configuration
-        profiling_config = strategy.ordered_phase_configs[-1]
+        profiling_config, _ = strategy.ordered_phase_configs[-1]
         assert profiling_config.type == CreditPhase.PROFILING
         assert profiling_config.expected_duration_sec == 1.0
         assert profiling_config.total_expected_requests is None
