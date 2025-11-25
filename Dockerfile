@@ -1,24 +1,31 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
+ARG UID=1000
+ARG GID=1000
+ARG APP_NAME=aiperf
+ARG USERNAME=appuser
+
 FROM python:3.13-slim-bookworm AS base
-
-ENV USERNAME=appuser
-ENV APP_NAME=aiperf
-
-# Create app user
-RUN groupadd -r $USERNAME \
-    && useradd -r -g $USERNAME $USERNAME
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+ARG UID
+ARG GID
+ARG USERNAME
+# Create app user
+RUN groupadd -g ${GID} ${USERNAME} \
+    && useradd -u ${UID} -g ${GID} -m -s /bin/bash ${USERNAME}
+
+ARG APP_NAME
 # Create virtual environment
-RUN mkdir /opt/$APP_NAME \
-    && uv venv /opt/$APP_NAME/venv --python 3.13 \
-    && chown -R $USERNAME:$USERNAME /opt/$APP_NAME
+RUN mkdir /opt/${APP_NAME} \
+    && uv venv /opt/${APP_NAME}/venv --python 3.13 \
+    && chown -R ${UID}:${GID} /opt/${APP_NAME}
 
 # Activate virtual environment
-ENV VIRTUAL_ENV=/opt/$APP_NAME/venv
+ENV VIRTUAL_ENV=/opt/${APP_NAME}/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 #######################################
@@ -30,11 +37,6 @@ FROM base AS local-dev
 # https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user
 # Will use the default aiperf user, but give sudo access
 # Needed so files permissions aren't set to root ownership when writing from inside container
-
-# Don't want username to be editable, just allow changing the uid and gid.
-# Username is hardcoded in .devcontainer
-ARG USER_UID=1000
-ARG USER_GID=1000
 
 RUN apt-get update -y \
     && apt-get install -y sudo gnupg2 gnupg1 \
@@ -135,27 +137,34 @@ RUN uv pip install /dist/aiperf-*.whl \
 ############################################
 FROM nvcr.io/nvidia/distroless/python:3.13-v3.1.1-dev AS runtime
 
+COPY --from=base /etc/passwd /etc/passwd
+COPY --from=base /etc/group /etc/group
+
+ARG UID
+ARG GID
+USER ${UID}:${GID}
+
 # Include license and attribution files
 COPY LICENSE ATTRIBUTIONS*.md /legal/
 
 # Copy bash with executable permissions preserved using --chmod
-COPY --from=env-builder --chown=1000:1000 --chmod=755 /bin/bash /bin/bash
+COPY --from=env-builder --chown=${UID}:${GID} --chmod=755 /bin/bash /bin/bash
 
 # Copy ffmpeg binaries and libraries (includes libvpx)
-COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
+COPY --from=env-builder --chown=${UID}:${GID} /opt/ffmpeg /opt/ffmpeg
 ENV PATH="/opt/ffmpeg/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
 
 # Setup the directories with permissions for nvs user
-COPY --from=env-builder --chown=1000:1000 /app /app
+COPY --from=env-builder --chown=${UID}:${GID} /app /app
 WORKDIR /app
 ENV HOME=/app
 
 # Copy the virtual environment and set up
-COPY --from=env-builder --chown=1000:1000 /opt/aiperf/venv /opt/aiperf/venv
-
-ENV VIRTUAL_ENV=/opt/aiperf/venv \
-    PATH="/opt/aiperf/venv/bin:${PATH}"
+ARG APP_NAME
+COPY --from=env-builder --chown=${UID}:${GID} /opt/${APP_NAME}/venv /opt/${APP_NAME}/venv
+ENV VIRTUAL_ENV=/opt/${APP_NAME}/venv \
+    PATH="/opt/${APP_NAME}/venv/bin:${PATH}"
 
 # Set bash as entrypoint
 ENTRYPOINT ["/bin/bash", "-c"]
