@@ -3,6 +3,7 @@
 
 
 import asyncio
+import gc
 
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
@@ -34,13 +35,8 @@ from aiperf.common.messages import (
 )
 from aiperf.common.mixins import PullClientMixin
 from aiperf.common.models import DatasetMetadata
-from aiperf.common.protocols import (
-    PushClientProtocol,
-    ServiceProtocol,
-)
-from aiperf.timing.config import (
-    TimingManagerConfig,
-)
+from aiperf.common.protocols import PushClientProtocol, ServiceProtocol
+from aiperf.timing.config import TimingManagerConfig
 from aiperf.timing.credit_issuing_strategy import (
     CreditIssuingStrategy,
     CreditIssuingStrategyFactory,
@@ -140,6 +136,11 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
         if not self._credit_issuing_strategy:
             raise InvalidStateError("No credit issuing strategy configured")
 
+        # Disable garbage collection to prevent large pauses during profiling
+        gc.collect()
+        gc.freeze()
+        gc.disable()
+
         self.execute_async(self._credit_issuing_strategy.start())
         self.info(
             f"Credit issuing strategy for {self.config.timing_mode.title()} started"
@@ -160,6 +161,11 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
     async def _timing_manager_stop(self) -> None:
         """Stop the timing manager."""
         self.debug("Stopping timing manager")
+
+        # Re-enable garbage collection to allow the timing manager to clean up resources
+        gc.unfreeze()
+        gc.enable()
+
         if self._credit_issuing_strategy:
             await self._credit_issuing_strategy.stop()
         await self.cancel_all_tasks()
