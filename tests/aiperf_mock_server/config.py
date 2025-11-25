@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Mock server configuration."""
 
-import json
 import logging
 import os
 from typing import Annotated, Any, Literal
 
+import msgspec
 from cyclopts import Parameter
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -153,5 +153,5 @@ def _get_env_key(config_key: str) -> str:
 def _serialize_env_value(value: Any) -> str:
     """Serialize value for environment variable storage."""
     if isinstance(value, list | dict):
-        return json.dumps(value)
+        return msgspec.json.encode(value).decode("utf-8")
     return str(value)

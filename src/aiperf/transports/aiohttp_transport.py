@@ -7,7 +7,7 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-import orjson
+import msgspec
 
 from aiperf.common.enums import TransportType
 from aiperf.common.exceptions import NotInitializedError
@@ -148,8 +148,8 @@ class AioHttpTransport(BaseTransport):
             url = self.build_url(request_info)
             headers = self.build_headers(request_info)
 
-            # Serialize with orjson for performance
-            json_str = orjson.dumps(payload).decode("utf-8")
+            # Serialize with msgspec for performance
+            json_str = msgspec.json.encode(payload).decode("utf-8")
             record = await self.aiohttp_client.post_request(url, json_str, headers)
             record.request_headers = headers
         except Exception as e:

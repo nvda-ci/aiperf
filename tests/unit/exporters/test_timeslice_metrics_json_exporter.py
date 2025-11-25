@@ -3,11 +3,11 @@
 
 """Tests for TimesliceMetricsJsonExporter."""
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import msgspec
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
@@ -246,7 +246,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ):
                 content = exporter._generate_content()
 
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
 
             assert "timeslices" in data
             assert "input_config" in data
@@ -292,7 +292,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ):
                 content = exporter._generate_content()
 
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
 
             indices = [ts["timeslice_index"] for ts in data["timeslices"]]
             assert indices == [0, 1, 2]
@@ -349,7 +349,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ):
                 content = exporter._generate_content()
 
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
 
             timeslice_0 = data["timeslices"][0]
             assert "time_to_first_token" in timeslice_0
@@ -403,7 +403,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ):
                 content = exporter._generate_content()
 
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
 
             metric_data = data["timeslices"][0]["metric"]
             assert "unit" in metric_data
@@ -457,7 +457,7 @@ class TestTimesliceMetricsJsonExporterGenerateContent:
             ):
                 content = exporter._generate_content()
 
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
 
             ts0 = data["timeslices"][0]
             ts1 = data["timeslices"][1]
@@ -549,7 +549,7 @@ class TestTimesliceMetricsJsonExporterIntegration:
 
             # Verify it's valid JSON
             with open(exporter._file_path) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             assert "timeslices" in data
             assert "input_config" in data
@@ -631,6 +631,6 @@ class TestTimesliceMetricsJsonExporterIntegration:
                 await exporter.export()
 
             with open(exporter._file_path) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             assert len(data["timeslices"]) == 50

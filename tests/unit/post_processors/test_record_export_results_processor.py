@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import orjson
+import msgspec
 import pytest
 
 from aiperf.common.config import (
@@ -228,7 +228,7 @@ class TestRecordExportResultsProcessorProcessResult:
         lines = processor.output_file.read_text().splitlines()
 
         assert len(lines) == 1
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = MetricRecordInfo.model_validate(record_dict)
         assert record.metadata.x_request_id == "test-record-123"
         assert record.metadata.conversation_id == "conv-456"
@@ -338,7 +338,7 @@ class TestRecordExportResultsProcessorProcessResult:
         assert len(lines) == 5
 
         for line in lines:
-            record_dict = orjson.loads(line)
+            record_dict = msgspec.json.decode(line)
             record = MetricRecordInfo.model_validate(record_dict)
             assert isinstance(record, MetricRecordInfo)
             assert record.metadata.x_request_id.startswith("record-")  # type: ignore[union-attr]
@@ -375,7 +375,7 @@ class TestRecordExportResultsProcessorFileFormat:
 
         for line in lines:
             if line.strip():
-                record_dict = orjson.loads(line)
+                record_dict = msgspec.json.decode(line)
                 assert isinstance(record_dict, dict)
                 record = MetricRecordInfo.model_validate(record_dict)
                 assert isinstance(record, MetricRecordInfo)
@@ -406,7 +406,7 @@ class TestRecordExportResultsProcessorFileFormat:
         lines = processor.output_file.read_text().splitlines()
 
         for line in lines:
-            record_dict = orjson.loads(line)
+            record_dict = msgspec.json.decode(line)
             record = MetricRecordInfo.model_validate(record_dict)
 
             assert isinstance(record.metadata, MetricRecordMetadata)

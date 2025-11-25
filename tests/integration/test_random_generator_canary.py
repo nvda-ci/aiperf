@@ -8,9 +8,9 @@ It compares the exact output of a seeded run against a known reference, ensuring
 that any changes to the codebase don't silently break determinism.
 """
 
-import json
 from pathlib import Path
 
+import msgspec
 import pytest
 
 from aiperf.common.utils import load_json_str
@@ -115,5 +115,5 @@ class TestRandomGeneratorCanary:
             data: Inputs data to save as reference
         """
         self.REFERENCE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.REFERENCE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        with open(self.REFERENCE_FILE, "wb") as f:
+            f.write(msgspec.json.format(msgspec.json.encode(data), indent=2))

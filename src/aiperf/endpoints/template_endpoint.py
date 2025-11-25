@@ -8,7 +8,7 @@ from typing import Any
 
 import jinja2
 import jmespath
-import orjson
+import msgspec
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import EndpointType
@@ -145,8 +145,8 @@ class TemplateEndpoint(BaseEndpoint):
         rendered = self._template.render(**template_vars)
 
         try:
-            payload = orjson.loads(rendered)
-        except orjson.JSONDecodeError as e:
+            payload = msgspec.json.decode(rendered)
+        except msgspec.DecodeError as e:
             self.error(f"Template did not render valid JSON: {rendered} - {e!r}")
             raise ValueError(
                 f"Template did not render valid JSON {e!r}: {rendered[:100]}"

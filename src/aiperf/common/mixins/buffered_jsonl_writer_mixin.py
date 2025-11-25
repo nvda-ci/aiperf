@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Generic
 
 import aiofiles
-import orjson
+import msgspec
 
 from aiperf.common.environment import Environment
 from aiperf.common.hooks import on_init, on_stop
@@ -57,18 +57,18 @@ class BufferedJSONLWriterMixin(AIPerfLifecycleMixin, Generic[BaseModelT]):
     async def _open_file(self) -> None:
         """Open the file handle for writing in binary mode (called automatically on initialization)."""
         async with self._file_lock:
-            # Binary mode for optimal performance with orjson
+            # Binary mode for optimal performance with msgspec
             self._file_handle = await aiofiles.open(self.output_file, mode="wb")
 
     async def buffered_write(self, record: BaseModelT) -> None:
         """Write a Pydantic model to the buffer with automatic flushing.
 
-        This method serializes the provided Pydantic model to JSON bytes using orjson
+        This method serializes the provided Pydantic model to JSON bytes using msgspec
         and adds it to the internal buffer. If the buffer reaches the configured batch
         size, it automatically flushes the buffer to disk.
 
-        Uses binary mode with orjson for optimal performance:
-        - 6x faster for large records (>20KB)
+        Uses binary mode with msgspec for optimal performance:
+        - Ultra-fast serialization for large records
         - No encode/decode overhead
         - Efficient for all record sizes
 
@@ -76,9 +76,11 @@ class BufferedJSONLWriterMixin(AIPerfLifecycleMixin, Generic[BaseModelT]):
             record: A Pydantic BaseModel instance to write
         """
         try:
-            # Serialize to bytes using orjson (faster for large records)
+            # Serialize to bytes using msgspec (faster for large records)
             # Use exclude_none=True to omit None fields (smaller output)
-            json_bytes = orjson.dumps(record.model_dump(exclude_none=True, mode="json"))
+            json_bytes = msgspec.json.encode(
+                record.model_dump(exclude_none=True, mode="json")
+            )
 
             buffer_to_flush = None
             async with self._buffer_lock:

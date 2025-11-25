@@ -4,7 +4,7 @@
 
 import platform
 
-import orjson
+import msgspec
 import pytest
 
 from aiperf.common.models.telemetry_models import TelemetryRecord
@@ -98,7 +98,7 @@ class TestGpuTelemetry:
 
         # Validate each line is valid JSON and can be parsed as TelemetryRecord
         for line in lines:
-            record_dict = orjson.loads(line)
+            record_dict = msgspec.json.decode(line)
             record = TelemetryRecord.model_validate(record_dict)
 
             # Verify required fields are present

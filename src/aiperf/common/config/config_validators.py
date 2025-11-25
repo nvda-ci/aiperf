@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-import orjson
+import msgspec
 
 from aiperf.common.enums.service_enums import ServiceType
 from aiperf.common.utils import load_json_str
@@ -151,7 +151,7 @@ def parse_str_or_dict_as_tuple_list(input: Any | None) -> list[tuple[str, Any]] 
         if input.startswith("{"):
             try:
                 return [(key, value) for key, value in load_json_str(input).items()]
-            except orjson.JSONDecodeError as e:
+            except msgspec.DecodeError as e:
                 raise ValueError(
                     f"User Config: {input} - must be a valid JSON string"
                 ) from e

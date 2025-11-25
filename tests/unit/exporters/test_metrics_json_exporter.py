@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import msgspec
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
@@ -213,7 +213,7 @@ class TestMetricsJsonExporter:
                 content = exporter._generate_content()
 
             # Should contain data from instance members
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
             assert "input_config" in data
 
     def test_generate_content_uses_telemetry_results_from_instance(
@@ -244,7 +244,7 @@ class TestMetricsJsonExporter:
                 content = exporter._generate_content()
 
             # Should contain telemetry data
-            data = json.loads(content)
+            data = msgspec.json.decode(content)
             assert "telemetry_data" in data
 
     @pytest.mark.asyncio
@@ -313,7 +313,7 @@ class TestMetricsJsonExporterTelemetry:
             assert expected_file.exists()
 
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             # Verify telemetry_data exists
             assert "telemetry_data" in data
@@ -357,7 +357,7 @@ class TestMetricsJsonExporterTelemetry:
             assert expected_file.exists()
 
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             # telemetry_data should not be present or be null
             assert "telemetry_data" not in data or data.get("telemetry_data") is None
@@ -383,7 +383,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             endpoints = data["telemetry_data"]["endpoints"]
             # Get first GPU from first endpoint
@@ -466,7 +466,7 @@ class TestMetricsJsonExporterTelemetry:
             assert expected_file.exists()
 
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             # Should still have telemetry structure even if metrics fail
             assert "telemetry_data" in data
@@ -522,7 +522,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             # Should handle None values gracefully
             assert "telemetry_data" in data
@@ -559,7 +559,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             # Should have telemetry_data section but empty
             assert "telemetry_data" in data
@@ -618,7 +618,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             endpoints = data["telemetry_data"]["endpoints"]
             # Check that endpoint was normalized (removed http:// and /metrics)
@@ -701,7 +701,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             endpoints = data["telemetry_data"]["endpoints"]
             # Should have both endpoints
@@ -765,7 +765,7 @@ class TestMetricsJsonExporterTelemetry:
 
             expected_file = output_dir / OutputDefaults.PROFILE_EXPORT_AIPERF_JSON_FILE
             with open(expected_file) as f:
-                data = json.load(f)
+                data = msgspec.json.decode(f.read())
 
             endpoints = data["telemetry_data"]["endpoints"]
             gpu_summary = endpoints["localhost:9400"]["gpus"]["gpu_0"]

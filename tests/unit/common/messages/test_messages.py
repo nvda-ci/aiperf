@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-import json
-
-import orjson
+import msgspec
 import pytest
 
 from aiperf.common.enums import LifecycleState, MessageType, ServiceType
@@ -31,7 +29,9 @@ def test_status_message():
         "request_ns": 1234567890,
         "request_id": "test",
     }
-    assert json.loads(message.model_dump_json(exclude_none=True)) == json.loads(
+    assert msgspec.json.decode(
+        message.model_dump_json(exclude_none=True)
+    ) == msgspec.json.decode(
         '{"message_type":"status","state":"running","service_id":"test","service_type":"worker","request_ns":1234567890,"request_id":"test"}'
     )
 
@@ -49,7 +49,9 @@ def test_status_message():
         "service_type": ServiceType.WORKER,
         "request_ns": 1234567890,
     }
-    assert json.loads(message.model_dump_json(exclude_none=True)) == json.loads(
+    assert msgspec.json.decode(
+        message.model_dump_json(exclude_none=True)
+    ) == msgspec.json.decode(
         '{"message_type":"status","state":"initialized","service_id":"test","service_type":"worker","request_ns":1234567890}'
     )
 
@@ -78,7 +80,7 @@ class TestMessageToJsonBytes:
         )
 
         json_bytes = message.to_json_bytes()
-        parsed = orjson.loads(json_bytes)
+        parsed = msgspec.json.decode(json_bytes)
 
         # request_id should not be in the output
         assert "request_id" not in parsed
@@ -96,7 +98,7 @@ class TestMessageToJsonBytes:
         )
 
         json_bytes = message.to_json_bytes()
-        parsed = orjson.loads(json_bytes)
+        parsed = msgspec.json.decode(json_bytes)
 
         assert parsed["message_type"] == "status"
         assert parsed["state"] == "initialized"
@@ -134,11 +136,11 @@ class TestMessageToJsonBytes:
 
         # Old way
         old_bytes = message.model_dump_json(exclude_none=True).encode("utf-8")
-        old_parsed = json.loads(old_bytes)
+        old_parsed = msgspec.json.decode(old_bytes)
 
         # New way
         new_bytes = message.to_json_bytes()
-        new_parsed = orjson.loads(new_bytes)
+        new_parsed = msgspec.json.decode(new_bytes)
 
         # Should produce equivalent JSON
         assert old_parsed == new_parsed
@@ -164,7 +166,7 @@ class TestMessageToJsonBytes:
         )
 
         json_bytes = message.to_json_bytes()
-        parsed = orjson.loads(json_bytes)
+        parsed = msgspec.json.decode(json_bytes)
 
         # Verify nested structure is preserved
         assert parsed["error"]["type"] == "TestError"
@@ -226,8 +228,8 @@ class TestMessageToJsonBytes:
         assert restored1.service_id == "service-1"
         assert restored2.service_id == "service-2"
 
-    def test_to_json_bytes_uses_orjson(self):
-        """Test that to_json_bytes() output is valid orjson format."""
+    def test_to_json_bytes_is_valid_json(self):
+        """Test that to_json_bytes() output is valid JSON format."""
         message = StatusMessage(
             state=LifecycleState.RUNNING,
             service_id="test",
@@ -237,8 +239,8 @@ class TestMessageToJsonBytes:
 
         json_bytes = message.to_json_bytes()
 
-        # Should be parseable by orjson
-        parsed = orjson.loads(json_bytes)
+        # Should be parseable by msgspec
+        parsed = msgspec.json.decode(json_bytes)
         assert isinstance(parsed, dict)
         assert "message_type" in parsed
 
@@ -250,7 +252,7 @@ class TestMessageToJsonBytes:
         )
 
         json_bytes = message.to_json_bytes()
-        parsed = orjson.loads(json_bytes)
+        parsed = msgspec.json.decode(json_bytes)
 
         # Should only contain required fields and message_type
         assert "service_id" in parsed
@@ -342,7 +344,7 @@ class TestMessageStringRepresentation:
     def test_message_str_json_output(self, message, expected_present, expected_absent):
         """Test that __str__() returns valid JSON with correct field inclusion/exclusion."""
         str_output = str(message)
-        parsed = json.loads(str_output)
+        parsed = msgspec.json.decode(str_output)
 
         # Check expected fields are present
         for field in expected_present:

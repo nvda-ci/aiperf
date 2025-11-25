@@ -35,8 +35,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+import msgspec
 import numpy as np
-import orjson
 
 from aiperf.common import random_generator as rng
 from aiperf.common.aiperf_logger import AIPerfLogger
@@ -362,7 +362,7 @@ class DistributionParser:
         """Parse JSON format and extract pairs: {"pairs": [{"isl": 256, "isl_stddev": 10, "osl": 128, "osl_stddev": 5, "prob": 40}, ...]}"""
         try:
             data = load_json_str(json_str)
-        except orjson.JSONDecodeError as e:
+        except msgspec.DecodeError as e:
             raise ValueError(f"Invalid JSON format: {e}") from e
 
         if "pairs" not in data:

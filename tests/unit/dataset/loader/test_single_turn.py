@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import json
-
+import msgspec
 import pytest
 
 from aiperf.common.enums import CustomDatasetType
@@ -256,7 +255,7 @@ class TestSingleTurnDatasetLoader:
         """Test loading dataset with full-featured version."""
 
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "texts": [
                         {"name": "text_field_A", "contents": ["Hello", "World"]},

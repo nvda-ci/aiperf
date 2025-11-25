@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import orjson
+import msgspec
 import pytest
 
 from aiperf.common.config import UserConfig
@@ -103,7 +103,7 @@ class TestRawRecordWriterProcessorProcessRecord:
         lines = processor.output_file.read_text().splitlines()
 
         assert len(lines) == 1
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = RawRecordInfo.model_validate(record_dict)
 
         assert record.metadata.conversation_id == "conv-123"
@@ -130,7 +130,9 @@ class TestRawRecordWriterProcessorProcessRecord:
 
             await processor.process_record(error_parsed_record, metadata)
 
-        record_dict = orjson.loads(processor.output_file.read_text().splitlines()[0])
+        record_dict = msgspec.json.decode(
+            processor.output_file.read_text().splitlines()[0]
+        )
 
         record = RawRecordInfo.model_validate(record_dict)
         assert record.metadata.conversation_id == "conv-error"
@@ -161,7 +163,7 @@ class TestRawRecordWriterProcessorProcessRecord:
 
         assert len(lines) == 5
         for i, line in enumerate(lines):
-            record = RawRecordInfo.model_validate(orjson.loads(line))
+            record = RawRecordInfo.model_validate(msgspec.json.decode(line))
             assert record.metadata.session_num == i
             assert record.metadata.conversation_id == f"conv-{i}"
             assert record.metadata.x_request_id == f"req-{i}"
@@ -191,7 +193,7 @@ class TestRawRecordWriterProcessorFileFormat:
         line = lines[0]
 
         # Verify format: valid JSON and ends with newline
-        record_dict = orjson.loads(line)
+        record_dict = msgspec.json.decode(line)
         assert isinstance(record_dict, dict)
 
         # Verify structure

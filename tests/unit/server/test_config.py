@@ -108,7 +108,7 @@ class TestConfigHelpers:
 
     def test_serialize_env_value_list(self):
         result = _serialize_env_value(["a", "b"])
-        assert result == '["a", "b"]'
+        assert result == '["a","b"]'
 
     def test_serialize_env_value_dict(self):
         result = _serialize_env_value({"key": "value"})

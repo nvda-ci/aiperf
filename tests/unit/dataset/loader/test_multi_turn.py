@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import json
-
+import msgspec
 import pytest
 
 from aiperf.common.enums import CustomDatasetType
@@ -125,7 +124,7 @@ class TestMultiTurnDatasetLoader:
     def test_load_simple_conversation(self, create_jsonl_file, default_user_config):
         """Test loading a simple multi-turn conversation."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "conv_001",
                     "turns": [
@@ -157,7 +156,7 @@ class TestMultiTurnDatasetLoader:
     def test_load_multiple_conversations(self, create_jsonl_file, default_user_config):
         """Test loading multiple conversations from file."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "session_A",
                     "turns": [
@@ -165,7 +164,7 @@ class TestMultiTurnDatasetLoader:
                     ],
                 }
             ),
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "session_B",
                     "turns": [
@@ -193,7 +192,7 @@ class TestMultiTurnDatasetLoader:
     ):
         """Test loading conversation without explicit session_id generates UUID."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "turns": [
                         {"text": "Anonymous conversation"},
@@ -221,7 +220,7 @@ class TestMultiTurnDatasetLoader:
     def test_load_multimodal_conversation(self, create_jsonl_file, default_user_config):
         """Test loading conversation with multimodal content."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "multimodal_chat",
                     "turns": [
@@ -259,7 +258,7 @@ class TestMultiTurnDatasetLoader:
     def test_load_scheduled_conversation(self, create_jsonl_file, default_user_config):
         """Test loading conversation with timestamp scheduling."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "scheduled_chat",
                     "turns": [
@@ -284,7 +283,7 @@ class TestMultiTurnDatasetLoader:
     def test_load_batched_conversation(self, create_jsonl_file, default_user_config):
         """Test loading conversation with batched content."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "batched_chat",
                     "turns": [
@@ -320,7 +319,7 @@ class TestMultiTurnDatasetLoader:
     ):
         """Test loading conversation with full-featured format."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "full_featured_chat",
                     "turns": [
@@ -371,14 +370,14 @@ class TestMultiTurnDatasetLoader:
     ):
         """Test that empty lines are skipped during loading."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "test_empty_lines",
                     "turns": [{"text": "First"}],
                 }
             ),
             "",  # Empty line
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "test_empty_lines_2",
                     "turns": [{"text": "Second"}],
@@ -401,13 +400,13 @@ class TestMultiTurnDatasetLoader:
     ):
         """Test that multiple conversations with same session_id are grouped together."""
         content = [
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "shared_session",
                     "turns": [{"text": "First conversation"}],
                 }
             ),
-            json.dumps(
+            msgspec.json.encode(
                 {
                     "session_id": "shared_session",
                     "turns": [{"text": "Second conversation"}],

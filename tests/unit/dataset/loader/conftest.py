@@ -24,9 +24,15 @@ def create_jsonl_file():
 
     def _create_file(content_lines):
         nonlocal filename
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".jsonl", delete=False) as f:
             for line in content_lines:
-                f.write(line + "\n")
+                # Handle both bytes and str for backwards compatibility
+                if isinstance(line, str):
+                    f.write(line.encode("utf-8") + b"\n")
+                elif isinstance(line, bytes):
+                    f.write(line + b"\n")
+                else:
+                    f.write(line + b"\n")
             filename = f.name
         return filename
 

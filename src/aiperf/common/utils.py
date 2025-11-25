@@ -7,7 +7,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-import orjson
+import msgspec
 
 from aiperf.common import aiperf_logger
 from aiperf.common.aiperf_logger import AIPerfLogger
@@ -90,11 +90,9 @@ def load_json_str(
           run validation checks on the object. Defaults to identity function.
     """
     try:
-        # Note: orjson may not parse JSON the same way as Python's standard json library,
-        # notably being stricter on UTF-8 conformance.
-        # Refer to https://github.com/ijl/orjson?tab=readme-ov-file#str for details.
-        return func(orjson.loads(json_str))
-    except orjson.JSONDecodeError as e:
+        # Note: msgspec is strict on UTF-8 conformance and provides fast JSON parsing
+        return func(msgspec.json.decode(json_str))
+    except msgspec.DecodeError as e:
         snippet = json_str[:200] + ("..." if len(json_str) > 200 else "")
         _logger.exception(f"Failed to parse JSON string: '{snippet}' - {e!r}")
         raise

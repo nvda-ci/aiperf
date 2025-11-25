@@ -4,11 +4,11 @@
 Unit tests for DatasetManager._generate_inputs_json_file method.
 """
 
-import json
 import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import msgspec
 import pytest
 
 from aiperf.common.config.config_defaults import OutputDefaults
@@ -52,7 +52,7 @@ class TestDatasetManagerInputsJsonGeneration:
         """Test comprehensive successful generation with populated dataset."""
         await populated_dataset_manager._generate_inputs_json_file()
 
-        written_json = json.loads(capture_file_writes.written_content)
+        written_json = msgspec.json.decode(capture_file_writes.written_content)
         _validate_inputs_file_structure(written_json)
 
         # Verify specific dataset content
@@ -80,7 +80,7 @@ class TestDatasetManagerInputsJsonGeneration:
         """Test generation with empty dataset creates empty inputs file."""
         await empty_dataset_manager._generate_inputs_json_file()
 
-        written_json = json.loads(capture_file_writes.written_content)
+        written_json = msgspec.json.decode(capture_file_writes.written_content)
         assert written_json == {"data": []}
 
     @pytest.mark.asyncio
@@ -98,7 +98,7 @@ class TestDatasetManagerInputsJsonGeneration:
         assert expected_path.exists()
 
         with open(expected_path) as f:
-            content = json.load(f)
+            content = msgspec.json.decode(f.read())
         _validate_inputs_file_structure(content)
 
     @pytest.mark.asyncio
@@ -110,7 +110,7 @@ class TestDatasetManagerInputsJsonGeneration:
         """Test that sessions are preserved in dataset iteration order."""
         await populated_dataset_manager._generate_inputs_json_file()
 
-        written_json = json.loads(capture_file_writes.written_content)
+        written_json = msgspec.json.decode(capture_file_writes.written_content)
         session_ids = [session["session_id"] for session in written_json["data"]]
         expected_order = list(populated_dataset_manager.dataset.keys())
         assert session_ids == expected_order
@@ -124,7 +124,7 @@ class TestDatasetManagerInputsJsonGeneration:
         """Test that custom fields like max_completion_tokens are preserved."""
         await populated_dataset_manager._generate_inputs_json_file()
 
-        written_json = json.loads(capture_file_writes.written_content)
+        written_json = msgspec.json.decode(capture_file_writes.written_content)
         session_2 = next(
             session
             for session in written_json["data"]
@@ -144,7 +144,7 @@ class TestDatasetManagerInputsJsonGeneration:
         """Test that generated content is compatible with InputsFile Pydantic model."""
         await populated_dataset_manager._generate_inputs_json_file()
 
-        written_json = json.loads(capture_file_writes.written_content)
+        written_json = msgspec.json.decode(capture_file_writes.written_content)
         inputs_file = InputsFile.model_validate(written_json)
 
         assert isinstance(inputs_file, InputsFile)

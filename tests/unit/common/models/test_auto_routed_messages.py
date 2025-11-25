@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for AutoRoutedModel-based message routing."""
 
-import json
-
+import msgspec
 import pytest
 
 from aiperf.common.enums import (
@@ -149,7 +148,7 @@ class TestAutoRoutedModel:
             "state": "running",
             "service_type": "worker",
         }
-        msg = Message.from_json(json.dumps(data))
+        msg = Message.from_json(msgspec.json.encode(data))
         assert_routed_to(msg, StatusMessage, state=LifecycleState.RUNNING)
 
     @pytest.mark.parametrize(
@@ -180,9 +179,9 @@ class TestAutoRoutedModel:
         "input_transform,description",
         [
             (lambda d: d, "dict (no parsing)"),
-            (lambda d: json.dumps(d), "JSON string"),
-            (lambda d: json.dumps(d).encode("utf-8"), "bytes"),
-            (lambda d: bytearray(json.dumps(d).encode("utf-8")), "bytearray"),
+            (lambda d: msgspec.json.encode(d).decode("utf-8"), "JSON string"),
+            (lambda d: msgspec.json.encode(d), "bytes"),
+            (lambda d: bytearray(msgspec.json.encode(d)), "bytearray"),
         ],
     )  # fmt: skip
     def test_from_json_input_types(self, input_transform, description):

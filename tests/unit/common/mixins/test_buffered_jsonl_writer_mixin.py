@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
-import json
 import tempfile
 from pathlib import Path
 
+import msgspec
 import pytest
 from pydantic import BaseModel
 
@@ -66,7 +66,7 @@ class TestBufferedJSONLWriterMixin:
             lines = [line.strip() for line in f.readlines()]
             assert len(lines) == expected_total
             for line in lines:
-                assert "id" in json.loads(line)
+                assert "id" in msgspec.json.decode(line)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

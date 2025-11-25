@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
-import orjson
+import msgspec
 import pytest
 
 from aiperf.common.config import (
@@ -228,7 +228,7 @@ class TestTelemetryExportResultsProcessorProcessing:
             await processor.process_telemetry_record(sample_telemetry_record)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = TelemetryRecord.model_validate(record_dict)
 
         assert record.timestamp_ns == 1_000_000_000
@@ -258,7 +258,7 @@ class TestTelemetryExportResultsProcessorProcessing:
             await processor.process_telemetry_record(sample_telemetry_record_partial)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = TelemetryRecord.model_validate(record_dict)
 
         assert record.timestamp_ns == 2_000_000_000
@@ -405,7 +405,7 @@ class TestTelemetryExportResultsProcessorProcessing:
         lines = processor.output_file.read_text().splitlines()
 
         # Verify each GPU is represented
-        gpu_indices = [orjson.loads(line)["gpu_index"] for line in lines]
+        gpu_indices = [msgspec.json.decode(line)["gpu_index"] for line in lines]
         assert gpu_indices == [0, 1, 2, 3]
 
     @pytest.mark.asyncio
@@ -440,7 +440,7 @@ class TestTelemetryExportResultsProcessorProcessing:
                 await processor.process_telemetry_record(record)
 
         lines = processor.output_file.read_text().splitlines()
-        dcgm_urls = [orjson.loads(line)["dcgm_url"] for line in lines]
+        dcgm_urls = [msgspec.json.decode(line)["dcgm_url"] for line in lines]
 
         assert "http://node0:9401/metrics" in dcgm_urls
         assert "http://node1:9401/metrics" in dcgm_urls
@@ -505,7 +505,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
 
         for line in lines:
             if line.strip():
-                record_dict = orjson.loads(line)
+                record_dict = msgspec.json.decode(line)
                 assert isinstance(record_dict, dict)
                 record = TelemetryRecord.model_validate(record_dict)
                 assert isinstance(record, TelemetryRecord)
@@ -531,7 +531,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
         lines = processor.output_file.read_text().splitlines()
 
         for line in lines:
-            record_dict = orjson.loads(line)
+            record_dict = msgspec.json.decode(line)
             record = TelemetryRecord.model_validate(record_dict)
 
             assert isinstance(record.timestamp_ns, int)
@@ -560,7 +560,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
             await processor.process_telemetry_record(sample_telemetry_record)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = TelemetryRecord.model_validate(record_dict)
 
         # Check all metadata fields
@@ -606,7 +606,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
             await processor.process_telemetry_record(sample_telemetry_record_partial)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
 
         # Verify None values are not present in the dict
         assert "pci_bus_id" not in record_dict
@@ -642,7 +642,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
             await processor.process_telemetry_record(record)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
 
         assert record_dict["timestamp_ns"] == precise_timestamp
 
@@ -665,7 +665,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
             await processor.process_telemetry_record(sample_telemetry_record)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
 
         # Check all required metadata fields
         assert "timestamp_ns" in record_dict
@@ -695,7 +695,7 @@ class TestTelemetryExportResultsProcessorFileFormat:
             await processor.process_telemetry_record(sample_telemetry_record)
 
         lines = processor.output_file.read_text().splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
 
         # Verify hierarchical keys are present
         assert record_dict["dcgm_url"] == "http://node1:9401/metrics"
@@ -973,7 +973,7 @@ class TestTelemetryExportResultsProcessorIntegration:
 
         # Verify parseable
         lines = content.splitlines()
-        record_dict = orjson.loads(lines[0])
+        record_dict = msgspec.json.decode(lines[0])
         record = TelemetryRecord.model_validate(record_dict)
         assert record.gpu_uuid == sample_telemetry_record.gpu_uuid
 
@@ -1089,7 +1089,7 @@ class TestTelemetryExportResultsProcessorIntegration:
 
         # Verify records are in order
         lines = processor.output_file.read_text().splitlines()
-        timestamps = [orjson.loads(line)["timestamp_ns"] for line in lines]
+        timestamps = [msgspec.json.decode(line)["timestamp_ns"] for line in lines]
         assert timestamps == sorted(timestamps)
 
 

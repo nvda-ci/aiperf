@@ -445,8 +445,8 @@ class TestDistributionParser:
             "{'pairs': []}",  # Single quotes instead of double quotes
         ],
     )
-    def test_malformed_json_raises_orjson_error(self, malformed_json):
-        """Test that malformed JSON syntax raises ValueError with orjson.JSONDecodeError."""
+    def test_malformed_json_raises_msgspec_error(self, malformed_json):
+        """Test that malformed JSON syntax raises ValueError with msgspec.DecodeError."""
         with pytest.raises(ValueError, match="Invalid JSON format"):
             DistributionParser.parse(malformed_json)
 

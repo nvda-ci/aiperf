@@ -3,7 +3,7 @@
 import time
 from typing import ClassVar
 
-import orjson
+import msgspec
 from pydantic import Field
 
 from aiperf.common.enums.message_enums import MessageType
@@ -44,10 +44,10 @@ class Message(AIPerfBaseModel):
         return self.model_dump_json(exclude_none=True)
 
     def to_json_bytes(self) -> bytes:
-        """Serialize message to JSON bytes using orjson for optimal performance.
+        """Serialize message to JSON bytes using msgspec for optimal performance.
 
-        This method uses orjson for high-performance serialization (6x faster for
-        large records >20KB). It automatically excludes None fields to minimize
+        This method uses msgspec for high-performance serialization (ultra-fast
+        serialization for large records). It automatically excludes None fields to minimize
         message size.
 
         Returns:
@@ -57,7 +57,7 @@ class Message(AIPerfBaseModel):
             Prefer this method over model_dump_json() for ZMQ message passing
             and other high-throughput scenarios.
         """
-        return orjson.dumps(self.model_dump(exclude_none=True, mode="json"))
+        return msgspec.json.encode(self.model_dump(exclude_none=True, mode="json"))
 
 
 class RequiresRequestNSMixin(Message):

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Any, AnyStr
 
-import orjson
+import msgspec
 from pydantic import (
     Field,
     RootModel,
@@ -250,7 +250,7 @@ class TextResponse(BaseInferenceServerResponse):
             if not self.text:
                 return None
             return load_json_str(self.text)
-        except orjson.JSONDecodeError:
+        except msgspec.DecodeError:
             return None
 
 
@@ -347,7 +347,7 @@ class SSEMessage(BaseInferenceServerResponse):
             if data_content in ("", None, "[DONE]"):
                 return None
             return load_json_str(data_content)
-        except orjson.JSONDecodeError:
+        except msgspec.DecodeError:
             return None
 
 

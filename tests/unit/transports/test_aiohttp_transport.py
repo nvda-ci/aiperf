@@ -219,10 +219,10 @@ class TestAioHttpTransport:
         assert headers["Accept"] == "application/json"
 
     @pytest.mark.asyncio
-    async def test_send_request_serializes_payload_with_orjson(
+    async def test_send_request_serializes_payload_with_msgspec(
         self, transport, model_endpoint_non_streaming
     ):
-        """Test that payload is serialized using orjson."""
+        """Test that payload is serialized using msgspec."""
         await self._setup_initialized_transport_with_mock(transport)
 
         request_info = self._create_request_info(model_endpoint_non_streaming)

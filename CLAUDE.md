@@ -78,7 +78,7 @@ except Exception as e:
 
 **Logging**: Lambda for expensive logs: `self.debug(lambda: f"{len(self._x())}")`. Direct string: `self.info("Starting")`.
 
-**JSON**: Always orjson: `orjson.loads(s)`, `orjson.dumps(d)`
+**JSON**: Always msgspec: `msgspec.json.decode(s)`, `msgspec.json.encode(d)`
 
 ## Mixins & Base Classes
 

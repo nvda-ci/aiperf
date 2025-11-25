@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Annotated, Any
 
-from orjson import JSONDecodeError
+import msgspec
 from pydantic import BeforeValidator, Field, model_validator
 from typing_extensions import Self
 
@@ -141,7 +141,7 @@ class UserConfig(BaseConfig):
                     try:
                         data = load_json_str(line)
                         return "timestamp" in data and data["timestamp"] is not None
-                    except (JSONDecodeError, KeyError):
+                    except (msgspec.DecodeError, KeyError):
                         continue
         except (OSError, FileNotFoundError):
             _logger.warning(

@@ -3,10 +3,10 @@
 """Comprehensive unit tests for aiohttp client components."""
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
+import msgspec
 import pytest
 
 from aiperf.common.enums import SSEEventType, SSEFieldType
@@ -323,12 +323,14 @@ class TestAioHttpClient:
         test_response = {"message": "success", "data": [1, 2, 3]}
 
         with patch("aiohttp.ClientSession") as mock_session_class:
-            mock_response = create_mock_response(text_content=json.dumps(test_response))
+            mock_response = create_mock_response(
+                text_content=msgspec.json.encode(test_response).decode("utf-8")
+            )
             setup_mock_session(mock_session_class, mock_response, ["request"])
 
             record = await aiohttp_client.post_request(
                 "http://test.com/api",
-                json.dumps({"query": "test"}),
+                msgspec.json.encode({"query": "test"}).decode("utf-8"),
                 {"Content-Type": "application/json"},
             )
 
@@ -352,7 +354,7 @@ class TestAioHttpClient:
             with patch("time.perf_counter_ns", side_effect=range(123456789, 123456799)):
                 record = await aiohttp_client.post_request(
                     "http://test.com/stream",
-                    json.dumps({"stream": True}),
+                    msgspec.json.encode({"stream": True}).decode("utf-8"),
                     {"Accept": "text/event-stream"},
                 )
 
