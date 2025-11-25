@@ -21,7 +21,6 @@ class TestDatasetMetadataCreation:
         )
 
         assert len(metadata.conversations) == 3
-        assert metadata.has_timing_data is False
         assert metadata.sampling_strategy == DatasetSamplingStrategy.SEQUENTIAL
 
         # Verify all conversations are present
@@ -45,7 +44,6 @@ class TestDatasetMetadataCreation:
         )
 
         assert len(metadata.conversations) == 2
-        assert metadata.has_timing_data is True
 
         # Find conversations by ID
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
@@ -81,7 +79,6 @@ class TestDatasetMetadataCreation:
         metadata = create_mock_dataset_metadata_with_schedule(schedule)
 
         assert len(metadata.conversations) == 3
-        assert metadata.has_timing_data is True
 
         # Find conversations by ID
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
@@ -111,7 +108,6 @@ class TestDatasetMetadataCreation:
         )
 
         assert len(metadata.conversations) == 0
-        assert metadata.has_timing_data is False
 
 
 class TestConversationMetadataValidation:
@@ -186,12 +182,10 @@ class TestDatasetMetadataValidation:
         metadata = DatasetMetadata(
             conversations=conversations,
             sampling_strategy=DatasetSamplingStrategy.RANDOM,
-            has_timing_data=True,
         )
 
         assert len(metadata.conversations) == 2
         assert metadata.sampling_strategy == DatasetSamplingStrategy.RANDOM
-        assert metadata.has_timing_data is True
 
     def test_dataset_metadata_default_values(self):
         """Test dataset metadata default values."""
@@ -200,14 +194,12 @@ class TestDatasetMetadataValidation:
         )
 
         assert len(metadata.conversations) == 0
-        assert metadata.has_timing_data is False
 
     def test_dataset_metadata_empty_conversations(self):
         """Test dataset metadata with empty conversations list."""
         metadata = DatasetMetadata(
             conversations=[],
             sampling_strategy=DatasetSamplingStrategy.SEQUENTIAL,
-            has_timing_data=False,
         )
 
         assert len(metadata.conversations) == 0
@@ -223,7 +215,6 @@ class TestDatasetMetadataHelperFunctions:
         )
 
         assert len(metadata.conversations) == 2
-        assert metadata.has_timing_data is False
         assert metadata.sampling_strategy == DatasetSamplingStrategy.SEQUENTIAL
 
         for conv in metadata.conversations:
@@ -254,8 +245,6 @@ class TestDatasetMetadataHelperFunctions:
             turn_counts=[3, 3],
         )
 
-        assert metadata.has_timing_data is True
-
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
         assert conv_dict["conv1"].turns[0].timestamp_ms == 0
@@ -270,7 +259,6 @@ class TestDatasetMetadataHelperFunctions:
         metadata = create_mock_dataset_metadata_with_schedule(schedule)
 
         assert len(metadata.conversations) == 3
-        assert metadata.has_timing_data is True
 
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
@@ -297,7 +285,6 @@ class TestDatasetMetadataHelperFunctions:
         metadata = create_mock_dataset_metadata_with_schedule(schedule)
 
         assert len(metadata.conversations) == 2
-        assert metadata.has_timing_data is True
 
         conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}
 
@@ -333,7 +320,6 @@ class TestDatasetMetadataHelperFunctions:
         metadata = create_mock_dataset_metadata_with_schedule([])
 
         assert len(metadata.conversations) == 0
-        assert metadata.has_timing_data is True
 
 
 class TestDatasetMetadataIntegration:

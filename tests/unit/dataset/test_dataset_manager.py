@@ -44,7 +44,6 @@ class TestDatasetManager:
         - Include one ConversationMetadata per conversation (not one per turn)
         - Include the first_turn_timestamp and turn_delays for each conversation
         - Have the correct turn count for each conversation
-        - Mark has_timing_data as True
         """
         # Mock the tokenizer to avoid HTTP requests
         mock_tokenizer_from_pretrained.return_value = (
@@ -104,7 +103,6 @@ class TestDatasetManager:
 
             # Verify dataset metadata structure
             assert len(metadata.conversations) == 2  # 2 conversations, not 5 turns
-            assert metadata.has_timing_data is True
 
             # Extract conversation metadata for easier testing
             conv_dict = {conv.conversation_id: conv for conv in metadata.conversations}

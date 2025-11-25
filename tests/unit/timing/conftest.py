@@ -299,7 +299,6 @@ def create_mock_dataset_metadata(
     return DatasetMetadata(
         conversations=conversations,
         sampling_strategy=sampling_strategy,
-        has_timing_data=has_timing_data,
     )
 
 
@@ -345,5 +344,4 @@ def create_mock_dataset_metadata_with_schedule(
     return DatasetMetadata(
         conversations=conversations,
         sampling_strategy=sampling_strategy,
-        has_timing_data=True,
     )

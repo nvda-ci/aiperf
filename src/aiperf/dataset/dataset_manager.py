@@ -16,7 +16,7 @@ from aiperf.common.enums import (
     ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.factories import ComposerFactory, ServiceFactory
+from aiperf.common.factories import ComposerFactory, EndpointFactory, ServiceFactory
 from aiperf.common.hooks import on_command, on_request
 from aiperf.common.messages import (
     ConversationRequestMessage,
@@ -35,7 +35,7 @@ from aiperf.common.models import (
     RequestInfo,
     SessionPayloads,
 )
-from aiperf.common.protocols import ServiceProtocol
+from aiperf.common.protocols import EndpointProtocol, ServiceProtocol
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
 
@@ -67,7 +67,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self.dataset: dict[str, Conversation] = {}  # session ID -> Conversation mapping
         self.dataset_metadata: DatasetMetadata | None = None
         self._session_ids_cache: list[str] = []
-        self._has_timing_data: bool = False
         self.dataset_configured = asyncio.Event()
 
     @on_command(CommandType.PROFILE_CONFIGURE)
@@ -109,8 +108,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
     ) -> InputsFile:
         """Generate input payloads from the dataset for use in the inputs.json file."""
         inputs = InputsFile()
-        from aiperf.common.factories import EndpointFactory
-        from aiperf.common.protocols import EndpointProtocol
 
         endpoint: EndpointProtocol = EndpointFactory.create_instance(
             model_endpoint.endpoint.type,
@@ -240,22 +237,13 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self._session_ids_cache = [
             conversation.session_id for conversation in conversations
         ]
-        # Check if all conversations have timing data (first turn must have a timestamp)
-        # Empty conversations list should be treated as having no timing data
-        # TODO: This is a temporary solution to check if the dataset has timing data (to be used with fixed schedule strategy)
-        self._has_timing_data = len(conversations) > 0 and all(
-            len(conversation.turns) > 0 and conversation.turns[0].timestamp is not None
-            for conversation in conversations
-        )
 
         self.dataset_metadata = DatasetMetadata(
             conversations=[conversation.metadata() for conversation in conversations],
             sampling_strategy=self.user_config.input.dataset_sampling_strategy,
-            has_timing_data=self._has_timing_data,
         )
         metadata = self.dataset_metadata
         self.info(
-            f"Dataset metadata: has timing data: {metadata.has_timing_data}, "
             f"sampling strategy: {metadata.sampling_strategy}, "
             f"unique conversations: {len(metadata.conversations)}, "
             f"unique turn count: {sum(len(conversation.turns) for conversation in metadata.conversations)}"
