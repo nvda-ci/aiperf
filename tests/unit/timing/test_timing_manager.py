@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the TimingManager service."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,6 +10,7 @@ from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import TimingMode
 from aiperf.common.environment import Environment
 from aiperf.common.messages import (
+    CommandMessage,
     DatasetConfiguredNotification,
     ProfileConfigureCommand,
 )
@@ -225,3 +226,89 @@ class TestTimingManagerDatasetConfiguration:
             call_kwargs = mock_factory.call_args.kwargs
             assert "dataset_metadata" in call_kwargs
             assert call_kwargs["dataset_metadata"] == mock_dataset_metadata
+
+
+class TestTimingManagerGarbageCollection:
+    """Test suite for TimingManager garbage collection control."""
+
+    def _create_timing_manager(
+        self, service_config: ServiceConfig, user_config: UserConfig
+    ) -> TimingManager:
+        """Create a TimingManager instance (ZMQ is globally mocked)."""
+        return TimingManager(
+            service_config=service_config,
+            user_config=user_config,
+            service_id="test-timing-manager",
+        )
+
+    @pytest.fixture
+    def service_config(self):
+        """Service configuration fixture."""
+        return ServiceConfig()
+
+    @pytest.fixture
+    def user_config(self):
+        """User config fixture."""
+        return UserConfig.model_construct(
+            endpoint=MagicMock(),
+            _timing_mode=TimingMode.REQUEST_RATE,
+        )
+
+    @pytest.fixture
+    def configured_manager(self, service_config, user_config):
+        """Create a configured timing manager with strategy."""
+        manager = self._create_timing_manager(service_config, user_config)
+        manager._credit_issuing_strategy = MagicMock()
+        manager._credit_issuing_strategy.start = AsyncMock()
+        manager._credit_issuing_strategy.stop = AsyncMock()
+        manager.initialized_event.set()
+        return manager
+
+    @pytest.mark.asyncio
+    async def test_gc_disabled_on_profiling_start(self, configured_manager):
+        """Test that garbage collection is collected, frozen, and disabled when profiling starts."""
+        with patch("aiperf.timing.timing_manager.gc") as mock_gc:
+            await configured_manager._on_start_profiling(
+                CommandMessage.model_construct(service_id="test-controller")
+            )
+
+            assert mock_gc.collect.called
+            assert mock_gc.freeze.called
+            assert mock_gc.disable.called
+
+            # Verify correct order: collect -> freeze -> disable
+            calls = mock_gc.method_calls
+            call_names = [c[0] for c in calls]
+            collect_idx = call_names.index("collect")
+            freeze_idx = call_names.index("freeze")
+            disable_idx = call_names.index("disable")
+            assert collect_idx < freeze_idx < disable_idx
+
+    @pytest.mark.asyncio
+    async def test_gc_enabled_on_stop(self, configured_manager):
+        """Test that garbage collection is unfrozen and re-enabled when timing manager stops."""
+        with patch("aiperf.timing.timing_manager.gc") as mock_gc:
+            await configured_manager._timing_manager_stop()
+
+            assert mock_gc.unfreeze.called
+            assert mock_gc.enable.called
+
+            # Verify correct order: unfreeze -> enable
+            calls = mock_gc.method_calls
+            call_names = [c[0] for c in calls]
+            unfreeze_idx = call_names.index("unfreeze")
+            enable_idx = call_names.index("enable")
+            assert unfreeze_idx < enable_idx
+
+    @pytest.mark.asyncio
+    async def test_gc_enabled_on_stop_without_strategy(
+        self, service_config, user_config
+    ):
+        """Test that GC is re-enabled even if no strategy was configured."""
+        manager = self._create_timing_manager(service_config, user_config)
+
+        with patch("aiperf.timing.timing_manager.gc") as mock_gc:
+            await manager._timing_manager_stop()
+
+            assert mock_gc.unfreeze.called
+            assert mock_gc.enable.called
