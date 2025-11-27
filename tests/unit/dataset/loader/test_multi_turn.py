@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-
 import json
 
 import pytest
@@ -18,12 +17,8 @@ class TestMultiTurn:
         """Test creating a basic multi-turn conversation."""
         data = MultiTurn(
             session_id="test_session",
-            turns=[
-                SingleTurn(text="Hello"),
-                SingleTurn(text="Hi there", delay=1000),
-            ],
+            turns=[SingleTurn(text="Hello"), SingleTurn(text="Hi there", delay=1000)],
         )
-
         assert data.session_id == "test_session"
         assert len(data.turns) == 2
         assert data.turns[0].text == "Hello"
@@ -36,7 +31,6 @@ class TestMultiTurn:
     def test_create_without_session_id(self):
         """Test creating conversation without explicit session_id."""
         data = MultiTurn(turns=[SingleTurn(text="What is AI?")])
-
         assert data.session_id is None
         assert len(data.turns) == 1
         assert data.turns[0].text == "What is AI?"
@@ -51,7 +45,6 @@ class TestMultiTurn:
                 SingleTurn(text="Summary please", delay=2000),
             ],
         )
-
         assert len(data.turns) == 3
         assert data.turns[0].image == "/path/to/image.png"
         assert data.turns[1].audio == "/path/to/audio.wav"
@@ -67,7 +60,6 @@ class TestMultiTurn:
                 SingleTurn(text="Third message", timestamp=10000),
             ],
         )
-
         assert all(turn.timestamp is not None for turn in data.turns)
         assert data.turns[0].timestamp == 0
         assert data.turns[1].timestamp == 5000
@@ -85,7 +77,6 @@ class TestMultiTurn:
                 SingleTurn(texts=["I'm fine", "Thanks for asking"], delay=1500),
             ],
         )
-
         assert len(data.turns[0].texts) == 2
         assert len(data.turns[0].images) == 2
         assert len(data.turns[1].texts) == 2
@@ -107,7 +98,6 @@ class TestMultiTurn:
                 )
             ],
         )
-
         assert len(data.turns[0].texts) == 2
         assert len(data.turns[0].images) == 2
         assert data.turns[0].texts[0].name == "question"
@@ -122,7 +112,9 @@ class TestMultiTurn:
 class TestMultiTurnDatasetLoader:
     """Tests for MultiTurnDatasetLoader functionality."""
 
-    def test_load_simple_conversation(self, create_jsonl_file, default_user_config):
+    def test_load_simple_conversation(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading a simple multi-turn conversation."""
         content = [
             json.dumps(
@@ -136,17 +128,15 @@ class TestMultiTurnDatasetLoader:
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        assert len(dataset) == 1
-        assert "conv_001" in dataset
-
-        multi_turn = dataset["conv_001"][0]
+        data = loader.parse_and_validate()
+        assert len(data) == 1
+        multi_turn = data[0]
         assert isinstance(multi_turn, MultiTurn)
+        assert multi_turn.session_id == "conv_001"
         assert len(multi_turn.turns) == 2
         assert multi_turn.turns[0].text == "Hello, how are you?"
         assert multi_turn.turns[0].texts is None
@@ -154,15 +144,15 @@ class TestMultiTurnDatasetLoader:
         assert multi_turn.turns[1].texts is None
         assert multi_turn.turns[1].delay == 1000
 
-    def test_load_multiple_conversations(self, create_jsonl_file, default_user_config):
+    def test_load_multiple_conversations(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading multiple conversations from file."""
         content = [
             json.dumps(
                 {
                     "session_id": "session_A",
-                    "turns": [
-                        {"text": "First conversation start"},
-                    ],
+                    "turns": [{"text": "First conversation start"}],
                 }
             ),
             json.dumps(
@@ -176,20 +166,19 @@ class TestMultiTurnDatasetLoader:
             ),
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        assert len(dataset) == 2
-        assert "session_A" in dataset
-        assert "session_B" in dataset
-        assert len(dataset["session_A"][0].turns) == 1
-        assert len(dataset["session_B"][0].turns) == 2
+        data = loader.parse_and_validate()
+        assert len(data) == 2
+        assert data[0].session_id == "session_A"
+        assert data[1].session_id == "session_B"
+        assert len(data[0].turns) == 1
+        assert len(data[1].turns) == 2
 
     def test_load_conversation_without_session_id(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test loading conversation without explicit session_id generates UUID."""
         content = [
@@ -203,32 +192,27 @@ class TestMultiTurnDatasetLoader:
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        assert len(dataset) == 1
-        session_id = list(dataset.keys())[0]
-        # Should be a UUID string (36 characters with hyphens)
-        assert len(session_id) == 36
-        assert session_id.count("-") == 4
-
-        multi_turn = dataset[session_id][0]
+        data = loader.parse_and_validate()
+        assert len(data) == 1
+        multi_turn = data[0]
+        # When no session_id is provided, it should be None at parse time
+        assert multi_turn.session_id is None
         assert len(multi_turn.turns) == 2
 
-    def test_load_multimodal_conversation(self, create_jsonl_file, default_user_config):
+    def test_load_multimodal_conversation(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading conversation with multimodal content."""
         content = [
             json.dumps(
                 {
                     "session_id": "multimodal_chat",
                     "turns": [
-                        {
-                            "text": "What do you see?",
-                            "image": "/path/to/image.jpg",
-                        },
+                        {"text": "What do you see?", "image": "/path/to/image.jpg"},
                         {
                             "text": "Can you hear this?",
                             "audio": "/path/to/sound.wav",
@@ -239,13 +223,13 @@ class TestMultiTurnDatasetLoader:
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        multi_turn = dataset["multimodal_chat"][0]
+        data = loader.parse_and_validate()
+        multi_turn = data[0]
+        assert multi_turn.session_id == "multimodal_chat"
         assert multi_turn.turns[0].text == "What do you see?"
         assert multi_turn.turns[0].texts is None
         assert multi_turn.turns[0].image == "/path/to/image.jpg"
@@ -256,7 +240,9 @@ class TestMultiTurnDatasetLoader:
         assert multi_turn.turns[1].audios is None
         assert multi_turn.turns[1].delay == 3000
 
-    def test_load_scheduled_conversation(self, create_jsonl_file, default_user_config):
+    def test_load_scheduled_conversation(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading conversation with timestamp scheduling."""
         content = [
             json.dumps(
@@ -271,17 +257,19 @@ class TestMultiTurnDatasetLoader:
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        result = loader.load_dataset()
-
-        conversation = result["scheduled_chat"][0]
-        timestamps = [turn.timestamp for turn in conversation.turns]
+        data = loader.parse_and_validate()
+        multi_turn = data[0]
+        assert multi_turn.session_id == "scheduled_chat"
+        timestamps = [turn.timestamp for turn in multi_turn.turns]
         assert timestamps == [0, 5000, 10000]
 
-    def test_load_batched_conversation(self, create_jsonl_file, default_user_config):
+    def test_load_batched_conversation(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading conversation with batched content."""
         content = [
             json.dumps(
@@ -292,22 +280,19 @@ class TestMultiTurnDatasetLoader:
                             "texts": ["Hello", "How are you?"],
                             "images": ["/img1.png", "/img2.png"],
                         },
-                        {
-                            "texts": ["Fine", "Thanks"],
-                            "delay": 1500,
-                        },
+                        {"texts": ["Fine", "Thanks"], "delay": 1500},
                     ],
                 }
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        multi_turn = dataset["batched_chat"][0]
+        data = loader.parse_and_validate()
+        multi_turn = data[0]
+        assert multi_turn.session_id == "batched_chat"
         assert multi_turn.turns[0].text is None
         assert multi_turn.turns[0].texts == ["Hello", "How are you?"]
         assert multi_turn.turns[0].image is None
@@ -316,7 +301,7 @@ class TestMultiTurnDatasetLoader:
         assert multi_turn.turns[1].texts == ["Fine", "Thanks"]
 
     def test_load_full_featured_conversation(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test loading conversation with full-featured format."""
         content = [
@@ -337,28 +322,26 @@ class TestMultiTurnDatasetLoader:
                                 {"name": "raw_data", "contents": ["/data.png"]},
                             ],
                             "timestamp": 1000,
-                        },
+                        }
                     ],
                 }
             )
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        multi_turn = dataset["full_featured_chat"][0]
+        data = loader.parse_and_validate()
+        multi_turn = data[0]
+        assert multi_turn.session_id == "full_featured_chat"
         assert len(multi_turn.turns) == 1
-
         turn = multi_turn.turns[0]
         assert len(turn.texts) == 2
         assert turn.texts[0].name == "user_query"
         assert turn.texts[0].contents == ["Analyze this data"]
         assert turn.texts[1].name == "user_context"
         assert turn.texts[1].contents == ["Be thorough"]
-
         assert len(turn.images) == 2
         assert turn.images[0].name == "dataset_viz"
         assert turn.images[0].contents == ["/chart.png"]
@@ -367,37 +350,30 @@ class TestMultiTurnDatasetLoader:
         assert turn.timestamp == 1000
 
     def test_load_dataset_skips_empty_lines(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test that empty lines are skipped during loading."""
         content = [
             json.dumps(
-                {
-                    "session_id": "test_empty_lines",
-                    "turns": [{"text": "First"}],
-                }
+                {"session_id": "test_empty_lines", "turns": [{"text": "First"}]}
             ),
-            "",  # Empty line
+            "",
             json.dumps(
-                {
-                    "session_id": "test_empty_lines_2",
-                    "turns": [{"text": "Second"}],
-                }
+                {"session_id": "test_empty_lines_2", "turns": [{"text": "Second"}]}
             ),
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        assert len(dataset) == 2  # Should skip empty line
-        assert "test_empty_lines" in dataset
-        assert "test_empty_lines_2" in dataset
+        data = loader.parse_and_validate()
+        assert len(data) == 2
+        assert data[0].session_id == "test_empty_lines"
+        assert data[1].session_id == "test_empty_lines_2"
 
     def test_load_duplicate_session_ids_are_grouped(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test that multiple conversations with same session_id are grouped together."""
         content = [
@@ -415,69 +391,62 @@ class TestMultiTurnDatasetLoader:
             ),
         ]
         filename = create_jsonl_file(content)
-
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
-
-        assert len(dataset) == 1  # Same session_id groups together
-        assert len(dataset["shared_session"]) == 2  # Two conversations in same session
-
-        multi_turn = dataset["shared_session"]
-        assert multi_turn[0].turns[0].text == "First conversation"
-        assert multi_turn[1].turns[0].text == "Second conversation"
+        data = loader.parse_and_validate()
+        # parse_and_validate returns a list, not grouped
+        assert len(data) == 2
+        assert data[0].session_id == "shared_session"
+        assert data[1].session_id == "shared_session"
+        assert data[0].turns[0].text == "First conversation"
+        assert data[1].turns[0].text == "Second conversation"
 
 
 class TestMultiTurnDatasetLoaderConvertToConversations:
     """Test convert_to_conversations method for MultiTurnDatasetLoader."""
 
-    def test_convert_simple_multi_turn_data(self, default_user_config):
+    def test_convert_simple_multi_turn_data(
+        self, default_user_config, mock_tokenizer_cls
+    ):
         """Test converting simple multi-turn data to conversations."""
-        data = {
-            "session_123": [
-                MultiTurn(
-                    session_id="session_123",
-                    turns=[
-                        SingleTurn(text="Hello"),
-                        SingleTurn(text="How are you?", delay=1000),
-                    ],
-                )
-            ]
-        }
-
+        data = [
+            MultiTurn(
+                session_id="session_123",
+                turns=[
+                    SingleTurn(text="Hello"),
+                    SingleTurn(text="How are you?", delay=1000),
+                ],
+            )
+        ]
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            filename="dummy.jsonl", config=default_user_config, tokenizer=tokenizer
         )
         conversations = loader.convert_to_conversations(data)
-
         assert len(conversations) == 1
         conversation = conversations[0]
         assert conversation.session_id == "session_123"
         assert len(conversation.turns) == 2
-
         assert conversation.turns[0].texts[0].contents == ["Hello"]
         assert conversation.turns[0].delay is None
-
         assert conversation.turns[1].texts[0].contents == ["How are you?"]
         assert conversation.turns[1].delay == 1000
 
     def test_convert_multiple_multi_turn_entries_same_session(
-        self, default_user_config
+        self, default_user_config, mock_tokenizer_cls
     ):
         """Test converting multiple MultiTurn entries with same session ID."""
-        data = {
-            "session_123": [
-                MultiTurn(session_id="session_123", turns=[SingleTurn(text="First")]),
-                MultiTurn(session_id="session_123", turns=[SingleTurn(text="Second")]),
-            ]
-        }
-
+        data = [
+            MultiTurn(session_id="session_123", turns=[SingleTurn(text="First")]),
+            MultiTurn(session_id="session_123", turns=[SingleTurn(text="Second")]),
+        ]
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            filename="dummy.jsonl", config=default_user_config, tokenizer=tokenizer
         )
         conversations = loader.convert_to_conversations(data)
-
         assert len(conversations) == 1
         conversation = conversations[0]
         assert conversation.session_id == "session_123"
@@ -485,62 +454,56 @@ class TestMultiTurnDatasetLoaderConvertToConversations:
         assert conversation.turns[0].texts[0].contents == ["First"]
         assert conversation.turns[1].texts[0].contents == ["Second"]
 
-    def test_convert_multimodal_multi_turn_data(self, default_user_config):
+    def test_convert_multimodal_multi_turn_data(
+        self, default_user_config, mock_tokenizer_cls
+    ):
         """Test converting multimodal multi-turn data."""
-        data = {
-            "session_1": [
-                MultiTurn(
-                    session_id="session_1",
-                    turns=[
-                        SingleTurn(text="What's this?", image="image1.png"),
-                        SingleTurn(text="Follow up", image="image2.png"),
-                    ],
-                )
-            ]
-        }
+        data = [
+            MultiTurn(
+                session_id="session_1",
+                turns=[
+                    SingleTurn(text="What's this?", image="image1.png"),
+                    SingleTurn(text="Follow up", image="image2.png"),
+                ],
+            )
+        ]
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            filename="dummy.jsonl", config=default_user_config, tokenizer=tokenizer
         )
-
         conversations = loader.convert_to_conversations(data)
-
         assert len(conversations) == 1
         conversation = conversations[0]
         assert len(conversation.turns) == 2
-
-        # First turn
         first_turn = conversation.turns[0]
         assert first_turn.texts[0].contents == ["What's this?"]
         assert first_turn.images[0].contents == ["image1.png"]
-
-        # Second turn
         second_turn = conversation.turns[1]
         assert second_turn.texts[0].contents == ["Follow up"]
         assert second_turn.images[0].contents == ["image2.png"]
 
-    def test_convert_structured_objects_in_turns(self, default_user_config):
+    def test_convert_structured_objects_in_turns(
+        self, default_user_config, mock_tokenizer_cls
+    ):
         """Test converting MultiTurn with structured Text objects."""
-        data = {
-            "session_1": [
-                MultiTurn(
-                    session_id="session_1",
-                    turns=[
-                        SingleTurn(
-                            texts=[
-                                Text(name="query", contents=["What is this?"]),
-                                Text(name="context", contents=["Some context"]),
-                            ],
-                        )
-                    ],
-                )
-            ]
-        }
-
+        data = [
+            MultiTurn(
+                session_id="session_1",
+                turns=[
+                    SingleTurn(
+                        texts=[
+                            Text(name="query", contents=["What is this?"]),
+                            Text(name="context", contents=["Some context"]),
+                        ]
+                    )
+                ],
+            )
+        ]
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            filename="dummy.jsonl", config=default_user_config, tokenizer=tokenizer
         )
         conversations = loader.convert_to_conversations(data)
-
         assert len(conversations) == 1
         turn = conversations[0].turns[0]
         assert len(turn.texts) == 2
@@ -549,26 +512,23 @@ class TestMultiTurnDatasetLoaderConvertToConversations:
         assert turn.texts[1].name == "context"
         assert turn.texts[1].contents == ["Some context"]
 
-    def test_convert_multiple_sessions(self, default_user_config):
+    def test_convert_multiple_sessions(self, default_user_config, mock_tokenizer_cls):
         """Test converting multiple sessions."""
-        data = {
-            "session_1": [
-                MultiTurn(session_id="session_1", turns=[SingleTurn(text="First")]),
-            ],
-            "session_2": [
-                MultiTurn(session_id="session_2", turns=[SingleTurn(text="Second")]),
-            ],
-        }
-
+        data = [
+            MultiTurn(session_id="session_1", turns=[SingleTurn(text="First")]),
+            MultiTurn(session_id="session_2", turns=[SingleTurn(text="Second")]),
+        ]
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = MultiTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            filename="dummy.jsonl", config=default_user_config, tokenizer=tokenizer
         )
         conversations = loader.convert_to_conversations(data)
-
         assert len(conversations) == 2
-        assert conversations[0].session_id == "session_1"
-        assert conversations[1].session_id == "session_2"
-        assert len(conversations[0].turns) == 1
-        assert len(conversations[1].turns) == 1
-        assert conversations[0].turns[0].texts[0].contents == ["First"]
-        assert conversations[1].turns[0].texts[0].contents == ["Second"]
+        # Find conversations by session_id
+        conv_map = {c.session_id: c for c in conversations}
+        assert "session_1" in conv_map
+        assert "session_2" in conv_map
+        assert len(conv_map["session_1"].turns) == 1
+        assert len(conv_map["session_2"].turns) == 1
+        assert conv_map["session_1"].turns[0].texts[0].contents == ["First"]
+        assert conv_map["session_2"].turns[0].texts[0].contents == ["Second"]

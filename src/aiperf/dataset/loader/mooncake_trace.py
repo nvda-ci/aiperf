@@ -44,11 +44,10 @@ class MooncakeTraceDatasetLoader(BaseFileLoader):
         config: UserConfig,
         tokenizer: Tokenizer,
         filename: str,
-        prompt_generator: PromptGenerator,
         **kwargs,
     ):
         super().__init__(config, tokenizer, filename, **kwargs)
-        self.prompt_generator = prompt_generator
+        self.prompt_generator = PromptGenerator(config.input.prompt, tokenizer)
         self._skipped_traces = 0
         self._start_offset = config.input.fixed_schedule_start_offset
         self._end_offset = config.input.fixed_schedule_end_offset

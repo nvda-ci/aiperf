@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-
 import json
 
 import pytest
@@ -52,53 +51,51 @@ class TestShareGPTLoader:
         """Test initialization of ShareGPTLoader"""
         assert sharegpt_loader.tokenizer is not None
         assert sharegpt_loader.config is not None
-        assert sharegpt_loader.turn_count == 0
         assert isinstance(sharegpt_loader.filename, str)
 
-    def test_can_load_valid_data(self):
-        """Test can_load method with valid ShareGPT data"""
-        valid_data = {
-            "conversations": [
-                {"from": "human", "value": "Hello"},
-                {"from": "gpt", "value": "Hi there"},
-            ]
-        }
-        assert ShareGPTLoader.can_load(data=valid_data) is True
+    def test_can_load_valid_data(self, tmp_path):
+        """Test can_load_file method with valid ShareGPT file"""
+        valid_data = [
+            {
+                "conversations": [
+                    {"from": "human", "value": "Hello"},
+                    {"from": "gpt", "value": "Hi there"},
+                ]
+            }
+        ]
+        file_path = tmp_path / "valid_sharegpt.json"
+        with open(file_path, "w") as f:
+            json.dump(valid_data, f)
+        assert ShareGPTLoader.can_load_file(file_path) is True
 
-    def test_can_load_invalid_data(self):
-        """Test can_load method with invalid data"""
-        # Missing conversations field
+    def test_can_load_invalid_data(self, tmp_path):
+        """Test can_load_file method with invalid data"""
         invalid_data = {"messages": [{"from": "human", "value": "Hello"}]}
-        assert ShareGPTLoader.can_load(data=invalid_data) is False
+        file_path = tmp_path / "invalid_sharegpt.json"
+        with open(file_path, "w") as f:
+            json.dump(invalid_data, f)
+        assert ShareGPTLoader.can_load_file(file_path) is False
 
-        # Too few conversations
-        invalid_data = {"conversations": [{"from": "human", "value": "Hello"}]}
-        assert ShareGPTLoader.can_load(data=invalid_data) is False
-
-    def test_get_preferred_sampling_strategy(self):
+    def test_get_preferred_sampling_strategy(self, sharegpt_loader: ShareGPTLoader):
         """Test get_preferred_sampling_strategy method"""
-        strategy = ShareGPTLoader.get_preferred_sampling_strategy()
+        strategy = sharegpt_loader.get_preferred_sampling_strategy()
         from aiperf.common.enums import DatasetSamplingStrategy
 
         assert strategy == DatasetSamplingStrategy.SEQUENTIAL
 
     def test_load_dataset(self, sharegpt_loader: ShareGPTLoader):
         """Test loading dataset from file"""
-        dataset = sharegpt_loader.parse_and_validate()
-
-        assert "default" in dataset
-        assert len(dataset["default"]) == 3
-        assert all(isinstance(entry, ShareGPT) for entry in dataset["default"])
+        data = sharegpt_loader.parse_and_validate()
+        assert isinstance(data, list)
+        assert len(data) == 3
+        assert all(isinstance(entry, ShareGPT) for entry in data)
 
     def test_convert_to_conversations(self, sharegpt_loader: ShareGPTLoader):
         """Test converting loaded dataset to conversations"""
-        dataset = sharegpt_loader.parse_and_validate()
-        conversations = sharegpt_loader.convert_to_conversations(dataset)
-
-        # Should only include 1 valid conversation (others filtered out by validation)
+        data = sharegpt_loader.parse_and_validate()
+        conversations = sharegpt_loader.convert_to_conversations(data)
         assert len(conversations) == 1
         assert isinstance(conversations[0], Conversation)
-
         turn = conversations[0].turns[0]
         assert turn.texts[0].contents[0] == "Hello how are you"
         assert turn.max_tokens == len(["This", "is", "test", "output"])
@@ -106,14 +103,9 @@ class TestShareGPTLoader:
 
     def test_end_to_end_workflow(self, sharegpt_loader: ShareGPTLoader):
         """Test complete workflow: load -> convert"""
-        # Load the dataset
-        dataset = sharegpt_loader.parse_and_validate()
-        assert len(dataset["default"]) == 3
-
-        # Convert to conversations
-        conversations = sharegpt_loader.convert_to_conversations(dataset)
-
-        # Verify filtering worked (only 1 valid entry)
+        data = sharegpt_loader.parse_and_validate()
+        assert len(data) == 3
+        conversations = sharegpt_loader.convert_to_conversations(data)
         assert len(conversations) == 1
         assert isinstance(conversations[0], Conversation)
         assert len(conversations[0].turns) == 1

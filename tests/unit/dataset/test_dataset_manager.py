@@ -78,26 +78,23 @@ class TestDatasetManagerSequentialIteration:
             # Get conversations multiple times and verify order
             conversations = []
             for _ in range(5):
-                conv = dataset_manager._return_any_conversation("test_session")
+                conv = dataset_manager._get_conversation(None)
                 conversations.append(conv)
 
             # Verify we got 5 conversations
             assert len(conversations) == 5
 
             # The key test: sequential iteration should mean we get the same order
-            # when we reset and iterate again
-            dataset_manager._sequential_iterator_index = 0  # Reset iterator
+            # when we reset and iterate again (reset the sampler's index)
+            dataset_manager._dataset_sampler._index = 0  # Reset iterator
             conversations_repeat = []
             for _ in range(5):
-                conv = dataset_manager._return_any_conversation("test_session")
+                conv = dataset_manager._get_conversation(None)
                 conversations_repeat.append(conv)
 
             # Verify that the order is identical (sequential), not different (random)
             for i in range(5):
-                assert (
-                    conversations[i].conversation.session_id
-                    == conversations_repeat[i].conversation.session_id
-                )
+                assert conversations[i].session_id == conversations_repeat[i].session_id
 
         finally:
             Path(filename).unlink(missing_ok=True)
@@ -149,8 +146,8 @@ class TestDatasetManagerSequentialIteration:
             # Get sessions in order for custom dataset
             custom_sessions = []
             for _ in range(6):  # More than dataset size to test wraparound
-                conv = custom_manager._return_any_conversation("test_session")
-                custom_sessions.append(conv.conversation.session_id)
+                conv = custom_manager._get_conversation(None)
+                custom_sessions.append(conv.session_id)
 
             # Should repeat pattern: session1, session2, session3, session1, session2, session3
             assert (
@@ -208,8 +205,8 @@ class TestDatasetManagerSequentialIteration:
             # Get more conversations than dataset size
             session_ids = []
             for _ in range(5):  # 5 requests for 2-entry dataset
-                conv = dataset_manager._return_any_conversation("test_session")
-                session_ids.append(conv.conversation.session_id)
+                conv = dataset_manager._get_conversation(None)
+                session_ids.append(conv.session_id)
 
             # Should follow pattern: entry1, entry2, entry1, entry2, entry1
             assert (

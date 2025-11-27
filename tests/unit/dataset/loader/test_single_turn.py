@@ -127,7 +127,7 @@ class TestSingleTurnDatasetLoader:
     """Basic functionality tests for SingleTurnDatasetLoader."""
 
     def test_load_dataset_basic_functionality(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test basic JSONL file loading."""
         content = [
@@ -136,29 +136,30 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        assert isinstance(dataset, dict)
-        assert len(dataset) == 2
+        assert isinstance(conversations, list)
+        assert len(conversations) == 2
 
-        # Check that each session has single turn
-        for _, turns in dataset.items():
-            assert len(turns) == 1
+        # Check that each conversation has single turn
+        for conv in conversations:
+            assert len(conv.turns) == 1
 
-        turn1, turn2 = list(dataset.values())
-        assert turn1[0].text == "What is deep learning?"
-        assert turn1[0].image is None
-        assert turn1[0].audio is None
+        conv1, conv2 = conversations
+        assert conv1.turns[0].texts[0].contents == ["What is deep learning?"]
+        assert len(conv1.turns[0].images) == 0
+        assert len(conv1.turns[0].audios) == 0
 
-        assert turn2[0].text == "What is in the image?"
-        assert turn2[0].image == "/path/to/image.png"
-        assert turn2[0].audio is None
+        assert conv2.turns[0].texts[0].contents == ["What is in the image?"]
+        assert conv2.turns[0].images[0].contents == ["/path/to/image.png"]
+        assert len(conv2.turns[0].audios) == 0
 
     def test_load_dataset_skips_empty_lines(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test that empty lines are skipped."""
         content = [
@@ -168,15 +169,16 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        assert len(dataset) == 2  # Should skip empty line
+        assert len(conversations) == 2  # Should skip empty line
 
     def test_load_dataset_with_batched_inputs(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test loading dataset with batched inputs."""
         content = [
@@ -185,24 +187,33 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        # Check that there are two sessions
-        assert len(dataset) == 2
+        # Check that there are two conversations
+        assert len(conversations) == 2
 
-        turn1, turn2 = list(dataset.values())
-        assert turn1[0].texts == ["What is the weather?", "What is AI?"]
-        assert turn1[0].images == ["/path/1.png", "/path/2.png"]
-        assert turn1[0].audios is None
+        conv1, conv2 = conversations
+        assert conv1.turns[0].texts[0].contents == [
+            "What is the weather?",
+            "What is AI?",
+        ]
+        assert conv1.turns[0].images[0].contents == ["/path/1.png", "/path/2.png"]
+        assert len(conv1.turns[0].audios) == 0
 
-        assert turn2[0].texts == ["Summarize the podcast", "What is audio about?"]
-        assert turn2[0].images is None
-        assert turn2[0].audios == ["/path/3.wav", "/path/4.wav"]
+        assert conv2.turns[0].texts[0].contents == [
+            "Summarize the podcast",
+            "What is audio about?",
+        ]
+        assert len(conv2.turns[0].images) == 0
+        assert conv2.turns[0].audios[0].contents == ["/path/3.wav", "/path/4.wav"]
 
-    def test_load_dataset_with_timestamp(self, create_jsonl_file, default_user_config):
+    def test_load_dataset_with_timestamp(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading dataset with timestamp field."""
         content = [
             '{"text": "What is deep learning?", "timestamp": 1000}',
@@ -210,23 +221,24 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        assert len(dataset) == 2
+        assert len(conversations) == 2
 
-        turn1, turn2 = list(dataset.values())
-        assert turn1[0].text == "What is deep learning?"
-        assert turn1[0].timestamp == 1000
-        assert turn1[0].delay is None
+        conv1, conv2 = conversations
+        assert conv1.turns[0].timestamp == 1000
+        assert conv1.turns[0].delay is None
 
-        assert turn2[0].text == "Who are you?"
-        assert turn2[0].timestamp == 2000
-        assert turn2[0].delay is None
+        assert conv2.turns[0].timestamp == 2000
+        assert conv2.turns[0].delay is None
 
-    def test_load_dataset_with_delay(self, create_jsonl_file, default_user_config):
+    def test_load_dataset_with_delay(
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
+    ):
         """Test loading dataset with delay field."""
         content = [
             '{"text": "What is deep learning?", "delay": 0}',
@@ -234,24 +246,23 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        assert len(dataset) == 2
+        assert len(conversations) == 2
 
-        turn1, turn2 = list(dataset.values())
-        assert turn1[0].text == "What is deep learning?"
-        assert turn1[0].delay == 0
-        assert turn1[0].timestamp is None
+        conv1, conv2 = conversations
+        assert conv1.turns[0].delay == 0
+        assert conv1.turns[0].timestamp is None
 
-        assert turn2[0].text == "Who are you?"
-        assert turn2[0].delay == 1234
-        assert turn2[0].timestamp is None
+        assert conv2.turns[0].delay == 1234
+        assert conv2.turns[0].timestamp is None
 
     def test_load_dataset_with_full_featured_version(
-        self, create_jsonl_file, default_user_config
+        self, create_jsonl_file, default_user_config, mock_tokenizer_cls
     ):
         """Test loading dataset with full-featured version."""
 
@@ -274,66 +285,69 @@ class TestSingleTurnDatasetLoader:
         ]
         filename = create_jsonl_file(content)
 
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename=filename, user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename=filename
         )
-        dataset = loader.load_dataset()
+        conversations = loader.load()
 
-        assert len(dataset) == 1
+        assert len(conversations) == 1
 
-        turn = list(dataset.values())[0]
-        assert len(turn[0].texts) == 2
-        assert len(turn[0].images) == 2
+        turn = conversations[0].turns[0]
+        assert len(turn.texts) == 2
+        assert len(turn.images) == 2
 
-        assert turn[0].texts[0].name == "text_field_A"
-        assert turn[0].texts[0].contents == ["Hello", "World"]
-        assert turn[0].texts[1].name == "text_field_B"
-        assert turn[0].texts[1].contents == ["Hi there"]
+        assert turn.texts[0].name == "text_field_A"
+        assert turn.texts[0].contents == ["Hello", "World"]
+        assert turn.texts[1].name == "text_field_B"
+        assert turn.texts[1].contents == ["Hi there"]
 
-        assert turn[0].images[0].name == "image_field_A"
-        assert turn[0].images[0].contents == ["/path/1.png", "/path/2.png"]
-        assert turn[0].images[1].name == "image_field_B"
-        assert turn[0].images[1].contents == ["/path/3.png"]
+        assert turn.images[0].name == "image_field_A"
+        assert turn.images[0].contents == ["/path/1.png", "/path/2.png"]
+        assert turn.images[1].name == "image_field_B"
+        assert turn.images[1].contents == ["/path/3.png"]
 
 
 class TestSingleTurnDatasetLoaderConvertToConversations:
-    """Test convert_to_conversations method for SingleTurnDatasetLoader."""
+    """Test convert_to_conversations method for SingleTurnDatasetLoader.
 
-    def test_convert_simple_text_data(self, default_user_config):
+    Note: convert_to_conversations is now part of the internal load() pipeline,
+    but we test it directly to ensure correct conversion logic.
+    """
+
+    def test_convert_simple_text_data(self, default_user_config, mock_tokenizer_cls):
         """Test converting simple text data to conversations."""
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename="dummy.jsonl"
         )
-        data = {
-            "session_1": [SingleTurn(text="Hello world")],
-            "session_2": [SingleTurn(text="How are you?")],
-        }
+        data = [
+            SingleTurn(text="Hello world"),
+            SingleTurn(text="How are you?"),
+        ]
 
         conversations = loader.convert_to_conversations(data)
 
         assert len(conversations) == 2
-        assert conversations[0].session_id == "session_1"
         assert len(conversations[0].turns) == 1
         assert conversations[0].turns[0].texts[0].contents == ["Hello world"]
 
-        assert conversations[1].session_id == "session_2"
         assert len(conversations[1].turns) == 1
         assert conversations[1].turns[0].texts[0].contents == ["How are you?"]
 
-    def test_convert_multimodal_data(self, default_user_config):
+    def test_convert_multimodal_data(self, default_user_config, mock_tokenizer_cls):
         """Test converting multimodal data to conversations."""
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename="dummy.jsonl"
         )
-        data = {
-            "session_1": [
-                SingleTurn(
-                    text="What's in this image?",
-                    image="/path/to/image.png",
-                    audio="/path/to/audio.wav",
-                )
-            ]
-        }
+        data = [
+            SingleTurn(
+                text="What's in this image?",
+                image="/path/to/image.png",
+                audio="/path/to/audio.wav",
+            )
+        ]
 
         conversations = loader.convert_to_conversations(data)
 
@@ -346,19 +360,18 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert len(turn.audios) == 1
         assert turn.audios[0].contents == ["/path/to/audio.wav"]
 
-    def test_convert_batched_data(self, default_user_config):
+    def test_convert_batched_data(self, default_user_config, mock_tokenizer_cls):
         """Test converting batched data to conversations."""
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename="dummy.jsonl"
         )
-        data = {
-            "session_1": [
-                SingleTurn(
-                    texts=["First message", "Second message"],
-                    images=["/path/1.png", "/path/2.png"],
-                )
-            ]
-        }
+        data = [
+            SingleTurn(
+                texts=["First message", "Second message"],
+                images=["/path/1.png", "/path/2.png"],
+            )
+        ]
 
         conversations = loader.convert_to_conversations(data)
 
@@ -369,43 +382,44 @@ class TestSingleTurnDatasetLoaderConvertToConversations:
         assert len(turn.images) == 1
         assert turn.images[0].contents == ["/path/1.png", "/path/2.png"]
 
-    def test_convert_with_timing_data(self, default_user_config):
+    def test_convert_with_timing_data(self, default_user_config, mock_tokenizer_cls):
         """Test converting data with timestamp and delay."""
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename="dummy.jsonl"
         )
-        data = {
-            "session_1": [
-                SingleTurn(text="First", timestamp=1000),
-                SingleTurn(text="Second", delay=500, role="user"),
-            ]
-        }
+        data = [
+            SingleTurn(text="First", timestamp=1000),
+            SingleTurn(text="Second", delay=500, role="user"),
+        ]
 
         conversations = loader.convert_to_conversations(data)
 
-        assert len(conversations) == 1
-        assert len(conversations[0].turns) == 2
+        assert len(conversations) == 2  # Each SingleTurn becomes separate conversation
 
         first_turn = conversations[0].turns[0]
         assert first_turn.timestamp == 1000
         assert first_turn.delay is None
         assert first_turn.role is None
 
-        second_turn = conversations[0].turns[1]
+        second_turn = conversations[1].turns[0]
         assert second_turn.timestamp is None
         assert second_turn.delay == 500
         assert second_turn.role == "user"
 
-    def test_convert_structured_text_objects(self, default_user_config):
+    def test_convert_structured_text_objects(
+        self, default_user_config, mock_tokenizer_cls
+    ):
         """Test converting data with structured Text objects."""
+        tokenizer = mock_tokenizer_cls.from_pretrained("test-model")
         loader = SingleTurnDatasetLoader(
-            filename="dummy.jsonl", user_config=default_user_config
+            config=default_user_config, tokenizer=tokenizer, filename="dummy.jsonl"
         )
         text_objects = [
             Text(name="query", contents=["What is AI?"]),
             Text(name="context", contents=["AI stands for artificial intelligence"]),
         ]
-        data = {"session_1": [SingleTurn(texts=text_objects)]}
+        data = [SingleTurn(texts=text_objects)]
 
         conversations = loader.convert_to_conversations(data)
 

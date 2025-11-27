@@ -78,12 +78,11 @@ class RandomPoolDatasetLoader(BaseFileLoader, MediaConversionMixin):
         config: UserConfig,
         tokenizer: Tokenizer,
         filename: str,
-        num_conversations: int = 1,
         **kwargs,
     ):
         super().__init__(config, tokenizer, filename, **kwargs)
         self._rng = rng.derive("dataset.loader.random_pool")
-        self.num_conversations = num_conversations
+        self.num_conversations = config.input.conversation.num or 1
         # Store filename->pool mapping for convert_to_conversations
         self._pool_mapping: dict[Filename, list[RandomPool]] = {}
 

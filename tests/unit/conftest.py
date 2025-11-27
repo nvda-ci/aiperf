@@ -168,6 +168,22 @@ def reset_singleton_factories():
 
 
 @pytest.fixture
+def mock_tokenizer_from_pretrained():
+    """Patch Tokenizer.from_pretrained to avoid HTTP requests during testing.
+
+    This fixture patches the Tokenizer.from_pretrained method and returns the mock
+    so tests can configure its return value.
+
+    Usage in tests:
+        def test_something(mock_tokenizer_from_pretrained, mock_tokenizer_cls):
+            mock_tokenizer_from_pretrained.return_value = mock_tokenizer_cls.from_pretrained("test")
+            # Now any code calling Tokenizer.from_pretrained will get the mock
+    """
+    with patch("aiperf.common.tokenizer.Tokenizer.from_pretrained") as mock:
+        yield mock
+
+
+@pytest.fixture
 def mock_tokenizer_cls() -> type[Tokenizer]:
     """Mock our Tokenizer class to avoid HTTP requests during testing.
 
