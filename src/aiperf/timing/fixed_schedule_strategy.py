@@ -5,15 +5,24 @@ import asyncio
 import time
 from collections import defaultdict
 
-from aiperf.common.constants import MILLIS_PER_SECOND
+from aiperf.common.constants import (
+    MILLIS_PER_SECOND,
+    NANOS_PER_MILLIS,
+    NANOS_PER_SECOND,
+)
 from aiperf.common.enums import CreditPhase, TimingMode
-from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats
+from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats, DatasetMetadata
+from aiperf.common.utils import yield_to_event_loop
 from aiperf.timing.config import TimingManagerConfig
 from aiperf.timing.credit_issuing_strategy import (
     CreditIssuingStrategy,
     CreditIssuingStrategyFactory,
 )
 from aiperf.timing.credit_manager import CreditManagerProtocol
+
+
+def _perf_counter_ms() -> float:
+    return time.perf_counter() * MILLIS_PER_SECOND
 
 
 @CreditIssuingStrategyFactory.register(TimingMode.FIXED_SCHEDULE)
@@ -26,29 +35,60 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
         self,
         config: TimingManagerConfig,
         credit_manager: CreditManagerProtocol,
-        schedule: list[tuple[int, str]],
+        dataset_metadata: DatasetMetadata,
     ):
         # NOTE: This all needs to be set before the super call, because the base class will call
         # _setup_profiling_phase_config() which uses it to set the total expected requests.
-        self._schedule: list[tuple[int, str]] = schedule
-        self._num_requests = len(self._schedule)
+
+        # Reconstruct the full schedule from the first turn timestamps
+        self._schedule: list[tuple[int | float, str]] = []
+        for conversation in dataset_metadata.conversations:
+            if conversation.turns[0].timestamp_ms is not None:
+                # Add first turn only, as the credit is for the whole conversation
+                self._schedule.append(
+                    (conversation.turns[0].timestamp_ms, conversation.conversation_id)
+                )
+            else:
+                raise ValueError(
+                    f"Conversation {conversation.conversation_id} has no timing data"
+                )
+
+        self._num_conversations = len(self._schedule)
         self._auto_offset_timestamps = config.auto_offset_timestamps
         self._start_offset = config.fixed_schedule_start_offset
         self._end_offset = config.fixed_schedule_end_offset
-        super().__init__(config=config, credit_manager=credit_manager)
+        self._schedule_zero_ms = 0
+        self._schedule_zero_ns = 0
+        super().__init__(
+            config=config,
+            credit_manager=credit_manager,
+            dataset_metadata=dataset_metadata,
+        )
 
     def _create_timestamp_groups(self) -> None:
         """
         Create a dictionary of timestamp groups, and filter the schedule to only include the requested subset.
+
+        Note: Timestamps are rounded to the nearest millisecond to group conversations that are very close together.
+        This prevents creating excessive sleep operations for timestamps that differ by fractions of a millisecond.
         """
-        if not self._schedule or self._num_requests == 0:
+        if not self._schedule or self._num_conversations == 0:
             raise ValueError(
                 "No schedule loaded, unable to setup fixed schedule strategy"
             )
-        # Group the schedule by timestamp
-        self._timestamp_groups = defaultdict(list)
+        # Group the schedule by timestamp, rounding to nearest millisecond to avoid
+        # excessive grouping with floating point timestamps
+        self._timestamp_groups = defaultdict(list[tuple[int, str]])
         for timestamp, conversation_id in self._schedule:
-            self._timestamp_groups[timestamp].append(conversation_id)
+            # Truncate to nearest millisecond to group similar timestamps together
+            truncated_timestamp = int(timestamp)
+            self._timestamp_groups[truncated_timestamp].append(
+                (int(timestamp * NANOS_PER_MILLIS), conversation_id)
+            )
+
+        # Sort the conversations by timestamp
+        for _, conversation_tuples in self._timestamp_groups.items():
+            conversation_tuples.sort(key=lambda x: x[0])
 
         # Sort the timestamps, so we can drop credits in order
         self._sorted_timestamp_keys = sorted(self._timestamp_groups.keys())
@@ -60,6 +100,7 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
             self._schedule_zero_ms = self._start_offset
         else:
             self._schedule_zero_ms = 0
+        self._schedule_zero_ns = int(self._schedule_zero_ms * NANOS_PER_MILLIS)
 
     def _setup_profiling_phase_config(self) -> None:
         """
@@ -72,27 +113,24 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
         self.ordered_phase_configs.append(
             CreditPhaseConfig(
                 type=CreditPhase.PROFILING,
-                total_expected_requests=self._num_requests,
+                total_expected_requests=self._num_conversations,
             )
         )
 
-    def _perf_counter_ms(self) -> float:
-        return time.perf_counter() * MILLIS_PER_SECOND
-
     async def _execute_single_phase(self, phase_stats: CreditPhaseStats) -> None:
         # This is used as a reference point for the wait duration calculation
-        start_time_ms = self._perf_counter_ms()
+        start_time_ns = time.perf_counter_ns()
+        start_time_ms = start_time_ns / NANOS_PER_MILLIS
 
         # Drop credits in order of the schedule
         for timestamp in self._sorted_timestamp_keys:
-            # Lookup/cache the conversation IDs now, so that way they are ready to go
-            conversation_ids = self._timestamp_groups[timestamp]
-
+            # Get the conversations at this timestamp group now, so we are ready
+            conversation_tuples = self._timestamp_groups[timestamp]
             # Calculate the wait duration for this timestamp
             # (timestamp - schedule_zero_ms) is the offset of the conversation(s) from the start of the schedule
-            # (self._perf_counter_ms() - start_time_ms) is how much time has passed since we started dropping credits
+            # (_perf_counter_ms() - start_time_ms) is how much time has passed since we started dropping credits
             wait_duration_ms = (timestamp - self._schedule_zero_ms) - (
-                self._perf_counter_ms() - start_time_ms
+                _perf_counter_ms() - start_time_ms
             )
             wait_duration_sec = wait_duration_ms / MILLIS_PER_SECOND
 
@@ -100,7 +138,14 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
                 await asyncio.sleep(wait_duration_sec)
 
             # Drop credits asynchronously for all conversations at this timestamp
-            for conversation_id in conversation_ids:
+            for conversation_ns, conversation_id in conversation_tuples:
+                # Use tight loop to wait for precise timestamp (sub-millisecond precision)
+                while (
+                    time.perf_counter_ns() - start_time_ns
+                    < conversation_ns - self._schedule_zero_ns
+                ):
+                    await yield_to_event_loop()
+
                 should_cancel = self.cancellation_strategy.should_cancel_request()
                 cancel_after_ns = self.cancellation_strategy.get_cancellation_delay_ns()
 
@@ -116,7 +161,7 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
                 # NOTE: This is incremented here, as the credit_num is used up above, and needs the current value.
                 phase_stats.sent += 1
 
-        duration_sec = (self._perf_counter_ms() - start_time_ms) / MILLIS_PER_SECOND
+        duration_sec = (time.perf_counter_ns() - start_time_ns) / NANOS_PER_SECOND
         self.info(
-            f"Sent all {self._num_requests:,} fixed schedule requests in {duration_sec:,.2f}s. Waiting for responses..."
+            f"Sent all {self._num_conversations:,} fixed schedule requests in {duration_sec:,.2f}s. Waiting for responses..."
         )

@@ -4,12 +4,10 @@ import asyncio
 import time
 from collections import defaultdict
 
-import aiofiles
+import orjson
 
-import aiperf.dataset.public_datasets  # noqa: F401
 from aiperf.common.base_component_service import BaseComponentService
-from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.config.config_defaults import OutputDefaults
+from aiperf.common.config import OutputDefaults, ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
@@ -22,6 +20,7 @@ from aiperf.common.environment import Environment
 from aiperf.common.factories import (
     DatasetLoaderFactory,
     DatasetSamplingStrategyFactory,
+    EndpointFactory,
     PublicDatasetFactory,
     ServiceFactory,
 )
@@ -32,28 +31,19 @@ from aiperf.common.messages import (
     ConversationTurnRequestMessage,
     ConversationTurnResponseMessage,
     DatasetConfiguredNotification,
-    DatasetTimingRequest,
-    DatasetTimingResponse,
     ProfileConfigureCommand,
 )
 from aiperf.common.mixins import ReplyClientMixin
-from aiperf.common.models import Conversation, InputsFile
-from aiperf.common.models.dataset_models import SessionPayloads
-from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
-from aiperf.common.models.record_models import RequestInfo
-from aiperf.common.protocols import DatasetSamplingStrategyProtocol, ServiceProtocol
-from aiperf.common.tokenizer import Tokenizer
-
-# Import to ensure factory registrations - loaders and datasets self-register on import
-from aiperf.dataset.loader import (  # noqa: F401
-    MooncakeTraceDatasetLoader,
-    MultiTurnDatasetLoader,
-    RandomPoolDatasetLoader,
-    ShareGPTLoader,
-    SingleTurnDatasetLoader,
-    SyntheticMultiModalLoader,
-    SyntheticRankingsLoader,
+from aiperf.common.models import (
+    Conversation,
+    DatasetMetadata,
+    InputsFile,
+    ModelEndpointInfo,
+    RequestInfo,
+    SessionPayloads,
 )
+from aiperf.common.protocols import ServiceProtocol
+from aiperf.common.tokenizer import Tokenizer
 
 
 @implements_protocol(ServiceProtocol)
@@ -78,12 +68,12 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             reply_client_address=CommAddress.DATASET_MANAGER_PROXY_BACKEND,
             reply_client_bind=False,
         )
-        self.debug("Dataset manager __init__")
         self.user_config = user_config
         self.tokenizer: Tokenizer | None = None
-        self.dataset: dict[str, Conversation] = {}
+        self.dataset: dict[str, Conversation] = {}  # session ID -> Conversation mapping
+        self.dataset_metadata: DatasetMetadata | None = None
+        self._session_ids_cache: list[str] = []
         self.dataset_configured = asyncio.Event()
-        self._dataset_sampler: DatasetSamplingStrategyProtocol | None = None
 
     @on_command(CommandType.PROFILE_CONFIGURE)
     async def _profile_configure_command(
@@ -116,8 +106,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
 
     def _generate_input_payloads(self, model_endpoint: ModelEndpointInfo) -> InputsFile:
         """Generate input payloads from the dataset for use in the inputs.json file."""
-        from aiperf.common.factories import EndpointFactory
-
         endpoint = EndpointFactory.create_instance(
             model_endpoint.endpoint.type,
             model_endpoint=model_endpoint,
@@ -152,6 +140,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         file_path = (
             self.user_config.output.artifact_directory / OutputDefaults.INPUTS_JSON_FILE
         )
+        temp_file_path = file_path.with_suffix(".tmp")
         self.info(f"Generating inputs.json file at {file_path.resolve()}")
 
         try:
@@ -161,17 +150,31 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             model_endpoint = ModelEndpointInfo.from_user_config(self.user_config)
             inputs = self._generate_input_payloads(model_endpoint)
 
-            async with aiofiles.open(file_path, "w") as f:
-                await f.write(inputs.model_dump_json(indent=2, exclude_none=True))
+            temp_file_path.write_bytes(
+                orjson.dumps(
+                    inputs.model_dump(exclude_none=True, mode="json"),
+                    option=orjson.OPT_INDENT_2,
+                )
+            )
+            temp_file_path.replace(file_path)
 
             duration = time.perf_counter() - start_time
             self.info(f"inputs.json file generated in {duration:.2f} seconds")
 
-        except Exception as e:
-            # Log as warning, but continue to run the benchmark
-            self.warning(
-                f"Error generating inputs.json file at {file_path.resolve()}: {e}"
+        except OSError as e:
+            self.exception(
+                f"Error generating inputs.json file at {file_path.resolve()}: {e!r}"
             )
+            # NOTE: We don't raise an error here, as we want to continue to run the benchmark
+        except Exception as e:
+            # This is a fatal error, as later in the benchmark, errors will occur while trying to convert the payloads
+            self.exception(
+                f"Error generating inputs.json file at {file_path.resolve()}: {e!r}"
+            )
+            raise
+        finally:
+            if temp_file_path.exists():
+                temp_file_path.unlink()
 
     def _load_dataset(self) -> list[Conversation]:
         """Load dataset using the appropriate loader.
@@ -306,9 +309,22 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             self.user_config.input.dataset_sampling_strategy,
             conversation_ids=list(self.dataset.keys()),
         )
-
+        self.dataset_metadata = DatasetMetadata(
+            conversations=[
+                conversation.metadata() for conversation in self.dataset.values()
+            ],
+            sampling_strategy=self.user_config.input.dataset_sampling_strategy,
+        )
+        metadata = self.dataset_metadata
+        self.info(
+            f"sampling strategy: {metadata.sampling_strategy}, "
+            f"unique conversations: {len(metadata.conversations)}, "
+            f"unique turn count: {sum(len(conversation.turns) for conversation in metadata.conversations)}"
+        )
         self.dataset_configured.set()
-        await self.publish(DatasetConfiguredNotification(service_id=self.service_id))
+        await self.publish(
+            DatasetConfiguredNotification(service_id=self.service_id, metadata=metadata)
+        )
 
     @on_request(MessageType.CONVERSATION_REQUEST)
     async def _handle_conversation_request(
@@ -321,15 +337,9 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         if not self.dataset:
             raise self._service_error("Dataset is empty")
 
-        conversation = self._get_conversation(message.conversation_id)
-        self.trace_or_debug(
-            lambda: f"Sending conversation response: {conversation}",
-            lambda: f"Sending conversation response with id: {conversation.session_id}",
-        )
-        return ConversationResponseMessage(
-            service_id=self.service_id,
+        return self._return_conversation_by_id(
             request_id=message.request_id,
-            conversation=conversation,
+            conversation_id=message.conversation_id,
         )
 
     def _get_conversation(self, conversation_id: str | None) -> Conversation:
@@ -365,28 +375,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             service_id=self.service_id,
             request_id=message.request_id,
             turn=conversation.turns[message.turn_index],
-        )
-
-    @on_request(MessageType.DATASET_TIMING_REQUEST)
-    async def _handle_dataset_timing_request(
-        self, message: DatasetTimingRequest
-    ) -> DatasetTimingResponse:
-        """Handle a dataset timing request."""
-        self.debug("Handling dataset timing request")
-        await self._wait_for_dataset_configuration()
-
-        if not self.dataset:
-            raise self._service_error("Dataset is empty")
-
-        timing_data = [
-            (conv.turns[0].timestamp, cid)
-            for cid, conv in self.dataset.items()
-            if conv.turns
-        ]
-        return DatasetTimingResponse(
-            service_id=self.service_id,
-            request_id=message.request_id,
-            timing_data=timing_data,
         )
 
     async def _wait_for_dataset_configuration(self) -> None:
