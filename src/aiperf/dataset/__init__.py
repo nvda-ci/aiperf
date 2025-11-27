@@ -57,7 +57,6 @@ from aiperf.dataset.output_tokens_sampler import (
     OutputTokensSampler,
 )
 from aiperf.dataset.public_datasets import (
-    AIPERF_DATASET_CACHE_DIR,
     SHAREGPT,
     PublicDataset,
     download_public_dataset,
@@ -69,7 +68,6 @@ from aiperf.dataset.utils import (
 )
 
 __all__ = [
-    "AIPERF_DATASET_CACHE_DIR",
     "AudioGenerator",
     "BaseDatasetLoader",
     "BaseDatasetSampler",

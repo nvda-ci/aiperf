@@ -58,6 +58,10 @@ class _DatasetSettings(BaseSettings):
         env_prefix="AIPERF_DATASET_",
     )
 
+    CACHE_DIR: str = Field(
+        default=".cache/aiperf/datasets",
+        description="Directory path for caching downloaded public datasets",
+    )
     CONFIGURATION_TIMEOUT: float = Field(
         ge=1.0,
         le=100000.0,

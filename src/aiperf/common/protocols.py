@@ -404,16 +404,16 @@ class PublicDatasetProtocol(Protocol):
         SHAREGPT = PublicDataset(
             dataset_type=PublicDatasetType.SHAREGPT,  # Auto-registers!
             name="ShareGPT",
-            url="https://...",
-            remote_filename="sharegpt.json",
-            loader_type=DatasetLoaderType.SHAREGPT
+            url="https://huggingface.co/.../dataset.json",
+            loader_type=DatasetLoaderType.SHAREGPT,
+            # remote_filename auto-detected from URL if not provided
         )
 
     Attributes:
         dataset_type: PublicDatasetType enum for registration
         name: Human-readable name for the dataset
         url: Remote URL to download the dataset from
-        remote_filename: Filename to use for local caching
+        remote_filename: Optional filename for local caching (auto-detected from URL if empty)
         loader_type: Which DatasetLoaderType to use for parsing
     """
 
@@ -427,10 +427,14 @@ class PublicDatasetProtocol(Protocol):
     """URL to download the dataset from"""
 
     remote_filename: str
-    """Filename to use for local caching"""
+    """Filename to use for local caching (empty string = auto-detect from URL)"""
 
     loader_type: "DatasetLoaderType"  # noqa: F821
     """Which loader to use for parsing this dataset"""
+
+    def get_cache_filename(self) -> str:
+        """Get the filename to use for caching (explicit or auto-detected from URL)."""
+        ...
 
 
 @runtime_checkable

@@ -5,6 +5,7 @@ import time
 
 import aiofiles
 
+import aiperf.dataset.public_datasets  # noqa: F401
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
@@ -54,7 +55,6 @@ from aiperf.dataset.loader import (  # noqa: F401
     SyntheticMultiModalLoader,
     SyntheticRankingsLoader,
 )
-from aiperf.dataset.public_datasets import datasets  # noqa: F401
 
 _logger = AIPerfLogger(__name__)
 

@@ -28,6 +28,7 @@ Dataset loading and configuration. Controls timeouts and behavior for dataset lo
 
 | Environment Variable | Default | Constraints | Description |
 |----------------------|---------|-------------|-------------|
+| `AIPERF_DATASET_CACHE_DIR` | `'.cache/aiperf/datasets'` | — | Directory path for caching downloaded public datasets |
 | `AIPERF_DATASET_CONFIGURATION_TIMEOUT` | `300.0` | ≥ 1.0, ≤ 100000.0 | Timeout in seconds for dataset configuration operations |
 | `AIPERF_DATASET_PUBLIC_DATASET_TIMEOUT` | `300.0` | ≥ 1.0, ≤ 100000.0 | Timeout in seconds for public dataset loading operations |
 
