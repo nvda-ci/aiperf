@@ -20,7 +20,7 @@ Model name(s) to be benchmarked. Can be a comma-separated list or a single model
 #### `--model-selection-strategy` `<str>`
 
 When multiple models are specified, this is how a specific model should be assigned to a prompt. round_robin: nth prompt in the list gets assigned to n-mod len(models). random: assignment is uniformly random.
-<br>_Choices: [`round_robin`, `random`]_
+<br>_Choices: [`round_robin`, `random`, `shuffle`]_
 <br>_Default: `round_robin`_
 
 #### `--custom-endpoint`, `--endpoint` `<str>`

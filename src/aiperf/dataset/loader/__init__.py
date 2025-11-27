@@ -11,9 +11,6 @@ __ignore__ = []
 from aiperf.dataset.loader.base import (
     BaseDatasetLoader,
 )
-from aiperf.dataset.loader.base_loader import (
-    BaseLoader,
-)
 from aiperf.dataset.loader.file import (
     BaseFileLoader,
     ShareGPTLoader,
@@ -51,7 +48,6 @@ from aiperf.dataset.loader.synthetic import (
 __all__ = [
     "BaseDatasetLoader",
     "BaseFileLoader",
-    "BaseLoader",
     "BaseSyntheticLoader",
     "CustomDatasetT",
     "MediaConversionMixin",

@@ -31,7 +31,6 @@ from aiperf.dataset.generator import (
 from aiperf.dataset.loader import (
     BaseDatasetLoader,
     BaseFileLoader,
-    BaseLoader,
     BaseSyntheticLoader,
     CustomDatasetT,
     MediaConversionMixin,
@@ -76,7 +75,6 @@ __all__ = [
     "BaseDatasetSampler",
     "BaseFileLoader",
     "BaseGenerator",
-    "BaseLoader",
     "BaseSyntheticLoader",
     "CustomDatasetT",
     "DEFAULT_CORPUS_FILE",
