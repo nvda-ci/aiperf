@@ -19,7 +19,6 @@ from aiperf.common.enums import (
 from aiperf.common.environment import Environment
 from aiperf.common.factories import (
     DatasetLoaderFactory,
-    DatasetSamplingStrategyFactory,
     EndpointFactory,
     PublicDatasetFactory,
     ServiceFactory,
@@ -44,6 +43,7 @@ from aiperf.common.models import (
 )
 from aiperf.common.protocols import ServiceProtocol
 from aiperf.common.tokenizer import Tokenizer
+from aiperf.dataset.utils import check_file_exists
 
 
 @implements_protocol(ServiceProtocol)
@@ -72,7 +72,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self.tokenizer: Tokenizer | None = None
         self.dataset: dict[str, Conversation] = {}  # session ID -> Conversation mapping
         self.dataset_metadata: DatasetMetadata | None = None
-        self._session_ids_cache: list[str] = []
         self.dataset_configured = asyncio.Event()
 
     @on_command(CommandType.PROFILE_CONFIGURE)
@@ -181,8 +180,8 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
 
         Handles three loading paths in order of precedence:
         1. Public dataset: Download and use specified loader
-        2. File-based: Find loader that can handle the input file
-        3. Synthetic: Find loader for synthetic data generation
+        2. File-based: Load from input file
+        3. Synthetic: Generate synthetic data
 
         Returns:
             list[Conversation]: Loaded conversations.
@@ -190,12 +189,13 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         Raises:
             ValueError: If no loader can handle the configuration.
         """
-        # Path 1: Public dataset (has special download logic)
         if self.user_config.input.public_dataset is not None:
             return self._load_public_dataset()
 
-        # Path 2 & 3: Find loader via can_load() auto-detection
-        return self._load_via_auto_detection()
+        if self.user_config.input.file is not None:
+            return self._load_file_dataset()
+
+        return self._load_synthetic_dataset()
 
     def _load_public_dataset(self) -> list[Conversation]:
         """Load public dataset: download → loader → conversations."""
@@ -215,31 +215,86 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self._apply_sampling_strategy(loader)
         return loader.load()
 
-    def _load_via_auto_detection(self) -> list[Conversation]:
-        """Find and use a loader via can_load() auto-detection.
+    def _load_file_dataset(self) -> list[Conversation]:
+        """Load dataset from file using auto-detection or explicit type."""
+        check_file_exists(self.user_config.input.file)
 
-        Iterates through all registered loaders and uses the first one
-        that returns True from can_load().
-
-        Returns:
-            list[Conversation]: Loaded conversations.
-
-        Raises:
-            ValueError: If no loader can handle the configuration.
-        """
-        from aiperf.dataset.utils import check_file_exists
-
-        # Check file exists if specified
-        if self.user_config.input.file is not None:
-            check_file_exists(self.user_config.input.file)
-
-        # If explicit type is set, use that loader directly
+        # If explicit type, use it directly
         if self.user_config.input.custom_dataset_type is not None:
             loader_type = DatasetLoaderType(self.user_config.input.custom_dataset_type)
-            return self._create_and_load(loader_type)
+        else:
+            loader_type = self._detect_file_loader_type()
 
-        # Auto-detect: iterate through loaders and find one that can_load()
-        matching_loaders: list[tuple[type, DatasetLoaderType]] = []
+        loader = DatasetLoaderFactory.create_instance(
+            loader_type,
+            config=self.user_config,
+            tokenizer=self.tokenizer,
+            filename=self.user_config.input.file,
+        )
+        self._apply_sampling_strategy(loader)
+        return loader.load()
+
+    def _load_synthetic_dataset(self) -> list[Conversation]:
+        """Load synthetic dataset using auto-detection or explicit type."""
+        # If explicit type, use it directly
+        if self.user_config.input.custom_dataset_type is not None:
+            loader_type = DatasetLoaderType(self.user_config.input.custom_dataset_type)
+        else:
+            loader_type = self._detect_synthetic_loader_type()
+
+        loader = DatasetLoaderFactory.create_instance(
+            loader_type,
+            config=self.user_config,
+            tokenizer=self.tokenizer,
+        )
+        self._apply_sampling_strategy(loader)
+        return loader.load()
+
+    def _detect_file_loader_type(self) -> DatasetLoaderType:
+        """Auto-detect which file loader can handle the input file."""
+        matching = self._find_matching_loaders()
+
+        if not matching:
+            raise ValueError(
+                f"No loader can handle file: {self.user_config.input.file}. "
+                "Please specify --custom-dataset-type explicitly."
+            )
+
+        if len(matching) > 1:
+            names = [cls.__name__ for cls, _ in matching]
+            raise ValueError(
+                f"Multiple loaders can handle the file: {names}. "
+                "Please specify --custom-dataset-type explicitly."
+            )
+
+        loader_class, loader_type = matching[0]
+        self.info(f"Auto-detected file loader: {loader_class.__name__}")
+        return loader_type
+
+    def _detect_synthetic_loader_type(self) -> DatasetLoaderType:
+        """Auto-detect which synthetic loader to use."""
+        matching = self._find_matching_loaders()
+
+        if not matching:
+            raise ValueError(
+                "No synthetic loader matches this configuration. "
+                "Please specify --custom-dataset-type or --input-file."
+            )
+
+        if len(matching) > 1:
+            names = [cls.__name__ for cls, _ in matching]
+            raise ValueError(
+                f"Multiple synthetic loaders match: {names}. "
+                "Please specify --custom-dataset-type explicitly."
+            )
+
+        loader_class, loader_type = matching[0]
+        self.info(f"Auto-detected synthetic loader: {loader_class.__name__}")
+        return loader_type
+
+    def _find_matching_loaders(self) -> list[tuple[type, DatasetLoaderType]]:
+        """Find all loaders that can handle the current config."""
+        matching: list[tuple[type, DatasetLoaderType]] = []
 
         for (
             loader_class,
@@ -247,47 +302,12 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         ) in DatasetLoaderFactory.get_all_classes_and_types():
             try:
                 if loader_class.can_load(self.user_config):
-                    matching_loaders.append((loader_class, loader_type))
-                    self.debug(
-                        f"Loader {loader_class.__name__} can handle this configuration"
-                    )
+                    matching.append((loader_class, loader_type))
+                    self.debug(f"Loader {loader_class.__name__} can handle config")
             except Exception as e:
                 self.debug(f"Loader {loader_class.__name__} check failed: {e!r}")
 
-        if not matching_loaders:
-            raise ValueError(
-                "No loader can handle the data format. "
-                "Please specify --custom-dataset-type or --input-file explicitly."
-            )
-
-        if len(matching_loaders) > 1:
-            loader_names = [cls.__name__ for cls, _ in matching_loaders]
-            raise ValueError(
-                f"Multiple loaders can handle the data format: {loader_names}. "
-                "Please specify --custom-dataset-type explicitly."
-            )
-
-        loader_class, loader_type = matching_loaders[0]
-        self.info(f"Auto-detected loader: {loader_class.__name__}")
-        return self._create_and_load(loader_type)
-
-    def _create_and_load(self, loader_type: DatasetLoaderType) -> list[Conversation]:
-        """Create loader instance and load conversations.
-
-        Args:
-            loader_type: The type of loader to create.
-
-        Returns:
-            list[Conversation]: Loaded conversations.
-        """
-        # Build kwargs based on whether loader needs filename
-        kwargs: dict = {"config": self.user_config, "tokenizer": self.tokenizer}
-        if self.user_config.input.file is not None:
-            kwargs["filename"] = self.user_config.input.file
-
-        loader = DatasetLoaderFactory.create_instance(loader_type, **kwargs)
-        self._apply_sampling_strategy(loader)
-        return loader.load()
+        return matching
 
     def _apply_sampling_strategy(self, loader) -> None:
         """Apply loader's preferred sampling strategy if not explicitly set."""
@@ -305,10 +325,6 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self.dataset_configured.clear()
         self.dataset = {conv.session_id: conv for conv in self._load_dataset()}
 
-        self._dataset_sampler = DatasetSamplingStrategyFactory.create_instance(
-            self.user_config.input.dataset_sampling_strategy,
-            conversation_ids=list(self.dataset.keys()),
-        )
         self.dataset_metadata = DatasetMetadata(
             conversations=[
                 conversation.metadata() for conversation in self.dataset.values()
@@ -337,21 +353,21 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         if not self.dataset:
             raise self._service_error("Dataset is empty")
 
-        return self._return_conversation_by_id(
+        conversation = self._get_conversation(message.conversation_id)
+        self.trace_or_debug(
+            lambda: f"Sending conversation response: {conversation}",
+            lambda: f"Sending conversation response with id: {conversation.session_id}",
+        )
+        return ConversationResponseMessage(
+            service_id=self.service_id,
             request_id=message.request_id,
-            conversation_id=message.conversation_id,
+            conversation=conversation,
         )
 
-    def _get_conversation(self, conversation_id: str | None) -> Conversation:
-        """Get a conversation by ID, or sample one if ID is None."""
-        if conversation_id is None:
-            if self._dataset_sampler is None:
-                raise self._service_error("Dataset sampler not configured")
-            conversation_id = self._dataset_sampler.next_conversation_id()
-
+    def _get_conversation(self, conversation_id: str) -> Conversation:
+        """Get a conversation by ID."""
         if conversation_id not in self.dataset:
             raise self._service_error(f"Conversation {conversation_id} not found")
-
         return self.dataset[conversation_id]
 
     @on_request(MessageType.CONVERSATION_TURN_REQUEST)

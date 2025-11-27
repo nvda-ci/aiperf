@@ -113,7 +113,8 @@ class TestPublicDatasetDownload:
         from aiperf.dataset.public_datasets import download_public_dataset
 
         mock_exists.return_value = False
-        mock_async_run.return_value = '{"data": "test"}'
+        # Close the coroutine to avoid "coroutine was never awaited" warning
+        mock_async_run.side_effect = lambda coro: (coro.close(), '{"data": "test"}')[1]
 
         dataset = PublicDataset(
             dataset_type=PublicDatasetType.SHAREGPT,
@@ -139,7 +140,8 @@ class TestPublicDatasetDownload:
         from aiperf.dataset.public_datasets import download_public_dataset
 
         mock_exists.return_value = False
-        mock_async_run.return_value = '{"data": "test"}'
+        # Close the coroutine to avoid "coroutine was never awaited" warning
+        mock_async_run.side_effect = lambda coro: (coro.close(), '{"data": "test"}')[1]
 
         dataset = PublicDataset(
             dataset_type=PublicDatasetType.SHAREGPT,

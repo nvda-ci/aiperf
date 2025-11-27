@@ -3,7 +3,7 @@
 
 from aiperf.common import random_generator as rng
 from aiperf.common.config import UserConfig
-from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy, EndpointType
+from aiperf.common.enums import DatasetLoaderType, DatasetSamplingStrategy
 from aiperf.common.factories import DatasetLoaderFactory
 from aiperf.common.models import Conversation, Text, Turn
 from aiperf.common.tokenizer import Tokenizer
@@ -45,7 +45,7 @@ class SyntheticRankingsLoader(BaseSyntheticLoader):
         Returns True if:
         - No file specified
         - No public dataset specified
-        - Endpoint type is RANKINGS
+        - Endpoint type is a rankings type (cohere_rankings, nim_rankings, hf_tei_rankings)
 
         Args:
             config: The user configuration to check.
@@ -55,8 +55,8 @@ class SyntheticRankingsLoader(BaseSyntheticLoader):
         """
         return (
             config.input.file is None
-            and config.input.public_dataset_type is None
-            and config.endpoint.endpoint_type == EndpointType.RANKINGS
+            and config.input.public_dataset is None
+            and "rankings" in config.endpoint.type
         )
 
     def load(self) -> list[Conversation]:

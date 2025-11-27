@@ -431,17 +431,20 @@ class DatasetLoaderFactory(AIPerfFactory[DatasetLoaderType, "BaseDatasetLoader"]
             class_type: The type of loader to create
             config: User configuration
             tokenizer: Tokenizer instance
-            filename: Optional filename for file-based loaders
+            filename: Optional filename for file-based loaders (not passed to synthetic loaders)
             **kwargs: Additional arguments passed to the loader
 
         Returns:
             BaseDatasetLoader instance
         """
+        # Only pass filename if provided (synthetic loaders don't accept it)
+        if filename is not None:
+            kwargs["filename"] = filename
+
         return super().create_instance(
             class_type,
             config=config,
             tokenizer=tokenizer,
-            filename=filename,
             **kwargs,
         )
 

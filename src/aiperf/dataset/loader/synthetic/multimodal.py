@@ -61,12 +61,10 @@ class SyntheticMultiModalLoader(BaseSyntheticLoader):
         Returns:
             True if this loader should generate synthetic multi-modal data.
         """
-        from aiperf.common.enums import EndpointType
-
         return (
             config.input.file is None
-            and config.input.public_dataset_type is None
-            and config.endpoint.endpoint_type != EndpointType.RANKINGS
+            and config.input.public_dataset is None
+            and "rankings" not in config.endpoint.type.value
         )
 
     def load(self) -> list[Conversation]:
@@ -85,7 +83,9 @@ class SyntheticMultiModalLoader(BaseSyntheticLoader):
                 self.config.input.conversation.turn.mean,
                 self.config.input.conversation.turn.stddev,
             )
-            self.debug(lambda: f"Creating conversation with {num_turns} turns")
+            self.debug(
+                lambda num_turns=num_turns: f"Creating conversation with {num_turns} turns"
+            )
 
             turns = []
             for turn_idx in range(num_turns):
