@@ -30,11 +30,13 @@ class ZMQDealerRequestClient(BaseZMQClient, TaskManagerMixin):
     receiving responses through callbacks or awaitable futures.
 
     ASCII Diagram:
+    ```
     ┌──────────────┐                    ┌──────────────┐
     │    DEALER    │───── Request ─────>│    ROUTER    │
     │   (Client)   │                    │  (Service)   │
     │              │<─── Response ──────│              │
     └──────────────┘                    └──────────────┘
+    ```
 
     Usage Pattern:
     - DEALER Clients send requests to ROUTER Services
@@ -75,11 +77,22 @@ class ZMQDealerRequestClient(BaseZMQClient, TaskManagerMixin):
                     self.trace(f"Received response: {message_bytes}")
                 response_message = Message.from_json(message_bytes)
 
+                self._received_count += 1
+
                 # Call the callback if it exists
                 if response_message.request_id in self.request_callbacks:
                     callback = self.request_callbacks.pop(response_message.request_id)
                     self.execute_async(callback(response_message))
-
+                    if (
+                        Environment.ZMQ.REQUEST_YIELD_INTERVAL > 0
+                        and self._received_count % Environment.ZMQ.REQUEST_YIELD_INTERVAL == 0
+                    ):  # fmt: skip
+                        # Yield to the event loop to prevent starvation when a burst of responses is received.
+                        await yield_to_event_loop()
+                else:
+                    self.warning(
+                        f"Response received for request {response_message.request_id} but no callback registered. Ignoring."
+                    )
             except zmq.Again:
                 self.debug("No data on dealer socket received, yielding to event loop")
                 await yield_to_event_loop()
@@ -118,6 +131,7 @@ class ZMQDealerRequestClient(BaseZMQClient, TaskManagerMixin):
         self.trace(lambda msg=request_json_bytes: f"Sending request: {msg}")
 
         try:
+            self._sent_count += 1
             await self.socket.send(request_json_bytes)
 
         except Exception as e:
@@ -146,7 +160,17 @@ class ZMQDealerRequestClient(BaseZMQClient, TaskManagerMixin):
         future = asyncio.Future[Message]()
 
         async def callback(response_message: Message) -> None:
-            future.set_result(response_message)
+            if not future.done():
+                future.set_result(response_message)
+            else:
+                if future.cancelled():
+                    self.debug(
+                        lambda: f"Response cancelled for request {message.request_id}. Ignoring."
+                    )
+                else:
+                    self.warning(
+                        f"Response already received for request {message.request_id}. Ignoring."
+                    )
 
         await self.request_async(message, callback)
         return await asyncio.wait_for(future, timeout=timeout)

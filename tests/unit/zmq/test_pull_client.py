@@ -29,13 +29,9 @@ class TestZMQPullClientInitialization:
 
     def test_init_with_default_concurrency(self, mock_zmq_context):
         """Test initialization with default max_pull_concurrency."""
-        with (
-            patch("zmq.asyncio.Context.instance", return_value=mock_zmq_context),
-            patch.object(Environment.ZMQ, "PULL_MAX_CONCURRENCY", 10),
-        ):
-            client = ZMQPullClient(address="tcp://127.0.0.1:5555", bind=False)
+        client = ZMQPullClient(address="tcp://127.0.0.1:5555", bind=False)
 
-            assert client.semaphore._value == 10
+        assert client.semaphore._value == Environment.ZMQ.PULL_MAX_CONCURRENCY
 
     def test_init_with_custom_concurrency(self, mock_zmq_context):
         """Test initialization with custom max_pull_concurrency."""
@@ -44,6 +40,31 @@ class TestZMQPullClientInitialization:
         )
 
         assert client.semaphore._value == 5
+
+    def test_init_with_unbounded_concurrency(self, mock_zmq_context):
+        """Test initialization with unbounded concurrency (None)."""
+        client = ZMQPullClient(
+            address="tcp://127.0.0.1:5555", bind=False, max_pull_concurrency=None
+        )
+
+        assert client.semaphore is None
+
+    def test_init_with_zero_concurrency(self, mock_zmq_context):
+        """Test initialization with zero concurrency (unbounded)."""
+        client = ZMQPullClient(
+            address="tcp://127.0.0.1:5555", bind=False, max_pull_concurrency=0
+        )
+
+        assert client.semaphore is None
+
+    def test_init_with_negative_concurrency_raises_error(self, mock_zmq_context):
+        """Test initialization with negative concurrency raises ValueError."""
+        with pytest.raises(
+            ValueError, match="max_pull_concurrency must not be negative: -1"
+        ):
+            ZMQPullClient(
+                address="tcp://127.0.0.1:5555", bind=False, max_pull_concurrency=-1
+            )
 
 
 class TestZMQPullClientCallbackRegistration:
@@ -260,3 +281,51 @@ class TestZMQPullClientConcurrency:
         assert client.semaphore._value == initial_value
 
         await client.stop()
+
+
+class TestZMQPullClientYieldInterval:
+    """Test ZMQPullClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self, pull_test_helper, sample_message, mock_yield_to_event_loop, monkeypatch
+    ):
+        """Test yield interval and _received_count."""
+        messages = [sample_message] * 10
+        message_index = 0
+        received = []
+        event = asyncio.Event()
+
+        async def mock_recv():
+            nonlocal message_index
+            if message_index < len(messages):
+                result = messages[message_index].to_json_bytes()
+                message_index += 1
+                return result
+            await asyncio.Future()
+
+        pull_test_helper.setup_mock_socket(recv_side_effect=mock_recv)
+
+        async def test_callback(msg: Message) -> None:
+            received.append(msg)
+            if len(received) == len(messages):
+                event.set()
+
+        monkeypatch.setattr(
+            "aiperf.zmq.pull_client.Environment.ZMQ.PULL_YIELD_INTERVAL", 5
+        )
+
+        with patch(
+            "aiperf.zmq.pull_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with pull_test_helper.create_client() as client:
+                client.register_pull_callback(
+                    sample_message.message_type, test_callback
+                )
+                assert client.received_count == 0
+                await client.start()
+                await asyncio.wait_for(event.wait(), timeout=2.0)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

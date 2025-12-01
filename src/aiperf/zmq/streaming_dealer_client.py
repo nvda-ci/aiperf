@@ -10,6 +10,7 @@ import zmq
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import CommClientType
+from aiperf.common.environment import Environment
 from aiperf.common.factories import CommunicationClientFactory
 from aiperf.common.hooks import background_task, on_stop
 from aiperf.common.messages import Message
@@ -32,11 +33,13 @@ class ZMQStreamingDealerClient(BaseZMQClient):
     to this specific DEALER instance.
 
     ASCII Diagram:
+    ```
     ┌──────────────┐                    ┌──────────────┐
     │    DEALER    │◄──── Stream ──────►│    ROUTER    │
     │   (Worker)   │                    │  (Manager)   │
     │              │                    │              │
     └──────────────┘                    └──────────────┘
+    ```
 
     Usage Pattern:
     - DEALER connects to ROUTER with a unique identity
@@ -142,6 +145,7 @@ class ZMQStreamingDealerClient(BaseZMQClient):
         try:
             # DEALER automatically handles framing - use single-frame send
             await self.socket.send(message.to_json_bytes())
+            self._sent_count += 1
             if self.is_trace_enabled:
                 self.trace(f"Sent message: {message}")
         except Exception as e:
@@ -167,8 +171,16 @@ class ZMQStreamingDealerClient(BaseZMQClient):
                     self.trace(f"Received message: {message_bytes}")
                 message = Message.from_json(message_bytes)
 
+                self._received_count += 1
+
                 if self._receiver_handler:
                     self.execute_async(self._receiver_handler(message))
+                    if (
+                        Environment.ZMQ.STREAMING_DEALER_YIELD_INTERVAL > 0
+                        and self._received_count % Environment.ZMQ.STREAMING_DEALER_YIELD_INTERVAL == 0
+                    ):  # fmt: skip
+                        # Yield to the event loop to prevent starvation when a burst of messages is received.
+                        await yield_to_event_loop()
                 else:
                     self.warning(
                         f"Received {message.message_type} message but no handler registered"

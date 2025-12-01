@@ -25,6 +25,7 @@ class ZMQPushClient(BaseZMQClient):
     distributing work fairly among available PULL workers.
 
     ASCII Diagram:
+    ```
     ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
     │    PUSH     │      │    PULL     │      │    PULL     │
     │ (Producer)  │      │ (Worker 1)  │      │ (Worker 2)  │
@@ -38,6 +39,7 @@ class ZMQPushClient(BaseZMQClient):
                          │    PULL     │
                          │ (Worker 3)  │
                          └─────────────┘
+    ```
 
     Usage Pattern:
     - Round-robin distribution of work tasks (One-to-Many)
@@ -70,7 +72,7 @@ class ZMQPushClient(BaseZMQClient):
         self,
         message: Message,
         retry_count: int = 0,
-        max_retries: int | None = None,
+        max_retries: int = Environment.ZMQ.PUSH_MAX_RETRIES,
     ) -> None:
         """Push a message to the socket. Will retry up to max_retries times.
 
@@ -79,11 +81,14 @@ class ZMQPushClient(BaseZMQClient):
             retry_count: Current retry count
             max_retries: Maximum number of times to retry pushing the message (defaults to Environment.ZMQ.PUSH_MAX_RETRIES)
         """
-        if max_retries is None:
-            max_retries = Environment.ZMQ.PUSH_MAX_RETRIES
-
         try:
             data_json_bytes = message.to_json_bytes()
+        except Exception as e:
+            raise CommunicationError(
+                f"Failed to convert message to JSON bytes: {message=} {e!r}"
+            ) from e
+
+        try:
             await self.socket.send(data_json_bytes)
             if self.is_trace_enabled:
                 self.trace(f"Pushed json data: {data_json_bytes}")
@@ -112,3 +117,4 @@ class ZMQPushClient(BaseZMQClient):
         await self._check_initialized()
 
         await self._push_message(message)
+        self._sent_count += 1

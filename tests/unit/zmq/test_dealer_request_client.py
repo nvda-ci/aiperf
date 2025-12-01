@@ -5,7 +5,7 @@ Tests for dealer_request_client.py - ZMQDealerRequestClient class.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import zmq
@@ -171,3 +171,62 @@ class TestZMQDealerRequestClientRequest:
         async with dealer_test_helper.create_client(auto_start=True) as client:
             with pytest.raises(asyncio.TimeoutError):
                 await client.request(sample_message, timeout=0.1)
+
+
+class TestZMQDealerRequestClientYieldInterval:
+    """Test ZMQDealerRequestClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self,
+        dealer_test_helper,
+        create_test_heartbeat,
+        mock_yield_to_event_loop,
+        monkeypatch,
+    ):
+        """Test yield interval and _received_count."""
+        responses = []
+        for i in range(10):
+            msg = create_test_heartbeat(request_id=f"req-{i}", service_id=f"test-{i}")
+            responses.append(msg.to_json_bytes())
+
+        response_index = 0
+        responses_received = []
+        event = asyncio.Event()
+
+        async def mock_recv():
+            nonlocal response_index
+            if response_index < len(responses):
+                result = responses[response_index]
+                response_index += 1
+                return result
+            await asyncio.Future()
+
+        dealer_test_helper.setup_mock_socket(recv_side_effect=mock_recv)
+
+        async def response_callback(msg: Message) -> None:
+            responses_received.append(msg)
+            if len(responses_received) == len(responses):
+                event.set()
+
+        monkeypatch.setattr(
+            "aiperf.zmq.dealer_request_client.Environment.ZMQ.REQUEST_YIELD_INTERVAL", 5
+        )
+
+        with patch(
+            "aiperf.zmq.dealer_request_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with dealer_test_helper.create_client() as client:
+                for i in range(10):
+                    msg = create_test_heartbeat(
+                        request_id=f"req-{i}", service_id=f"test-{i}"
+                    )
+                    await client.request_async(msg, response_callback)
+
+                assert client.received_count == 0
+                await client.start()
+                await asyncio.wait_for(event.wait(), timeout=2.0)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

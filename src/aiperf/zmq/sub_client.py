@@ -9,6 +9,7 @@ import zmq.asyncio
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import CommClientType
+from aiperf.common.environment import Environment
 from aiperf.common.exceptions import CommunicationError
 from aiperf.common.factories import CommunicationClientFactory
 from aiperf.common.hooks import background_task
@@ -31,6 +32,7 @@ class ZMQSubClient(BaseZMQClient):
     One-to-Many or Many-to-One communication pattern.
 
     ASCII Diagram:
+    ```
     ┌──────────────┐    ┌──────────────┐
     │     PUB      │───>│              │
     │ (Publisher)  │    │              │
@@ -48,7 +50,7 @@ class ZMQSubClient(BaseZMQClient):
     │              │───>│     SUB      │
     │              │    │ (Subscriber) │
     └──────────────┘    └──────────────┘
-
+    ```
 
     Usage Pattern:
     - Single SUB socket subscribes to multiple PUB publishers (One-to-Many)
@@ -179,6 +181,13 @@ class ZMQSubClient(BaseZMQClient):
                         f"Socket received message: {topic_bytes} {message_bytes}"
                     )
                 self.execute_async(self._handle_message(topic_bytes, message_bytes))
+                self._received_count += 1
+                if (
+                    Environment.ZMQ.SUB_YIELD_INTERVAL > 0
+                    and self._received_count % Environment.ZMQ.SUB_YIELD_INTERVAL == 0
+                ):  # fmt: skip
+                    # Yield to the event loop to prevent starvation when a burst of messages is received.
+                    await yield_to_event_loop()
 
             except zmq.Again:
                 self.debug(f"Sub client {self.client_id} receiver task timed out")

@@ -23,6 +23,7 @@ class ZMQPubClient(BaseZMQClient):
     subscribed to the message topic/type.
 
     ASCII Diagram:
+    ```
     ┌──────────────┐    ┌──────────────┐
     │     PUB      │───>│              │
     │ (Publisher)  │    │              │
@@ -40,6 +41,7 @@ class ZMQPubClient(BaseZMQClient):
     │              │───>│     SUB      │
     │              │    │ (Subscriber) │
     └──────────────┘    └──────────────┘
+    ```
 
     Usage Pattern:
     - Single PUB socket broadcasts messages to all subscribers (One-to-Many)
@@ -85,6 +87,7 @@ class ZMQPubClient(BaseZMQClient):
             # Publish message
             self.trace(lambda: f"Publishing message {topic=} {message_json_bytes=}")
             await self.socket.send_multipart([topic.encode(), message_json_bytes])
+            self._sent_count += 1
 
         except (asyncio.CancelledError, zmq.ContextTerminated):
             self.debug(
@@ -102,7 +105,7 @@ class ZMQPubClient(BaseZMQClient):
         # For targeted messages such as commands, we can set the topic to a specific service by id or type
         # Note that target_service_id always takes precedence over target_service_type
 
-        # NOTE: Keep in mind that subscriptions in ZMQ are prefix based wildcards, so the unique portion has to come first.
+        # NOTE: Keep in mind that subscriptions in ZMQ are prefix based wildcards, which is why we add TOPIC_END to the end of the topic.
         if isinstance(message, TargetedServiceMessage):
             if message.target_service_id:
                 return f"{message.message_type}{TOPIC_DELIMITER}{message.target_service_id}{TOPIC_END}"

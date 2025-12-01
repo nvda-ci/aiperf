@@ -22,9 +22,9 @@ TOPIC_DELIMITER = "."
 This is used to create an inverted hierarchy of topics for filtering by service type or service id.
 
 For example:
-- "command"
-- "system_controller.command"
-- "timing_manager_eff34565.command"
+- "command$"
+- "command.system_controller$"
+- "command.timing_manager_eff34565$"
 """
 
 

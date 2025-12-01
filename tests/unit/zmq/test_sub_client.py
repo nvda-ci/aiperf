@@ -5,7 +5,7 @@ Tests for sub_client.py - ZMQSubClient class.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import zmq
@@ -383,3 +383,63 @@ class TestZMQSubClientBackgroundTask:
 
         # Should complete without hanging
         await client.stop()
+
+
+class TestZMQSubClientYieldInterval:
+    """Test ZMQSubClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self, sub_test_helper, mock_yield_to_event_loop, monkeypatch
+    ):
+        """Test yield interval and _received_count."""
+        from aiperf.zmq.zmq_defaults import TOPIC_END
+
+        messages = []
+        for i in range(10):
+            msg = HeartbeatMessage(
+                service_id=f"test-{i}",
+                state=LifecycleState.RUNNING,
+                service_type="test",
+                request_id=f"req-{i}",
+            )
+            topic = f"{msg.message_type.value}{TOPIC_END}"
+            messages.append([topic.encode(), msg.to_json_bytes()])
+
+        message_index = 0
+        received = []
+        event = asyncio.Event()
+
+        async def mock_recv_multipart():
+            nonlocal message_index
+            if message_index < len(messages):
+                result = messages[message_index]
+                message_index += 1
+                return result
+            await asyncio.Future()
+
+        sub_test_helper.setup_mock_socket(
+            recv_multipart_side_effect=mock_recv_multipart
+        )
+
+        async def test_callback(msg: Message) -> None:
+            received.append(msg)
+            if len(received) == len(messages):
+                event.set()
+
+        monkeypatch.setattr(
+            "aiperf.zmq.sub_client.Environment.ZMQ.SUB_YIELD_INTERVAL", 5
+        )
+
+        with patch(
+            "aiperf.zmq.sub_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with sub_test_helper.create_client() as client:
+                await client.subscribe(MessageType.HEARTBEAT, test_callback)
+                assert client.received_count == 0
+                await client.start()
+                await asyncio.wait_for(event.wait(), timeout=2.0)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

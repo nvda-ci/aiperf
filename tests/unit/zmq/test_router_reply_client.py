@@ -5,6 +5,7 @@ Tests for router_reply_client.py - ZMQRouterReplyClient class.
 """
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 import zmq
@@ -252,3 +253,62 @@ class TestZMQRouterReplyClientBackgroundTask:
             await asyncio.sleep(0.1)
 
             mock_socket.send_multipart.assert_not_called()
+
+
+class TestZMQRouterReplyClientYieldInterval:
+    """Test ZMQRouterReplyClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self,
+        router_test_helper,
+        create_test_heartbeat,
+        mock_yield_to_event_loop,
+        monkeypatch,
+        wait_for_background_task,
+    ):
+        """Test yield interval and _received_count."""
+        requests = []
+        for i in range(10):
+            msg = create_test_heartbeat(request_id=f"req-{i}", service_id=f"test-{i}")
+            requests.append([b"client_id", msg.model_dump_json().encode()])
+
+        request_index = 0
+
+        async def mock_recv_multipart():
+            nonlocal request_index
+            if request_index < len(requests):
+                result = requests[request_index]
+                request_index += 1
+                return result
+            await asyncio.Future()
+
+        router_test_helper.setup_mock_socket(
+            recv_multipart_side_effect=mock_recv_multipart
+        )
+
+        async def test_handler(msg: Message) -> Message:
+            return create_test_heartbeat(
+                request_id=msg.request_id, service_id="responder"
+            )
+
+        monkeypatch.setattr(
+            "aiperf.zmq.router_reply_client.Environment.ZMQ.REPLY_YIELD_INTERVAL", 5
+        )
+
+        with patch(
+            "aiperf.zmq.router_reply_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with router_test_helper.create_client() as client:
+                client.register_request_handler(
+                    service_id="test-service",
+                    message_type=MessageType.HEARTBEAT,
+                    handler=test_handler,
+                )
+                assert client.received_count == 0
+                await client.start()
+                await wait_for_background_task(iterations=15)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

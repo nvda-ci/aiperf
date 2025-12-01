@@ -586,3 +586,30 @@ def multiple_identities():
 def special_identity(request):
     """Various identity formats with special characters."""
     return request.param
+
+
+@pytest.fixture
+def mock_yield_to_event_loop():
+    """Create a mock for yield_to_event_loop that actually yields to prevent event loop starvation."""
+    from tests.unit.conftest import real_sleep
+
+    async def mock_yield_fn():
+        await real_sleep(0)  # Actually yield to the event loop using real sleep
+
+    return mock_yield_fn
+
+
+@pytest.fixture
+def create_test_heartbeat():
+    """Factory to create HeartbeatMessage instances for testing."""
+
+    def _create(request_id: str, service_id: str = "test-service") -> HeartbeatMessage:
+        """Create a test HeartbeatMessage."""
+        return HeartbeatMessage(
+            service_id=service_id,
+            state=LifecycleState.RUNNING,
+            service_type="test",
+            request_id=request_id,
+        )
+
+    return _create

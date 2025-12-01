@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from pytest import param
 
-from aiperf.common.environment import _Environment, _ServiceSettings
+from aiperf.common.environment import _Environment, _ServiceSettings, _ZMQSettings
 
 
 class TestServiceSettingsUvloopWindows:
@@ -93,3 +93,65 @@ class TestProfileConfigureTimeout:
             )
             assert profile_timeout == env.SERVICE.PROFILE_CONFIGURE_TIMEOUT
             assert dataset_timeout == env.DATASET.CONFIGURATION_TIMEOUT
+
+
+class TestZMQYieldIntervals:
+    """Test suite for ZMQ yield interval settings."""
+
+    @pytest.mark.parametrize(
+        "setting_name,env_var_name,default_value",
+        [
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", 1, id="streaming_dealer"),
+            param("STREAMING_ROUTER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_ROUTER_YIELD_INTERVAL", 1, id="streaming_router"),
+            param("REPLY_YIELD_INTERVAL", "AIPERF_ZMQ_REPLY_YIELD_INTERVAL", 1, id="reply"),
+            param("REQUEST_YIELD_INTERVAL", "AIPERF_ZMQ_REQUEST_YIELD_INTERVAL", 1, id="request"),
+            param("PULL_YIELD_INTERVAL", "AIPERF_ZMQ_PULL_YIELD_INTERVAL", 1, id="pull"),
+            param("SUB_YIELD_INTERVAL", "AIPERF_ZMQ_SUB_YIELD_INTERVAL", 1, id="sub"),
+        ],
+    )  # fmt: skip
+    def test_yield_interval_defaults(self, setting_name, env_var_name, default_value):
+        """Test that yield interval settings have correct default values."""
+        settings = _ZMQSettings()
+        assert getattr(settings, setting_name) == default_value
+
+    @pytest.mark.parametrize(
+        "setting_name,env_var_name,test_value",
+        [
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", 0, id="streaming_dealer_disabled"),
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", 10, id="streaming_dealer_custom"),
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", 1000000, id="streaming_dealer_max"),
+            param("STREAMING_ROUTER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_ROUTER_YIELD_INTERVAL", 0, id="streaming_router_disabled"),
+            param("STREAMING_ROUTER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_ROUTER_YIELD_INTERVAL", 100, id="streaming_router_custom"),
+            param("REPLY_YIELD_INTERVAL", "AIPERF_ZMQ_REPLY_YIELD_INTERVAL", 0, id="reply_disabled"),
+            param("REPLY_YIELD_INTERVAL", "AIPERF_ZMQ_REPLY_YIELD_INTERVAL", 50, id="reply_custom"),
+            param("REQUEST_YIELD_INTERVAL", "AIPERF_ZMQ_REQUEST_YIELD_INTERVAL", 0, id="request_disabled"),
+            param("REQUEST_YIELD_INTERVAL", "AIPERF_ZMQ_REQUEST_YIELD_INTERVAL", 25, id="request_custom"),
+            param("PULL_YIELD_INTERVAL", "AIPERF_ZMQ_PULL_YIELD_INTERVAL", 0, id="pull_disabled"),
+            param("PULL_YIELD_INTERVAL", "AIPERF_ZMQ_PULL_YIELD_INTERVAL", 200, id="pull_custom"),
+            param("SUB_YIELD_INTERVAL", "AIPERF_ZMQ_SUB_YIELD_INTERVAL", 0, id="sub_disabled"),
+            param("SUB_YIELD_INTERVAL", "AIPERF_ZMQ_SUB_YIELD_INTERVAL", 150, id="sub_custom"),
+        ],
+    )  # fmt: skip
+    def test_yield_interval_custom_values(
+        self, setting_name, env_var_name, test_value, monkeypatch
+    ):
+        """Test that yield interval settings can be customized via environment variables."""
+        monkeypatch.setenv(env_var_name, str(test_value))
+        settings = _ZMQSettings()
+        assert getattr(settings, setting_name) == test_value
+
+    @pytest.mark.parametrize(
+        "setting_name,env_var_name,invalid_value",
+        [
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", -1, id="negative"),
+            param("STREAMING_DEALER_YIELD_INTERVAL", "AIPERF_ZMQ_STREAMING_DEALER_YIELD_INTERVAL", 1000001, id="too_large"),
+            param("PULL_YIELD_INTERVAL", "AIPERF_ZMQ_PULL_YIELD_INTERVAL", -100, id="negative_pull"),
+        ],
+    )  # fmt: skip
+    def test_yield_interval_validation(
+        self, setting_name, env_var_name, invalid_value, monkeypatch
+    ):
+        """Test that yield interval settings validate constraints."""
+        monkeypatch.setenv(env_var_name, str(invalid_value))
+        with pytest.raises(ValueError):
+            _ZMQSettings()

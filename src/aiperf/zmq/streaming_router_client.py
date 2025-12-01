@@ -10,6 +10,7 @@ import zmq
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import CommClientType
+from aiperf.common.environment import Environment
 from aiperf.common.factories import CommunicationClientFactory
 from aiperf.common.hooks import background_task, on_stop
 from aiperf.common.messages import Message
@@ -34,6 +35,7 @@ class ZMQStreamingRouterClient(BaseZMQClient):
     - Works with both TCP and IPC transports
 
     ASCII Diagram:
+    ```
     ┌──────────────┐                    ┌──────────────┐
     │    DEALER    │◄──── Stream ──────►│              │
     │   (Worker)   │                    │              │
@@ -46,6 +48,7 @@ class ZMQStreamingRouterClient(BaseZMQClient):
     │    DEALER    │◄──── Stream ──────►│              │
     │   (Worker)   │                    │              │
     └──────────────┘                    └──────────────┘
+    ```
 
     Usage Pattern:
     - ROUTER sends messages to specific DEALER clients by identity
@@ -147,6 +150,9 @@ class ZMQStreamingRouterClient(BaseZMQClient):
             await self.socket.send_multipart(
                 [*routing_envelope, message.to_json_bytes()]
             )
+
+            self._sent_count += 1
+
             if self.is_trace_enabled:
                 self.trace(f"Sent message to {identity}: {message}")
         except Exception as e:
@@ -171,6 +177,8 @@ class ZMQStreamingRouterClient(BaseZMQClient):
 
                 message = Message.from_json(data[-1])
 
+                self._received_count += 1
+
                 routing_envelope: tuple[bytes, ...] = (
                     tuple(data[:-1]) if len(data) > 1 else (b"",)
                 )
@@ -186,6 +194,13 @@ class ZMQStreamingRouterClient(BaseZMQClient):
 
                 if self._receiver_handler:
                     self.execute_async(self._receiver_handler(identity, message))
+                    if (
+                        Environment.ZMQ.STREAMING_ROUTER_YIELD_INTERVAL > 0
+                        and self._received_count % Environment.ZMQ.STREAMING_ROUTER_YIELD_INTERVAL == 0
+                    ):  # fmt: skip
+                        # Yield to the event loop to prevent starvation when a burst of messages is received.
+                        await yield_to_event_loop()
+
                 else:
                     self.warning(
                         f"Received {message.message_type} message but no handler registered"

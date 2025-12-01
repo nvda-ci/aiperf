@@ -51,6 +51,8 @@ class BaseZMQClient(AIPerfLifecycleMixin):
             client_id
             or f"{self.socket_type.name.lower()}_client_{uuid.uuid4().hex[:8]}"
         )
+        self._sent_count = 0
+        self._received_count = 0
         super().__init__(id=self.client_id, **kwargs)
         self.trace(lambda: f"ZMQ client __init__: {self.client_id}")
 
@@ -60,6 +62,16 @@ class BaseZMQClient(AIPerfLifecycleMixin):
             raise asyncio.CancelledError("Socket was stopped")
         if not self.socket:
             raise NotInitializedError("Socket not initialized or closed")
+
+    @property
+    def sent_count(self) -> int:
+        """Get the number of messages sent through this client."""
+        return self._sent_count
+
+    @property
+    def received_count(self) -> int:
+        """Get the number of messages received through this client."""
+        return self._received_count
 
     @property
     def socket_type_name(self) -> str:

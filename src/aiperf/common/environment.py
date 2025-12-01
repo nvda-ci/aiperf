@@ -552,9 +552,59 @@ class _ZMQSettings(BaseSettings):
         default=10.0,
         description="Timeout in seconds for terminating the ZMQ context during shutdown",
     )
+
+    STREAMING_DEALER_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received messages from the "
+        "ZMQ streaming dealer client. This is to prevent event loop starvation when a burst of messages is received. "
+        "1 means yield after every message, 100 means yield after every 100 messages, etc. 0 means disabled (never yield).",
+    )
+    STREAMING_ROUTER_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received messages from the "
+        "ZMQ streaming router client. This is to prevent event loop starvation when a burst of messages is received. "
+        "1 means yield after every message, 100 means yield after every 100 messages, etc. 0 means disabled (never yield).",
+    )
+    REPLY_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received requests from the "
+        "ZMQ router reply client. This is to prevent event loop starvation when a burst of requests is received. "
+        "1 means yield after every request, 100 means yield after every 100 requests, etc. 0 means disabled (never yield).",
+    )
+    REQUEST_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received responses from the "
+        "ZMQ dealer request client. This is to prevent event loop starvation when a burst of responses is received. "
+        "1 means yield after every response, 100 means yield after every 100 responses, etc. 0 means disabled (never yield).",
+    )
+    PULL_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received messages from the "
+        "ZMQ pull client. This is to prevent event loop starvation when a burst of messages is received. "
+        "1 means yield after every message, 100 means yield after every 100 messages, etc. 0 means disabled (never yield).",
+    )
+    SUB_YIELD_INTERVAL: int = Field(
+        ge=0,
+        le=1_000_000,
+        default=1,
+        description="Yield to the event loop after every X received messages from the "
+        "ZMQ sub client. This is to prevent event loop starvation when a burst of messages is received. "
+        "1 means yield after every message, 100 means yield after every 100 messages, etc. 0 means disabled (never yield).",
+    )
+
     PULL_MAX_CONCURRENCY: int = Field(
         ge=1,
-        le=10000000,
+        le=1_000_000,
         default=100_000,
         description="Maximum concurrency for ZMQ PULL clients",
     )

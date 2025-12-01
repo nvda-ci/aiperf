@@ -5,6 +5,7 @@ Tests for streaming_dealer_client.py - ZMQStreamingDealerClient class.
 """
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 import zmq
@@ -465,3 +466,54 @@ class TestZMQStreamingDealerClientEdgeCases:
         assert not mock_zmq_socket.connect.called
 
         await client.stop()
+
+
+class TestZMQStreamingDealerClientYieldInterval:
+    """Test ZMQStreamingDealerClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self,
+        streaming_dealer_test_helper,
+        sample_message,
+        mock_yield_to_event_loop,
+        monkeypatch,
+    ):
+        """Test yield interval and _received_count."""
+        messages = [sample_message] * 10
+        message_index = 0
+        received = []
+        received_event = asyncio.Event()
+
+        async def mock_recv():
+            nonlocal message_index
+            if message_index < len(messages):
+                result = messages[message_index].to_json_bytes()
+                message_index += 1
+                return result
+            await asyncio.Future()
+
+        streaming_dealer_test_helper.setup_mock_socket(recv_side_effect=mock_recv)
+
+        async def test_handler(message: Message) -> None:
+            received.append(message)
+            if len(received) == len(messages):
+                received_event.set()
+
+        monkeypatch.setattr(
+            "aiperf.zmq.streaming_dealer_client.Environment.ZMQ.STREAMING_DEALER_YIELD_INTERVAL",
+            5,
+        )
+
+        with patch(
+            "aiperf.zmq.streaming_dealer_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with streaming_dealer_test_helper.create_client() as client:
+                client.register_receiver(test_handler)
+                assert client.received_count == 0
+                await client.start()
+                await asyncio.wait_for(received_event.wait(), timeout=2.0)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

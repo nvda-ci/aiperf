@@ -103,7 +103,7 @@ class TestZMQPushClientPush:
     async def test_push_raises_communication_error_after_max_retries(
         self, mock_zmq_context
     ):
-        """Test that push raises CommunicationError after max retries."""
+        """Test that push raises error after max retries on zmq.Again."""
         mock_socket = AsyncMock(spec=zmq.asyncio.Socket)
         mock_socket.bind = Mock()
         mock_socket.setsockopt = Mock()
@@ -120,8 +120,14 @@ class TestZMQPushClientPush:
 
             message = Message(message_type=MessageType.HEARTBEAT)
 
-            with pytest.raises(CommunicationError, match="Failed to push data after"):
+            # Should raise CommunicationError after max retries
+            with pytest.raises(
+                CommunicationError, match="Failed to push data after .* retries"
+            ):
                 await client.push(message)
+
+            # Should have retried 3 times total (initial + 2 retries)
+            assert mock_socket.send.call_count == 3
 
     @pytest.mark.asyncio
     async def test_push_handles_graceful_errors(self, push_test_helper, graceful_error):
@@ -138,12 +144,13 @@ class TestZMQPushClientPush:
     async def test_push_raises_communication_error_on_other_exceptions(
         self, push_test_helper, non_graceful_error
     ):
-        """Test that push raises CommunicationError for other exceptions."""
+        """Test that push raises CommunicationError on other exceptions."""
         async with push_test_helper.create_client(
             send_side_effect=non_graceful_error
         ) as client:
             message = Message(message_type=MessageType.HEARTBEAT)
 
+            # Should raise CommunicationError immediately
             with pytest.raises(CommunicationError, match="Failed to push data"):
                 await client.push(message)
 
@@ -178,3 +185,23 @@ class TestZMQPushClientEdgeCases:
             await client.push(msg)
 
         assert mock_zmq_socket.send.call_count == 5
+        assert client.sent_count == 5
+
+
+class TestZMQPushClientSentCounter:
+    """Test ZMQPushClient sent counter functionality."""
+
+    @pytest.mark.asyncio
+    async def test_sent_count_increments(self, mock_zmq_socket, mock_zmq_context):
+        """Test that sent_count increments correctly."""
+        client = ZMQPushClient(address="tcp://127.0.0.1:5555", bind=True)
+        await client.initialize()
+
+        assert client.sent_count == 0
+
+        for i in range(10):
+            msg = Message(message_type=MessageType.HEARTBEAT, request_id=f"req-{i}")
+            await client.push(msg)
+
+        assert client.sent_count == 10
+        assert mock_zmq_socket.send.call_count == 10

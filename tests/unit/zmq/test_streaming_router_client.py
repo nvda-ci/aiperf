@@ -5,6 +5,7 @@ Tests for streaming_router_client.py - ZMQStreamingRouterClient class.
 """
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 import zmq
@@ -390,3 +391,57 @@ class TestZMQStreamingRouterClientEdgeCases:
             )
 
             assert mock_socket.send_multipart.call_count == len(multiple_identities)
+
+
+class TestZMQStreamingRouterClientYieldInterval:
+    """Test ZMQStreamingRouterClient yield interval functionality."""
+
+    @pytest.mark.asyncio
+    async def test_yield_interval_and_counter(
+        self,
+        streaming_router_test_helper,
+        sample_message,
+        mock_yield_to_event_loop,
+        monkeypatch,
+    ):
+        """Test yield interval and _received_count."""
+        worker_id = "worker-1"
+        messages = [sample_message] * 10
+        message_index = 0
+        received = []
+        received_event = asyncio.Event()
+
+        async def mock_recv_multipart():
+            nonlocal message_index
+            if message_index < len(messages):
+                result = [worker_id.encode(), messages[message_index].to_json_bytes()]
+                message_index += 1
+                return result
+            await asyncio.Future()
+
+        streaming_router_test_helper.setup_mock_socket(
+            recv_multipart_side_effect=mock_recv_multipart
+        )
+
+        async def test_handler(identity: str, message: Message) -> None:
+            received.append((identity, message))
+            if len(received) == len(messages):
+                received_event.set()
+
+        monkeypatch.setattr(
+            "aiperf.zmq.streaming_router_client.Environment.ZMQ.STREAMING_ROUTER_YIELD_INTERVAL",
+            5,
+        )
+
+        with patch(
+            "aiperf.zmq.streaming_router_client.yield_to_event_loop",
+            side_effect=mock_yield_to_event_loop,
+        ) as mock_yield:
+            async with streaming_router_test_helper.create_client() as client:
+                client.register_receiver(test_handler)
+                assert client.received_count == 0
+                await client.start()
+                await asyncio.wait_for(received_event.wait(), timeout=2.0)
+
+                assert client.received_count == 10
+                assert mock_yield.call_count == 2

@@ -8,6 +8,7 @@ import zmq.asyncio
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import CommClientType
+from aiperf.common.environment import Environment
 from aiperf.common.factories import CommunicationClientFactory
 from aiperf.common.hooks import background_task, on_stop
 from aiperf.common.messages import ErrorMessage, Message
@@ -28,6 +29,7 @@ class ZMQRouterReplyClient(BaseZMQClient):
     back to the originating DEALER client using routing envelopes.
 
     ASCII Diagram:
+    ```
     ┌──────────────┐                    ┌──────────────┐
     │    DEALER    │───── Request ─────>│              │
     │   (Client)   │<──── Response ─────│              │
@@ -40,6 +42,7 @@ class ZMQRouterReplyClient(BaseZMQClient):
     │    DEALER    │───── Request ─────>│              │
     │   (Client)   │<──── Response ─────│              │
     └──────────────┘                    └──────────────┘
+    ```
 
     Usage Pattern:
     - ROUTER handles requests from multiple DEALER clients
@@ -164,6 +167,7 @@ class ZMQRouterReplyClient(BaseZMQClient):
             await self.socket.send_multipart(
                 [*routing_envelope, response.to_json_bytes()]
             )
+            self._sent_count += 1
         except Exception as e:
             self.exception(
                 f"Exception waiting for response for request {request_id}: {e}"
@@ -211,6 +215,13 @@ class ZMQRouterReplyClient(BaseZMQClient):
                 self.execute_async(
                     self._wait_for_response(request.request_id, routing_envelope)
                 )
+                self._received_count += 1
+                if (
+                    Environment.ZMQ.REPLY_YIELD_INTERVAL > 0
+                    and self._received_count % Environment.ZMQ.REPLY_YIELD_INTERVAL == 0
+                ):  # fmt: skip
+                    # Yield to the event loop to prevent starvation when a burst of requests is received.
+                    await yield_to_event_loop()
 
             except Exception as e:
                 self.exception(f"Exception receiving request: {e}")
