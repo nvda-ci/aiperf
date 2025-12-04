@@ -303,7 +303,7 @@ def create_mock_dataset_metadata(
 
 
 def create_mock_dataset_metadata_with_schedule(
-    schedule: list[tuple[int, str]],
+    schedule: list[tuple[int | float, str]],
     sampling_strategy: DatasetSamplingStrategy = DatasetSamplingStrategy.SEQUENTIAL,
 ) -> DatasetMetadata:
     """Create mock dataset metadata from a schedule for fixed schedule testing.
@@ -316,11 +316,11 @@ def create_mock_dataset_metadata_with_schedule(
         DatasetMetadata: Mock dataset metadata with timing data.
     """
     # Group schedule by conversation_id
-    conv_timestamps: dict[str, list[int]] = {}
+    conv_timestamps: dict[str, list[float]] = {}
     for timestamp, conv_id in schedule:
         if conv_id not in conv_timestamps:
             conv_timestamps[conv_id] = []
-        conv_timestamps[conv_id].append(timestamp)
+        conv_timestamps[conv_id].append(float(timestamp))
 
     conversations = []
     for conv_id, timestamps_list in conv_timestamps.items():

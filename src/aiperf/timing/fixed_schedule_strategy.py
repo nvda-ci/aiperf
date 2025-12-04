@@ -79,6 +79,10 @@ class FixedScheduleStrategy(CreditIssuingStrategy):
         # Group conversations by rounded millisecond timestamp
         self._timestamp_groups = defaultdict(list[str])
         for conversation in self._dataset_metadata.conversations:
+            if not conversation.turns:
+                raise ValueError(
+                    f"Conversation {conversation.conversation_id} has no turns"
+                )
             if conversation.turns[0].timestamp_ms is not None:
                 # Round to nearest millisecond to group similar timestamps together
                 rounded_timestamp = round(conversation.turns[0].timestamp_ms)

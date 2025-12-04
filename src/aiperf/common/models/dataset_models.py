@@ -3,7 +3,7 @@
 
 from typing import Any, ClassVar
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from aiperf.common.enums import DatasetSamplingStrategy, MediaType
 from aiperf.common.models.base_models import AIPerfBaseModel
@@ -141,10 +141,17 @@ class Conversation(AIPerfBaseModel):
     and it contains the session ID and all the turns that consists the conversation.
     """
 
-    session_id: str = Field(default="", description="Session ID of the conversation.")
+    session_id: str = Field(..., description="Session ID of the conversation.")
     turns: list[Turn] = Field(
         default=[], description="List of turns in the conversation."
     )
+
+    @model_validator(mode="after")
+    def validate_session_id_not_empty(self) -> "Conversation":
+        """Ensure session_id is not empty to prevent key collisions."""
+        if not self.session_id or not self.session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        return self
 
     def metadata(self) -> ConversationMetadata:
         """Get the metadata of the conversation."""
