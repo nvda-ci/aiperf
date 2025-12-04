@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the TimingManager service."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -78,8 +79,6 @@ class TestTimingManagerDatasetConfiguration:
             mock_factory.return_value = MagicMock()
 
             # Start configure command in background (it will wait for notification)
-            import asyncio
-
             configure_task = asyncio.create_task(
                 manager._profile_configure_command(
                     ProfileConfigureCommand.model_construct(
@@ -128,8 +127,6 @@ class TestTimingManagerDatasetConfiguration:
             mock_factory.return_value = MagicMock()
 
             # Start configure command in background (it will wait for notification)
-            import asyncio
-
             configure_task = asyncio.create_task(
                 manager._profile_configure_command(
                     ProfileConfigureCommand.model_construct(
@@ -170,9 +167,6 @@ class TestTimingManagerDatasetConfiguration:
         manager = self._create_timing_manager(
             service_config, user_config_fixed_schedule
         )
-
-        # Mock the timeout to be very short for testing
-        import asyncio
 
         with (
             patch.object(Environment.DATASET, "CONFIGURATION_TIMEOUT", 0.1),
