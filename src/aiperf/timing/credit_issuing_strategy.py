@@ -12,7 +12,7 @@ from aiperf.common.exceptions import ConfigurationError
 from aiperf.common.factories import AIPerfFactory
 from aiperf.common.messages import CreditReturnMessage
 from aiperf.common.mixins import TaskManagerMixin
-from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats
+from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats, DatasetMetadata
 from aiperf.timing.config import TimingManagerConfig
 from aiperf.timing.credit_manager import CreditManagerProtocol
 from aiperf.timing.request_cancellation_strategy import RequestCancellationStrategy
@@ -24,11 +24,15 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
     """
 
     def __init__(
-        self, config: TimingManagerConfig, credit_manager: CreditManagerProtocol
+        self,
+        config: TimingManagerConfig,
+        credit_manager: CreditManagerProtocol,
+        dataset_metadata: DatasetMetadata,
     ):
         super().__init__()
         self.config = config
         self.credit_manager = credit_manager
+        self.dataset_metadata = dataset_metadata
 
         self.cancellation_strategy = RequestCancellationStrategy(config)
 

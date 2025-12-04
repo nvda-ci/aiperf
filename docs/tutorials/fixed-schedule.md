@@ -35,6 +35,32 @@ Fixed schedule files use JSONL format with timestamp-based entries:
 - `output_length`: Maximum number of tokens in the response (optional)
 - `hash_ids`: Hash block identifiers to simulate text reuse with 512-token blocks (optional)
 
+## Timestamp Format and Precision
+
+> [!NOTE]
+> **Floating-Point Timestamp Support**
+>
+> The `timestamp` field now supports both integer and floating-point values in milliseconds.
+>
+> ```jsonl
+> {"timestamp": 0, "input_length": 100}
+> {"timestamp": 100.5, "input_length": 200}
+> {"timestamp": 200.75, "input_length": 150}
+> ```
+
+> [!TIP]
+> **Timestamp Rounding Behavior**
+>
+> For execution efficiency, timestamps are rounded to the nearest millisecond using
+> Python's banker's rounding (round half to even). This groups requests that occur
+> within the same millisecond together, reducing timing overhead:
+>
+> - `100.4ms` → rounds to `100ms`
+> - `100.5ms` → rounds to `100ms` (banker's rounding: round half to even)
+> - `100.6ms` → rounds to `101ms`
+> - `101.5ms` → rounds to `102ms` (banker's rounding: round half to even)
+
+
 ## Basic Fixed Schedule Execution
 
 ### Setting Up the Server

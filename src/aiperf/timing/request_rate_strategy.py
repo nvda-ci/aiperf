@@ -7,9 +7,12 @@ from aiperf.common import random_generator as rng
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import TimingMode
 from aiperf.common.enums.timing_enums import RequestRateMode
-from aiperf.common.factories import RequestRateGeneratorFactory
+from aiperf.common.factories import (
+    DatasetSamplingStrategyFactory,
+    RequestRateGeneratorFactory,
+)
 from aiperf.common.messages import CreditReturnMessage
-from aiperf.common.models import CreditPhaseStats
+from aiperf.common.models import CreditPhaseStats, DatasetMetadata
 from aiperf.common.protocols import RequestRateGeneratorProtocol
 from aiperf.timing.config import TimingManagerConfig
 from aiperf.timing.credit_issuing_strategy import (
@@ -31,11 +34,25 @@ class RequestRateStrategy(CreditIssuingStrategy):
     """
 
     def __init__(
-        self, config: TimingManagerConfig, credit_manager: CreditManagerProtocol
+        self,
+        config: TimingManagerConfig,
+        credit_manager: CreditManagerProtocol,
+        dataset_metadata: DatasetMetadata,
     ):
-        super().__init__(config=config, credit_manager=credit_manager)
+        super().__init__(
+            config=config,
+            credit_manager=credit_manager,
+            dataset_metadata=dataset_metadata,
+        )
         self._request_rate_generator = RequestRateGeneratorFactory.create_instance(
             config
+        )
+        self._dataset_sampler = DatasetSamplingStrategyFactory.create_instance(
+            dataset_metadata.sampling_strategy,
+            conversation_ids=[
+                conversation.conversation_id
+                for conversation in dataset_metadata.conversations
+            ],
         )
         # If the user has provided a concurrency, use a semaphore to limit the maximum number of concurrent requests
         self._semaphore: asyncio.Semaphore | None = (
@@ -64,12 +81,17 @@ class RequestRateStrategy(CreditIssuingStrategy):
                         )
                     break
 
+            # Sample the next conversation id from the dataset so the worker knows
+            # which conversation data to use.
+            conversation_id = self._dataset_sampler.next_conversation_id()
+
             should_cancel = self.cancellation_strategy.should_cancel_request()
             cancel_after_ns = self.cancellation_strategy.get_cancellation_delay_ns()
 
             await self.credit_manager.drop_credit(
                 credit_phase=phase_stats.type,
                 credit_num=phase_stats.sent,
+                conversation_id=conversation_id,
                 should_cancel=should_cancel,
                 cancel_after_ns=cancel_after_ns,
             )

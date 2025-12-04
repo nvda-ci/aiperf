@@ -181,9 +181,13 @@ class MooncakeTrace(AIPerfBaseModel):
         None, description="The output sequence length of a request"
     )
     hash_ids: list[int] | None = Field(None, description="The hash ids of a request")
-    timestamp: int | None = Field(None, description="The timestamp of a request")
-    delay: int | None = Field(
-        None, description="Amount of milliseconds to wait before sending the turn."
+    timestamp: int | float | None = Field(
+        None,
+        description="The timestamp of a request in milliseconds. Supports floating point for sub-millisecond precision.",
+    )
+    delay: int | float | None = Field(
+        None,
+        description="Amount of milliseconds to wait before sending the turn. Supports floating point for sub-millisecond precision.",
     )
     session_id: str | None = Field(
         None, description="Unique identifier for the conversation session"

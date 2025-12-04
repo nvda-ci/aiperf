@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 import pytest
 
 from aiperf.common.aiperf_logger import AIPerfLogger
-from aiperf.common.enums import CreditPhase
+from aiperf.common.enums import CreditPhase, DatasetSamplingStrategy
 from aiperf.common.messages import (
     CreditDropMessage,
     CreditPhaseCompleteMessage,
@@ -18,8 +18,13 @@ from aiperf.common.messages import (
     CreditsCompleteMessage,
     Message,
 )
-from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
-from aiperf.common.models.credit_models import CreditPhaseStats
+from aiperf.common.mixins import AIPerfLifecycleMixin
+from aiperf.common.models import (
+    ConversationMetadata,
+    CreditPhaseStats,
+    DatasetMetadata,
+    TurnMetadata,
+)
 from aiperf.timing import CreditIssuingStrategy
 from aiperf.timing.config import TimingManagerConfig
 from tests.unit.utils.time_traveler import TimeTraveler
@@ -92,9 +97,15 @@ class MockCreditManager(AIPerfLifecycleMixin):
         config: TimingManagerConfig,
         strategy_type: type[T],
         auto_return_delay: float | None = None,
+        dataset_metadata: DatasetMetadata | None = None,
     ) -> Any:
         """Create a credit issuing strategy."""
-        self.credit_strategy = strategy_type(config, self)  # type: ignore
+        # Create default dataset_metadata if not provided
+        if dataset_metadata is None:
+            dataset_metadata = create_mock_dataset_metadata(
+                conversation_ids=["conv1", "conv2", "conv3"]
+            )
+        self.credit_strategy = strategy_type(config, self, dataset_metadata)  # type: ignore
         if config.concurrency is not None:
             self.credit_strategy._semaphore = MockSemaphore(  # type: ignore
                 config.concurrency, auto_return_delay
@@ -219,4 +230,118 @@ def profiling_phase_stats_from_config(config: TimingManagerConfig) -> CreditPhas
         type=CreditPhase.PROFILING,
         start_ns=time.time_ns(),
         total_expected_requests=config.request_count,
+    )
+
+
+def create_mock_dataset_metadata(
+    conversation_ids: list[str],
+    has_timing_data: bool = False,
+    first_turn_timestamps: list[int | float | None] | None = None,
+    turn_delays: list[list[int | float] | None] | None = None,
+    turn_counts: list[int] | None = None,
+    sampling_strategy: DatasetSamplingStrategy = DatasetSamplingStrategy.SEQUENTIAL,
+) -> DatasetMetadata:
+    """Create mock dataset metadata for testing.
+
+    Args:
+        conversation_ids: List of conversation IDs to include in the metadata.
+        has_timing_data: Whether the dataset has timing data.
+        first_turn_timestamps: Optional list of first turn timestamps for each conversation.
+        turn_delays: Optional list of turn delay lists for each conversation.
+        turn_counts: Optional list of turn counts for each conversation.
+        sampling_strategy: The sampling strategy for the dataset.
+
+    Returns:
+        DatasetMetadata: Mock dataset metadata for testing.
+    """
+    conversations = []
+    for i, conv_id in enumerate(conversation_ids):
+        turns = []
+        turn_count = turn_counts[i] if turn_counts else 1
+
+        if has_timing_data:
+            # Create first turn
+            first_timestamp = (
+                first_turn_timestamps[i] if first_turn_timestamps else None
+            )
+            turns.append(TurnMetadata(timestamp_ms=first_timestamp, delay_ms=None))
+
+            # Create subsequent turns with delays
+            if turn_count > 1:
+                delays = (
+                    turn_delays[i] if turn_delays and i < len(turn_delays) else None
+                )
+                if delays:
+                    for j, delay in enumerate(delays):
+                        # Calculate absolute timestamp from delay
+                        if first_timestamp is not None:
+                            timestamp = first_timestamp + sum(delays[: j + 1])
+                        else:
+                            timestamp = None
+                        turns.append(
+                            TurnMetadata(timestamp_ms=timestamp, delay_ms=delay)
+                        )
+                else:
+                    # No delays provided, create turns without timing info
+                    for _ in range(turn_count - 1):
+                        turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
+        else:
+            # No timing data, create empty turns
+            for _ in range(turn_count):
+                turns.append(TurnMetadata(timestamp_ms=None, delay_ms=None))
+
+        metadata = ConversationMetadata(
+            conversation_id=conv_id,
+            turns=turns,
+        )
+        conversations.append(metadata)
+
+    return DatasetMetadata(
+        conversations=conversations,
+        sampling_strategy=sampling_strategy,
+    )
+
+
+def create_mock_dataset_metadata_with_schedule(
+    schedule: list[tuple[int, str]],
+    sampling_strategy: DatasetSamplingStrategy = DatasetSamplingStrategy.SEQUENTIAL,
+) -> DatasetMetadata:
+    """Create mock dataset metadata from a schedule for fixed schedule testing.
+
+    Args:
+        schedule: List of tuples (timestamp, conversation_id).
+        sampling_strategy: The sampling strategy for the dataset.
+
+    Returns:
+        DatasetMetadata: Mock dataset metadata with timing data.
+    """
+    # Group schedule by conversation_id
+    conv_timestamps: dict[str, list[int]] = {}
+    for timestamp, conv_id in schedule:
+        if conv_id not in conv_timestamps:
+            conv_timestamps[conv_id] = []
+        conv_timestamps[conv_id].append(timestamp)
+
+    conversations = []
+    for conv_id, timestamps_list in conv_timestamps.items():
+        # Create TurnMetadata objects for each turn
+        turns = []
+        for i, timestamp in enumerate(timestamps_list):
+            if i == 0:
+                # First turn has no delay
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=None))
+            else:
+                # Subsequent turns have delay relative to previous turn
+                delay = timestamp - timestamps_list[i - 1]
+                turns.append(TurnMetadata(timestamp_ms=timestamp, delay_ms=delay))
+
+        metadata = ConversationMetadata(
+            conversation_id=conv_id,
+            turns=turns,
+        )
+        conversations.append(metadata)
+
+    return DatasetMetadata(
+        conversations=conversations,
+        sampling_strategy=sampling_strategy,
     )
