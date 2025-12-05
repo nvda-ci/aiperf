@@ -361,7 +361,7 @@ class TestTelemetryExportResultsProcessorProcessing:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 
@@ -471,7 +471,7 @@ class TestTelemetryExportResultsProcessorProcessing:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 
@@ -858,7 +858,7 @@ class TestTelemetryExportResultsProcessorLifecycle:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 
@@ -891,7 +891,7 @@ class TestTelemetryExportResultsProcessorLifecycle:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 
@@ -928,7 +928,7 @@ class TestTelemetryExportResultsProcessorLifecycle:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 
@@ -1041,7 +1041,7 @@ class TestTelemetryExportResultsProcessorIntegration:
                     gpu_uuid="GPU-test",
                     gpu_model_name="Test GPU",
                     hostname="node1",
-                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0),
+                    telemetry_data=TelemetryMetrics(gpu_power_usage=100.0 + i),
                 )
                 await processor.process_telemetry_record(record)
 

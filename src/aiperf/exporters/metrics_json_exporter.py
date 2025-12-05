@@ -84,6 +84,7 @@ class MetricsJsonExporter(MetricsBaseExporter):
                 endpoints=self._generate_telemetry_statistical_summary(),
             )
 
+        # Note: server_metrics_data is exported to a separate file via ServerMetricsJsonExporter
         export_data = JsonExportData(
             input_config=self._user_config,
             was_cancelled=self._results.was_cancelled,

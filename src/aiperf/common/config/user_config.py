@@ -214,7 +214,6 @@ class UserConfig(BaseConfig):
     gpu_telemetry: Annotated[
         list[str] | None,
         Field(
-            default=None,
             description=(
                 "Enable GPU telemetry console display and optionally specify: "
                 "(1) 'dashboard' for realtime dashboard mode, "
@@ -230,7 +229,7 @@ class UserConfig(BaseConfig):
             consume_multiple=True,
             group=Groups.TELEMETRY,
         ),
-    ]
+    ] = None
 
     _gpu_telemetry_mode: GPUTelemetryMode = GPUTelemetryMode.SUMMARY
     _gpu_telemetry_urls: list[str] = []
@@ -286,6 +285,55 @@ class UserConfig(BaseConfig):
     def gpu_telemetry_metrics_file(self) -> Path | None:
         """Get the path to custom GPU metrics CSV file."""
         return self._gpu_telemetry_metrics_file
+
+    server_metrics: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Server metrics collection (ENABLED BY DEFAULT). "
+                "Automatically collects from inference endpoint base_url + `/metrics`. "
+                "Optionally specify additional custom Prometheus-compatible endpoint URLs "
+                "(e.g., http://node1:8081/metrics, http://node2:9090/metrics). "
+                "Use AIPERF_SERVER_METRICS_ENABLED=false to disable. "
+                "Example: `--server-metrics node1:8081 node2:9090/metrics` for additional endpoints"
+            ),
+        ),
+        BeforeValidator(parse_str_or_list),
+        CLIParameter(
+            name=("--server-metrics",),
+            consume_multiple=True,
+            group=Groups.SERVER_METRICS,
+        ),
+    ] = None
+
+    _server_metrics_urls: list[str] = []
+
+    @model_validator(mode="after")
+    def _parse_server_metrics_config(self) -> Self:
+        """Parse server_metrics list into URLs.
+
+        Check Environment.SERVER_METRICS.ENABLED to see if collection is enabled.
+        Empty list [] means enabled with automatic discovery only.
+        Non-empty list means enabled with custom URLs.
+        """
+        from aiperf.common.metric_utils import normalize_metrics_endpoint_url
+
+        urls: list[str] = []
+
+        for item in self.server_metrics or []:
+            # Check for URLs (anything with : or starting with http)
+            if item.startswith("http") or ":" in item:
+                normalized_url = item if item.startswith("http") else f"http://{item}"
+                normalized_url = normalize_metrics_endpoint_url(normalized_url)
+                urls.append(normalized_url)
+
+        self._server_metrics_urls = urls
+        return self
+
+    @property
+    def server_metrics_urls(self) -> list[str]:
+        """Get the parsed server metrics Prometheus endpoint URLs."""
+        return self._server_metrics_urls
 
     @model_validator(mode="after")
     def _compute_config(self) -> Self:

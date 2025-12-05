@@ -6,7 +6,17 @@
 import pytest
 
 from aiperf.common.config import ServiceConfig
+from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models import MetricResult
+from aiperf.common.models.server_metrics_models import (
+    HistogramData,
+    MetricFamily,
+    MetricSample,
+    ServerMetricsHierarchy,
+    ServerMetricsRecord,
+    ServerMetricsResults,
+    SummaryData,
+)
 from aiperf.common.models.telemetry_models import (
     TelemetryHierarchy,
     TelemetryMetrics,
@@ -161,7 +171,11 @@ def empty_telemetry_results():
 
 
 def create_exporter_config(
-    profile_results, user_config, telemetry_results=None, verbose=True
+    profile_results,
+    user_config,
+    telemetry_results=None,
+    server_metrics_results=None,
+    verbose=True,
 ):
     """Helper to create ExporterConfig with common defaults."""
     return ExporterConfig(
@@ -169,6 +183,7 @@ def create_exporter_config(
         user_config=user_config,
         service_config=ServiceConfig(verbose=verbose),
         telemetry_results=telemetry_results,
+        server_metrics_results=server_metrics_results,
     )
 
 
@@ -263,3 +278,185 @@ def mock_results_without_timeslices():
             self.error_summary = []
 
     return MockResultsNoTimeslices()
+
+
+@pytest.fixture
+def sample_server_metrics_results():
+    """Create a sample ServerMetricsResults with realistic multi-endpoint data.
+
+    Includes all four Prometheus metric types:
+    - Gauge: Point-in-time values
+    - Counter: Cumulative values (for delta calculation)
+    - Histogram: Distribution buckets with sum/count
+    - Summary: Pre-computed quantiles with sum/count
+    """
+    hierarchy = ServerMetricsHierarchy()
+
+    # Endpoint 1: vLLM worker 1 with all metric types
+    for time_offset in range(5):
+        gauge = MetricFamily(
+            type=PrometheusMetricType.GAUGE,
+            description="KV cache usage percentage",
+            samples=[
+                MetricSample(labels=None, value=0.4 + time_offset * 0.05),
+            ],
+        )
+        counter = MetricFamily(
+            type=PrometheusMetricType.COUNTER,
+            description="Total number of requests",
+            samples=[
+                MetricSample(labels=None, value=100.0 + time_offset * 20),
+            ],
+        )
+        # Histogram for time-to-first-token latency distribution
+        histogram = MetricFamily(
+            type=PrometheusMetricType.HISTOGRAM,
+            description="Time to first token histogram",
+            samples=[
+                MetricSample(
+                    labels=None,
+                    histogram=HistogramData(
+                        buckets={
+                            "0.01": 5.0 + time_offset * 2,
+                            "0.1": 15.0 + time_offset * 5,
+                            "1.0": 50.0 + time_offset * 10,
+                            "+Inf": 100.0 + time_offset * 20,
+                        },
+                        sum=25.5 + time_offset * 5.0,
+                        count=100.0 + time_offset * 20,
+                    ),
+                ),
+            ],
+        )
+        # Summary for request latency quantiles
+        summary = MetricFamily(
+            type=PrometheusMetricType.SUMMARY,
+            description="Request latency summary",
+            samples=[
+                MetricSample(
+                    labels=None,
+                    summary=SummaryData(
+                        quantiles={
+                            "0.5": 0.1 + time_offset * 0.01,
+                            "0.9": 0.5 + time_offset * 0.02,
+                            "0.95": 0.8 + time_offset * 0.03,
+                            "0.99": 1.0 + time_offset * 0.05,
+                        },
+                        sum=50.0 + time_offset * 10.0,
+                        count=100.0 + time_offset * 20,
+                    ),
+                ),
+            ],
+        )
+        record = ServerMetricsRecord(
+            endpoint_url="http://localhost:8081/metrics",
+            timestamp_ns=1_000_000_000 + time_offset * 1_000_000_000,
+            endpoint_latency_ns=5_000_000,
+            metrics={
+                "vllm:kv_cache_usage_perc": gauge,
+                "vllm:request_success_total": counter,
+                "vllm:time_to_first_token_seconds": histogram,
+                "vllm:request_latency_seconds": summary,
+            },
+        )
+        hierarchy.add_record(record)
+
+    # Endpoint 2: vLLM worker 2 with all metric types
+    for time_offset in range(5):
+        gauge = MetricFamily(
+            type=PrometheusMetricType.GAUGE,
+            description="KV cache usage percentage",
+            samples=[
+                MetricSample(labels=None, value=0.5 + time_offset * 0.04),
+            ],
+        )
+        counter = MetricFamily(
+            type=PrometheusMetricType.COUNTER,
+            description="Total number of requests",
+            samples=[
+                MetricSample(labels=None, value=80.0 + time_offset * 25),
+            ],
+        )
+        # Histogram for time-to-first-token latency distribution
+        histogram = MetricFamily(
+            type=PrometheusMetricType.HISTOGRAM,
+            description="Time to first token histogram",
+            samples=[
+                MetricSample(
+                    labels=None,
+                    histogram=HistogramData(
+                        buckets={
+                            "0.01": 3.0 + time_offset * 1,
+                            "0.1": 10.0 + time_offset * 3,
+                            "1.0": 40.0 + time_offset * 8,
+                            "+Inf": 80.0 + time_offset * 15,
+                        },
+                        sum=20.0 + time_offset * 4.0,
+                        count=80.0 + time_offset * 15,
+                    ),
+                ),
+            ],
+        )
+        # Summary for request latency quantiles
+        summary = MetricFamily(
+            type=PrometheusMetricType.SUMMARY,
+            description="Request latency summary",
+            samples=[
+                MetricSample(
+                    labels=None,
+                    summary=SummaryData(
+                        quantiles={
+                            "0.5": 0.12 + time_offset * 0.01,
+                            "0.9": 0.55 + time_offset * 0.02,
+                            "0.95": 0.85 + time_offset * 0.03,
+                            "0.99": 1.1 + time_offset * 0.05,
+                        },
+                        sum=45.0 + time_offset * 9.0,
+                        count=80.0 + time_offset * 15,
+                    ),
+                ),
+            ],
+        )
+        record = ServerMetricsRecord(
+            endpoint_url="http://localhost:8082/metrics",
+            timestamp_ns=1_000_000_000 + time_offset * 1_000_000_000,
+            endpoint_latency_ns=6_000_000,
+            metrics={
+                "vllm:kv_cache_usage_perc": gauge,
+                "vllm:request_success_total": counter,
+                "vllm:time_to_first_token_seconds": histogram,
+                "vllm:request_latency_seconds": summary,
+            },
+        )
+        hierarchy.add_record(record)
+
+    return ServerMetricsResults(
+        server_metrics_data=hierarchy,
+        start_ns=1_000_000_000,
+        end_ns=6_000_000_000,
+        endpoints_configured=[
+            "http://localhost:8081/metrics",
+            "http://localhost:8082/metrics",
+        ],
+        endpoints_successful=[
+            "http://localhost:8081/metrics",
+            "http://localhost:8082/metrics",
+        ],
+        error_summary=[],
+    )
+
+
+@pytest.fixture
+def empty_server_metrics_results():
+    """Create ServerMetricsResults with no data (all endpoints failed)."""
+    return ServerMetricsResults(
+        server_metrics_data=ServerMetricsHierarchy(),
+        start_ns=1_000_000_000,
+        end_ns=2_000_000_000,
+        endpoints_configured=[
+            "http://unreachable-1:8081/metrics",
+            "http://unreachable-2:8081/metrics",
+        ],
+        endpoints_successful=[],
+        error_summary=[],
+    )

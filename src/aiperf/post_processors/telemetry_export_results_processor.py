@@ -8,7 +8,7 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.environment import Environment
 from aiperf.common.factories import ResultsProcessorFactory
-from aiperf.common.mixins import BufferedJSONLWriterMixin
+from aiperf.common.mixins import BufferedJSONLWriterMixinWithDeduplication
 from aiperf.common.models import MetricResult
 from aiperf.common.models.telemetry_models import TelemetryRecord
 from aiperf.common.protocols import TelemetryResultsProcessorProtocol
@@ -18,7 +18,7 @@ from aiperf.post_processors.base_metrics_processor import BaseMetricsProcessor
 @implements_protocol(TelemetryResultsProcessorProtocol)
 @ResultsProcessorFactory.register(ResultsProcessorType.TELEMETRY_EXPORT)
 class TelemetryExportResultsProcessor(
-    BaseMetricsProcessor, BufferedJSONLWriterMixin[TelemetryRecord]
+    BaseMetricsProcessor, BufferedJSONLWriterMixinWithDeduplication[TelemetryRecord]
 ):
     """Exports per-record GPU telemetry data to JSONL files.
 
@@ -42,13 +42,13 @@ class TelemetryExportResultsProcessor(
         **kwargs,
     ):
         output_file: Path = user_config.output.profile_export_gpu_telemetry_jsonl_file
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file.unlink(missing_ok=True)
 
         super().__init__(
-            output_file=output_file,
-            batch_size=Environment.RECORD.EXPORT_BATCH_SIZE,
             user_config=user_config,
+            output_file=output_file,
+            batch_size=Environment.GPU.EXPORT_BATCH_SIZE,
+            dedupe_key_function=lambda x: (x.dcgm_url, x.gpu_uuid),
+            dedupe_value_function=lambda x: x.telemetry_data,
             **kwargs,
         )
 

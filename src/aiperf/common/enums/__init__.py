@@ -56,7 +56,6 @@ from aiperf.common.enums.metric_enums import (
     FrequencyMetricUnit,
     FrequencyMetricUnitInfo,
     GenericMetricUnit,
-    MetricDictValueTypeT,
     MetricFlags,
     MetricOverTimeUnit,
     MetricOverTimeUnitInfo,
@@ -65,10 +64,8 @@ from aiperf.common.enums.metric_enums import (
     MetricTimeUnit,
     MetricTimeUnitInfo,
     MetricType,
-    MetricUnitT,
     MetricValueType,
     MetricValueTypeInfo,
-    MetricValueTypeT,
     MetricValueTypeVarT,
     PowerMetricUnit,
     PowerMetricUnitInfo,
@@ -86,6 +83,9 @@ from aiperf.common.enums.plugin_enums import (
 from aiperf.common.enums.post_processor_enums import (
     RecordProcessorType,
     ResultsProcessorType,
+)
+from aiperf.common.enums.prometheus_enums import (
+    PrometheusMetricType,
 )
 from aiperf.common.enums.service_enums import (
     LifecycleState,
@@ -144,7 +144,6 @@ __all__ = [
     "LifecycleState",
     "MediaType",
     "MessageType",
-    "MetricDictValueTypeT",
     "MetricFlags",
     "MetricOverTimeUnit",
     "MetricOverTimeUnitInfo",
@@ -153,14 +152,13 @@ __all__ = [
     "MetricTimeUnit",
     "MetricTimeUnitInfo",
     "MetricType",
-    "MetricUnitT",
     "MetricValueType",
     "MetricValueTypeInfo",
-    "MetricValueTypeT",
     "MetricValueTypeVarT",
     "ModelSelectionStrategy",
     "PowerMetricUnit",
     "PowerMetricUnitInfo",
+    "PrometheusMetricType",
     "PromptSource",
     "PublicDatasetType",
     "RecordProcessorType",

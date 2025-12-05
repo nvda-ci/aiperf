@@ -3,12 +3,14 @@
 """Mixin for buffered JSONL writing with automatic flushing."""
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
-from typing import Generic
+from typing import Any, Generic
 
 import aiofiles
 import orjson
 
+from aiperf.common.duplicate_tracker import AsyncKeyedDuplicateTracker
 from aiperf.common.environment import Environment
 from aiperf.common.hooks import on_init, on_stop
 from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
@@ -53,6 +55,16 @@ class BufferedJSONLWriterMixin(AIPerfLifecycleMixin, Generic[BaseModelT]):
         self._batch_size = batch_size
         self._buffer_lock = asyncio.Lock()
 
+        try:
+            # Create the output file directory if it doesn't exist and clear the file
+            self.output_file.parent.mkdir(parents=True, exist_ok=True)
+            self.output_file.unlink(missing_ok=True)
+        except Exception as e:
+            self.exception(
+                f"Failed to create output file directory or clear file: {self.output_file}: {e!r}"
+            )
+            raise
+
     @on_init
     async def _open_file(self) -> None:
         """Open the file handle for writing in binary mode (called automatically on initialization)."""
@@ -96,6 +108,16 @@ class BufferedJSONLWriterMixin(AIPerfLifecycleMixin, Generic[BaseModelT]):
 
         except Exception as e:
             self.error(f"Failed to write record: {e!r}")
+
+    async def flush_buffer(self) -> None:
+        """Flush the buffer to disk."""
+        async with self._buffer_lock:
+            buffer_to_flush = self._buffer
+            self._buffer = []
+        if buffer_to_flush:
+            await self._flush_buffer(buffer_to_flush)
+        else:
+            self.debug(lambda: f"No buffer to flush: {self.output_file}")
 
     async def _flush_buffer(self, buffer_to_flush: list[bytes]) -> None:
         """Write buffered records to disk using bulk write.
@@ -166,3 +188,41 @@ class BufferedJSONLWriterMixin(AIPerfLifecycleMixin, Generic[BaseModelT]):
         self.debug(
             f"{self.__class__.__name__}: {self.lines_written} JSONL lines written to {self.output_file}"
         )
+
+
+class BufferedJSONLWriterMixinWithDeduplication(BufferedJSONLWriterMixin[BaseModelT]):
+    """Mixin for buffered JSONL writing with automatic flushing and deduplication.
+
+
+    Args:
+        dedupe_key_function: A function that takes a record and returns a key for deduplication.
+        dedupe_value_function: A function that takes a record and returns a value for deduplication.
+
+    See the AsyncKeyedDuplicateTracker class for more details on the deduplication logic.
+    """
+
+    def __init__(
+        self,
+        dedupe_key_function: Callable[[BaseModelT], str],
+        dedupe_value_function: Callable[[BaseModelT], Any] = lambda x: x,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._duplicate_tracker = AsyncKeyedDuplicateTracker[BaseModelT](
+            key_function=dedupe_key_function,
+            value_function=dedupe_value_function,
+        )
+
+    async def buffered_write(self, record: BaseModelT) -> None:
+        """Write a Pydantic model to the buffer with automatic flushing and deduplication."""
+        records_to_write = await self._duplicate_tracker.deduplicate_record(record)
+        for record in records_to_write:
+            await super().buffered_write(record)
+
+    @on_stop
+    async def _flush_remaining_duplicates(self) -> None:
+        """Flush remaining duplicates on shutdown."""
+        records_to_flush = await self._duplicate_tracker.flush_remaining_duplicates()
+        for record in records_to_flush:
+            await super().buffered_write(record)
+        await super().flush_buffer()

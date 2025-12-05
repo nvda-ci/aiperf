@@ -14,6 +14,7 @@ from aiperf.common.exceptions import (
 from aiperf.common.factories import ConsoleExporterFactory, DataExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import ProfileResults, TelemetryResults
+from aiperf.common.models.server_metrics_models import ServerMetricsResults
 from aiperf.common.protocols import ConsoleExporterProtocol, DataExporterProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 
@@ -30,6 +31,7 @@ class ExporterManager(AIPerfLoggerMixin):
         user_config: UserConfig,
         service_config: ServiceConfig,
         telemetry_results: TelemetryResults | None,
+        server_metrics_results: ServerMetricsResults | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -42,6 +44,7 @@ class ExporterManager(AIPerfLoggerMixin):
             user_config=self._user_config,
             service_config=self._service_config,
             telemetry_results=telemetry_results,
+            server_metrics_results=server_metrics_results,
         )
 
     def _task_done_callback(self, task: asyncio.Task) -> None:

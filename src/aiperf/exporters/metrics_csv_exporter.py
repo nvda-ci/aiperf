@@ -72,6 +72,10 @@ class MetricsCsvExporter(MetricsBaseExporter):
         if self._telemetry_results:
             self._write_telemetry_section(writer)
 
+        # Add server metrics data section if available
+        if self._server_metrics_results:
+            self._write_server_metrics_section(writer)
+
         return buf.getvalue()
 
     def _split_metrics(
@@ -271,3 +275,115 @@ class MetricsCsvExporter(MetricsBaseExporter):
         except Exception as e:
             self.debug(f"GPU metric {metric_key} not available: {e}")
             return False
+
+    def _write_server_metrics_section(self, writer: csv.writer) -> None:
+        """Write server metrics data section to CSV in structured table format.
+
+        Uses self._server_metrics_results.endpoint_summaries for pre-computed stats.
+
+        Creates a single flat table with all server metrics that's easy to
+        parse programmatically for visualization platforms.
+
+        Each row represents one metric for one endpoint with statistics in columns.
+        Metrics are separated by their unique label combinations.
+
+        Supports all Prometheus metric types:
+        - gauge: Point-in-time values with statistics
+        - counter: Delta values from reference point with statistics
+        - histogram: Delta bucket counts with estimated average
+        - summary: Pre-computed quantiles with delta count/sum
+
+        Note: endpoint_summaries contain pre-computed stats with only key percentiles
+        (p50, p90, p95, p99). Missing percentiles (p1, p5, p10, p25, p75) are output as blank.
+
+        Args:
+            writer: CSV writer object
+        """
+        if (
+            not self._server_metrics_results
+            or not self._server_metrics_results.endpoint_summaries
+        ):
+            return
+
+        writer.writerow([])
+        writer.writerow([])
+
+        # Write header row for server metrics table
+        header_row = [
+            "Endpoint",
+            "Metric_Type",
+            "Metric",
+            "Labels",
+        ]
+        header_row.extend(STAT_KEYS)
+        writer.writerow(header_row)
+
+        # Iterate through pre-computed endpoint summaries
+        for (
+            endpoint_url,
+            endpoint_summary,
+        ) in self._server_metrics_results.endpoint_summaries.items():
+            endpoint_display = normalize_endpoint_display(endpoint_url)
+
+            # Iterate through all metrics in the summary
+            for base_metric_name in sorted(endpoint_summary.metrics.keys()):
+                metric_summary = endpoint_summary.metrics[base_metric_name]
+
+                # Write a row for each label combination (series)
+                for labeled_stats in metric_summary.series:
+                    self._write_server_metric_row(
+                        writer,
+                        endpoint_display,
+                        endpoint_summary,
+                        base_metric_name,
+                        labeled_stats,
+                    )
+
+    def _write_server_metric_row(
+        self,
+        writer: csv.writer,
+        endpoint_display: str,
+        endpoint_summary,
+        base_metric_name: str,
+        labeled_stats,
+    ) -> None:
+        """Write a single server metric row from pre-computed endpoint summary.
+
+        Args:
+            writer: CSV writer object
+            endpoint_display: Display name of the Prometheus endpoint
+            endpoint_summary: ServerMetricsEndpointSummary with pre-computed stats
+            base_metric_name: Base metric name (without label suffix)
+            labeled_stats: ServerMetricLabeledStats with labels and stats
+        """
+        try:
+            # Get the metric summary to access type
+            metric_summary = endpoint_summary.metrics[base_metric_name]
+            metric_type = metric_summary.type
+            stats = labeled_stats.stats
+            labels = labeled_stats.labels
+
+            # Format labels for CSV
+            labels_str = (
+                ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
+                if labels
+                else ""
+            )
+
+            row = [
+                endpoint_display,
+                metric_type,
+                base_metric_name,
+                labels_str,
+            ]
+
+            # Convert ExportStats to CSV row - missing percentiles will be None/blank
+            for stat in STAT_KEYS:
+                value = getattr(stats, stat, None)
+                row.append(self._format_number(value))
+
+            writer.writerow(row)
+        except Exception as e:
+            self.warning(
+                f"Failed to write metric row for endpoint {endpoint_display}, metric {base_metric_name}: {e}"
+            )
