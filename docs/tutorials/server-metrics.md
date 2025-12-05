@@ -92,54 +92,54 @@ Line-delimited JSON with metrics snapshots over time:
 
 ### 2. Aggregated Statistics: `server_metrics.json`
 
-Aggregated statistics computed from time-series data:
+Aggregated statistics computed from time-series data. Metrics from all endpoints are merged together, with each series item tagged with its source endpoint:
 
 ```json
 {
   "summary": {
-    "endpoints_configured": ["http://localhost:8000/metrics"],
-    "endpoints_successful": ["http://localhost:8000/metrics"],
+    "endpoints_configured": ["localhost:8000"],
+    "endpoints_successful": ["localhost:8000"],
     "start_time": "2025-12-04T10:15:30.123456",
-    "end_time": "2025-12-04T10:20:35.789012"
-  },
-  "endpoints": {
-    "http://localhost:8000/metrics": {
-      "endpoint_url": "http://localhost:8000/metrics",
-      "duration_seconds": 305.5,
-      "scrape_count": 61,
-      "avg_scrape_latency_ms": 12.5,
-      "metrics": {
-        "vllm:gpu_cache_usage_perc": {
-          "description": "GPU KV-cache usage.",
-          "type": "gauge",
-          "series": [{
-            "labels": null,
-            "stats": {"avg": 0.65, "min": 0.45, "max": 0.85, "std": 0.12, "p50": 0.64, "p90": 0.79, "p95": 0.82, "p99": 0.84}
-          }]
-        },
-        "vllm:request_success_total": {
-          "description": "Count of successfully processed requests.",
-          "type": "counter",
-          "series": [{
-            "labels": null,
-            "stats": {"delta": 1000.0, "rate_overall": 200.0, "rate_avg": 195.0, "rate_min": 150.0, "rate_max": 280.0, "rate_std": 35.2}
-          }]
-        },
-        "vllm:time_to_first_token_seconds": {
-          "description": "Histogram of time to first token.",
-          "type": "histogram",
-          "series": [{
-            "labels": null,
-            "stats": {
-              "count_delta": 1000.0,
-              "sum_delta": 125.5,
-              "avg": 0.1255,
-              "rate": 200.0,
-              "buckets": {"0.01": 50.0, "0.1": 450.0, "1.0": 980.0, "+Inf": 1000.0}
-            }
-          }]
-        }
+    "end_time": "2025-12-04T10:20:35.789012",
+    "endpoint_info": {
+      "localhost:8000": {
+        "endpoint_url": "http://localhost:8000/metrics",
+        "duration_seconds": 305.5,
+        "scrape_count": 61,
+        "avg_scrape_latency_ms": 12.5
       }
+    }
+  },
+  "metrics": {
+    "vllm:gpu_cache_usage_perc": {
+      "description": "GPU KV-cache usage.",
+      "type": "gauge",
+      "series": [{
+        "endpoint": "localhost:8000",
+        "stats": {"avg": 0.65, "min": 0.45, "max": 0.85, "std": 0.12, "p50": 0.64, "p90": 0.79, "p95": 0.82, "p99": 0.84}
+      }]
+    },
+    "vllm:request_success_total": {
+      "description": "Count of successfully processed requests.",
+      "type": "counter",
+      "series": [{
+        "endpoint": "localhost:8000",
+        "stats": {"delta": 1000.0, "rate_overall": 200.0, "rate_avg": 195.0, "rate_min": 150.0, "rate_max": 280.0, "rate_std": 35.2}
+      }]
+    },
+    "vllm:time_to_first_token_seconds": {
+      "description": "Histogram of time to first token.",
+      "type": "histogram",
+      "series": [{
+        "endpoint": "localhost:8000",
+        "stats": {
+          "count_delta": 1000.0,
+          "sum_delta": 125.5,
+          "avg": 0.1255,
+          "rate": 200.0,
+          "buckets": {"0.01": 50.0, "0.1": 450.0, "1.0": 980.0, "+Inf": 1000.0}
+        }
+      }]
     }
   }
 }
@@ -228,15 +228,16 @@ Note: Change-point detection avoids misleading rates when sampling faster than s
 
 ## Labeled Metrics
 
-When metrics have labels, each unique label combination is aggregated separately:
+When metrics have labels, each unique label combination is aggregated separately. With multiple endpoints, series from all endpoints are merged together:
 
 ```json
 {
   "dynamo_frontend_requests": {
     "type": "counter",
     "series": [
-      {"labels": {"model": "llama-3", "status": "success"}, "stats": {"delta": 800.0, "rate_avg": 160.0}},
-      {"labels": {"model": "llama-3", "status": "error"}, "stats": {"delta": 5.0, "rate_avg": 1.0}}
+      {"endpoint": "node1:8000", "labels": {"model": "llama-3", "status": "success"}, "stats": {"delta": 800.0, "rate_avg": 160.0}},
+      {"endpoint": "node1:8000", "labels": {"model": "llama-3", "status": "error"}, "stats": {"delta": 5.0, "rate_avg": 1.0}},
+      {"endpoint": "node2:8000", "labels": {"model": "llama-3", "status": "success"}, "stats": {"delta": 750.0, "rate_avg": 150.0}}
     ]
   }
 }

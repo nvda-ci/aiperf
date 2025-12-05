@@ -9,11 +9,15 @@ from aiperf.common.enums import DataExporterType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.models.export_models import (
-    ServerMetricsEndpointSummary,
-    ServerMetricsExportData,
+    InfoMetricData,
+    ServerMetricLabeledStats,
+    ServerMetricsEndpointInfo,
+    ServerMetricsMergedExportData,
     ServerMetricsSummary,
+    ServerMetricSummary,
 )
 from aiperf.common.protocols import DataExporterProtocol
+from aiperf.exporters.display_units_utils import normalize_endpoint_display
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
 
@@ -21,7 +25,12 @@ from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
 @DataExporterFactory.register(DataExporterType.SERVER_METRICS_JSON)
 @implements_protocol(DataExporterProtocol)
 class ServerMetricsJsonExporter(MetricsBaseExporter):
-    """Export server metrics to a separate JSON file."""
+    """Export server metrics to a separate JSON file.
+
+    Exports server metrics in a merged format where all endpoints' series are
+    combined under each metric name, with each series item containing a
+    normalized 'endpoint' field (without http:// prefix or /metrics suffix).
+    """
 
     def __init__(self, exporter_config: ExporterConfig, **kwargs) -> None:
         # Check if server metrics data is available before initializing
@@ -46,48 +55,130 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
         )
 
     def _generate_content(self) -> str:
-        """Generate JSON content for server metrics data.
+        """Generate JSON content for server metrics data in merged format.
+
+        The merged format combines all endpoints' series under each metric name,
+        with each series item containing a normalized 'endpoint' field.
+        Endpoint metadata (duration, scrape count, latency) is included in the summary.
 
         Returns:
-            str: JSON content with server metrics data
+            str: JSON content with merged server metrics data
         """
         if not self._server_metrics_results:
             return "{}"
 
+        merged_metrics, merged_info, endpoint_info = self._merge_endpoint_summaries()
+
+        # Normalize endpoint URLs in configured/successful lists
+        endpoints_configured = [
+            normalize_endpoint_display(url)
+            for url in self._server_metrics_results.endpoints_configured
+        ]
+        endpoints_successful = [
+            normalize_endpoint_display(url)
+            for url in self._server_metrics_results.endpoints_successful
+        ]
+
         summary = ServerMetricsSummary(
-            endpoints_configured=self._server_metrics_results.endpoints_configured,
-            endpoints_successful=self._server_metrics_results.endpoints_successful,
+            endpoints_configured=endpoints_configured,
+            endpoints_successful=endpoints_successful,
             start_time=datetime.fromtimestamp(
                 self._server_metrics_results.start_ns / NANOS_PER_SECOND
             ),
             end_time=datetime.fromtimestamp(
                 self._server_metrics_results.end_ns / NANOS_PER_SECOND
             ),
+            endpoint_info=endpoint_info if endpoint_info else None,
         )
 
-        export_data = ServerMetricsExportData(
+        export_data = ServerMetricsMergedExportData(
             summary=summary,
-            endpoints=self._get_endpoint_summaries(),
+            info_metrics=merged_info if merged_info else None,
+            metrics=merged_metrics,
         )
 
         return export_data.model_dump_json(
             indent=2, exclude_unset=True, exclude_none=True
         )
 
-    def _get_endpoint_summaries(self) -> dict[str, ServerMetricsEndpointSummary]:
-        """Get pre-computed server metrics summaries.
+    def _merge_endpoint_summaries(
+        self,
+    ) -> tuple[
+        dict[str, ServerMetricSummary],
+        dict[str, InfoMetricData] | None,
+        dict[str, ServerMetricsEndpointInfo] | None,
+    ]:
+        """Merge all endpoint summaries into a single metrics dict.
+
+        Each metric's series list contains items from all endpoints, with each
+        series item tagged with its normalized source endpoint.
 
         Returns:
-            dict: Endpoint summaries from pre-computed data
+            Tuple of (merged metrics dict, merged info metrics dict, endpoint info dict)
         """
         if not self._server_metrics_results:
-            return {}
+            return {}, None, None
 
-        if self._server_metrics_results.endpoint_summaries:
-            return self._server_metrics_results.endpoint_summaries
+        endpoint_summaries = self._server_metrics_results.endpoint_summaries
+        if not endpoint_summaries:
+            self.warning(
+                "No pre-computed server metrics summaries available. "
+                "This may indicate a ZMQ serialization issue."
+            )
+            return {}, None, None
 
-        self.warning(
-            "No pre-computed server metrics summaries available. "
-            "This may indicate a ZMQ serialization issue."
+        merged_metrics: dict[str, ServerMetricSummary] = {}
+        merged_info: dict[str, InfoMetricData] = {}
+        endpoint_info: dict[str, ServerMetricsEndpointInfo] = {}
+
+        for endpoint_summary in endpoint_summaries.values():
+            endpoint_url = endpoint_summary.endpoint_url
+            normalized_endpoint = normalize_endpoint_display(endpoint_url)
+
+            # Collect endpoint metadata for summary
+            endpoint_info[normalized_endpoint] = ServerMetricsEndpointInfo(
+                endpoint_url=endpoint_url,
+                duration_seconds=endpoint_summary.duration_seconds,
+                scrape_count=endpoint_summary.scrape_count,
+                avg_scrape_latency_ms=endpoint_summary.avg_scrape_latency_ms,
+            )
+
+            # Merge info metrics
+            if endpoint_summary.info_metrics:
+                for metric_name, info_data in endpoint_summary.info_metrics.items():
+                    if metric_name not in merged_info:
+                        merged_info[metric_name] = InfoMetricData(
+                            description=info_data.description,
+                            labels=[],
+                        )
+                    # Add labels with normalized endpoint info
+                    for label_set in info_data.labels:
+                        label_with_endpoint = {
+                            "endpoint": normalized_endpoint,
+                            **label_set,
+                        }
+                        merged_info[metric_name].labels.append(label_with_endpoint)
+
+            # Merge metrics
+            for metric_name, metric_summary in endpoint_summary.metrics.items():
+                if metric_name not in merged_metrics:
+                    merged_metrics[metric_name] = ServerMetricSummary(
+                        description=metric_summary.description,
+                        type=metric_summary.type,
+                        series=[],
+                    )
+
+                # Add each series with normalized endpoint field
+                for series_item in metric_summary.series:
+                    merged_series = ServerMetricLabeledStats(
+                        endpoint=normalized_endpoint,
+                        labels=series_item.labels,
+                        stats=series_item.stats,
+                    )
+                    merged_metrics[metric_name].series.append(merged_series)
+
+        return (
+            merged_metrics,
+            merged_info if merged_info else None,
+            endpoint_info if endpoint_info else None,
         )
-        return {}

@@ -18,6 +18,7 @@ class DataExporterType(CaseInsensitiveStrEnum):
     CSV = "csv"
     RAW_RECORD_AGGREGATOR = "raw_record_aggregator"
     SERVER_METRICS_JSON = "server_metrics_json"
+    SERVER_METRICS_CSV = "server_metrics_csv"
     TIMESLICE_JSON = "timeslice_json"
     TIMESLICE_CSV = "timeslice_csv"
 

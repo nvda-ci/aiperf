@@ -464,13 +464,36 @@ class TelemetryExportData(AIPerfBaseModel):
     endpoints: dict[str, EndpointData]
 
 
+class ServerMetricsEndpointInfo(AIPerfBaseModel):
+    """Metadata about a single endpoint's collection statistics."""
+
+    endpoint_url: str = Field(description="Full endpoint URL")
+    duration_seconds: float = Field(
+        description="Total duration of metrics collection for this endpoint"
+    )
+    scrape_count: int = Field(
+        description="Number of successful scrapes from this endpoint"
+    )
+    avg_scrape_latency_ms: float = Field(
+        description="Average time to scrape metrics from this endpoint in milliseconds"
+    )
+
+
 class ServerMetricsSummary(AIPerfBaseModel):
     """Summary information for server metrics collection."""
 
-    endpoints_configured: list[str]
-    endpoints_successful: list[str]
+    endpoints_configured: list[str] = Field(
+        description="List of configured endpoint identifiers (normalized)"
+    )
+    endpoints_successful: list[str] = Field(
+        description="List of successful endpoint identifiers (normalized)"
+    )
     start_time: datetime
     end_time: datetime
+    endpoint_info: dict[str, ServerMetricsEndpointInfo] | None = Field(
+        default=None,
+        description="Per-endpoint collection metadata keyed by normalized endpoint identifier",
+    )
 
 
 class ServerMetricLabeledStats(AIPerfBaseModel):
@@ -480,6 +503,10 @@ class ServerMetricLabeledStats(AIPerfBaseModel):
     This model represents statistics for one such combination.
     """
 
+    endpoint: str | None = Field(
+        default=None,
+        description="Endpoint URL this series came from (used in merged export format)",
+    )
     labels: dict[str, str] | None = Field(
         default=None,
         description="Metric labels for this series. None if the metric has no labels.",
@@ -540,6 +567,24 @@ class ServerMetricsExportData(AIPerfBaseModel):
 
     summary: ServerMetricsSummary
     endpoints: dict[str, ServerMetricsEndpointSummary]
+
+
+class ServerMetricsMergedExportData(AIPerfBaseModel):
+    """Server metrics data structure with all endpoints merged into a single metrics dict.
+
+    This format merges series from all endpoints into each metric, with each series
+    item containing an 'endpoint' field to identify its source.
+    """
+
+    summary: ServerMetricsSummary
+    info_metrics: dict[str, InfoMetricData] | None = Field(
+        default=None,
+        description="Static info metrics merged from all endpoints",
+    )
+    metrics: dict[str, ServerMetricSummary] = Field(
+        default_factory=dict,
+        description="All metrics merged across endpoints, with endpoint field in each series item",
+    )
 
 
 class TimesliceData(AIPerfBaseModel):
