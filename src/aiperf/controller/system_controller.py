@@ -604,11 +604,30 @@ class SystemController(SignalHandlerMixin, BaseService):
         self._was_cancelled = True
         await self.publish(ProfileCancelCommand(service_id=self.service_id))
 
-        # TODO: HACK: Wait for 2 seconds to ensure the profiling is cancelled
-        # Wait for the profiling to be cancelled
-        await asyncio.sleep(2)
-        self.debug("Stopping system controller after profiling cancelled")
-        await asyncio.shield(self.stop())
+        # Wait for results to arrive via message handlers, with timeout fallback.
+        # The flush period (default 2s) + processing time requires a longer timeout.
+        # Normal shutdown coordination via _check_and_trigger_shutdown() will call stop()
+        # when all results arrive. This timeout is a fallback if messages don't arrive.
+        cancel_timeout = Environment.SERVER_METRICS.COLLECTION_FLUSH_PERIOD + 5.0
+        self.debug(
+            f"Waiting up to {cancel_timeout}s for results before forced shutdown..."
+        )
+
+        try:
+            await asyncio.wait_for(
+                self._wait_for_shutdown_triggered(), timeout=cancel_timeout
+            )
+            self.debug("Shutdown triggered by result handlers")
+        except asyncio.TimeoutError:
+            self.warning(
+                f"Timeout waiting for results after {cancel_timeout}s, forcing shutdown"
+            )
+            await asyncio.shield(self.stop())
+
+    async def _wait_for_shutdown_triggered(self) -> None:
+        """Wait for shutdown to be triggered by message handlers."""
+        while not self._shutdown_triggered:
+            await asyncio.sleep(0.1)
 
     @on_stop
     async def _stop_system_controller(self) -> None:

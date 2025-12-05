@@ -93,16 +93,14 @@ class GaugeExportStats(AIPerfBaseModel):
     Statistics are computed over all samples in the aggregation window.
     """
 
-    # Value statistics
-    avg: float = Field(description="Average value across all samples")
     min: float = Field(description="Minimum observed value")
-    max: float = Field(description="Maximum observed value")
-    std: float = Field(description="Standard deviation of values")
-    # Key percentiles (industry standard)
+    avg: float = Field(description="Average value across all samples")
     p50: float = Field(description="50th percentile (median)")
     p90: float = Field(description="90th percentile")
     p95: float = Field(description="95th percentile")
     p99: float = Field(description="99th percentile")
+    max: float = Field(description="Maximum observed value")
+    std: float = Field(description="Standard deviation of values")
 
     @classmethod
     def from_time_series(
