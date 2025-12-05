@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from pydantic import Field, model_validator
 
+from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetailsCount
@@ -520,7 +521,10 @@ class HistogramTimeSeries:
     def get_observation_rates(
         self, time_filter: TimeRangeFilter | None = None
     ) -> NDArray[np.float64]:
-        """Get point-to-point observation rates (count deltas / time deltas)."""
+        """Get point-to-point observation rates (count deltas / time deltas).
+
+        Zero-duration intervals are filtered out. Returns empty array if no valid rates.
+        """
         ref_idx, final_idx = self.get_indices_for_filter(time_filter)
         start_idx = ref_idx if ref_idx is not None else 0
 
@@ -528,11 +532,18 @@ class HistogramTimeSeries:
         counts = self.counts[start_idx : final_idx + 1]
 
         if len(ts) < 2:
-            return np.array([0.0])
+            return np.array([], dtype=np.float64)
 
         count_deltas = np.diff(counts)
-        time_deltas_s = np.maximum(np.diff(ts) / 1e9, 1e-9)
-        return count_deltas / time_deltas_s
+        time_deltas_ns = np.diff(ts)
+
+        # Filter out zero-duration intervals
+        valid_mask = time_deltas_ns > 0
+        if not np.any(valid_mask):
+            return np.array([], dtype=np.float64)
+
+        time_deltas_s = time_deltas_ns[valid_mask] / NANOS_PER_SECOND
+        return count_deltas[valid_mask] / time_deltas_s
 
 
 class SummaryTimeSeries:
@@ -658,6 +669,7 @@ class ServerMetricsTimeSeries:
         "first_timestamp_ns",
         "last_timestamp_ns",
         "_snapshot_count",
+        "_scrape_latencies_ns",
     )
 
     def __init__(self) -> None:
@@ -668,6 +680,7 @@ class ServerMetricsTimeSeries:
         self.first_timestamp_ns: int = 0
         self.last_timestamp_ns: int = 0
         self._snapshot_count: int = 0
+        self._scrape_latencies_ns: list[int] = []
 
     def append_snapshot(
         self,
@@ -676,12 +689,15 @@ class ServerMetricsTimeSeries:
         counter_metrics: dict[str, float] | None = None,
         histogram_metrics: dict[str, HistogramSnapshot] | None = None,
         summary_metrics: dict[str, SummarySnapshot] | None = None,
+        scrape_latency_ns: int | None = None,
     ) -> None:
         """Append all metrics from a single collection cycle."""
         if self._snapshot_count == 0:
             self.first_timestamp_ns = timestamp_ns
         self.last_timestamp_ns = timestamp_ns
         self._snapshot_count += 1
+        if scrape_latency_ns is not None:
+            self._scrape_latencies_ns.append(scrape_latency_ns)
 
         for key, value in (gauge_metrics or {}).items():
             self.gauges.setdefault(key, ScalarTimeSeries()).append(timestamp_ns, value)
@@ -804,6 +820,7 @@ class ServerMetricsEndpointData(AIPerfBaseModel):
                 counter_metrics=counter_metrics,
                 histogram_metrics=histogram_metrics,
                 summary_metrics=summary_metrics,
+                scrape_latency_ns=record.endpoint_latency_ns,
             )
 
     def _get_label_suffix(self, labels: dict[str, str] | None) -> str:

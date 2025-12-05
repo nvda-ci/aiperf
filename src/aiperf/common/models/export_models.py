@@ -10,6 +10,7 @@ import numpy as np
 from pydantic import ConfigDict, Field, SerializeAsAny
 
 from aiperf.common.config import UserConfig
+from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models import ErrorDetailsCount
 from aiperf.common.models.base_models import AIPerfBaseModel
 
@@ -92,11 +93,6 @@ class GaugeExportStats(AIPerfBaseModel):
     Statistics are computed over all samples in the aggregation window.
     """
 
-    # Collection metadata
-    sample_count: int = Field(description="Number of samples collected")
-    duration_seconds: float = Field(
-        default=0.0, description="Aggregation period duration"
-    )
     # Value statistics
     avg: float = Field(description="Average value across all samples")
     min: float = Field(description="Minimum observed value")
@@ -107,10 +103,6 @@ class GaugeExportStats(AIPerfBaseModel):
     p90: float = Field(description="90th percentile")
     p95: float = Field(description="95th percentile")
     p99: float = Field(description="99th percentile")
-    # Time-weighted average (more accurate for sparse/irregular samples)
-    time_weighted_avg: float = Field(
-        description="Time-weighted average accounting for duration between samples. More accurate than simple avg for metrics that change infrequently (e.g., KV cache usage, queue depth)"
-    )
 
     @classmethod
     def from_time_series(
@@ -119,40 +111,21 @@ class GaugeExportStats(AIPerfBaseModel):
         """Create GaugeExportStats from a ScalarTimeSeries."""
         mask = ts.get_time_mask(time_filter)
         values = ts.values[mask]
-        timestamps = ts.timestamps[mask]
 
         pcts = np.percentile(values, [50, 90, 95, 99])
-        duration_s = (
-            (timestamps[-1] - timestamps[0]) / 1e9 if len(timestamps) > 1 else 0.0
-        )
 
-        # Time-weighted average: weight each value by duration until next sample
-        if len(values) > 1:
-            durations = np.diff(timestamps).astype(np.float64)
-            # Last value has no "next" sample, so we exclude it from weighting
-            # (alternative: extend to end of window, but this is simpler and standard)
-            total_weighted = np.sum(values[:-1] * durations)
-            total_duration = np.sum(durations)
-            time_weighted_avg = (
-                float(total_weighted / total_duration)
-                if total_duration > 0
-                else float(np.mean(values))
-            )
-        else:
-            time_weighted_avg = float(values[0]) if len(values) > 0 else 0.0
+        # Use sample std (ddof=1) for unbiased estimate; 0 for single sample
+        std = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
 
         return cls(
-            sample_count=len(values),
-            duration_seconds=duration_s,
             avg=float(np.mean(values)),
             min=float(np.min(values)),
             max=float(np.max(values)),
-            std=float(np.std(values)),
+            std=std,
             p50=float(pcts[0]),
             p90=float(pcts[1]),
             p95=float(pcts[2]),
             p99=float(pcts[3]),
-            time_weighted_avg=time_weighted_avg,
         )
 
 
@@ -161,15 +134,40 @@ class CounterExportStats(AIPerfBaseModel):
 
     Counters represent cumulative totals (e.g., total requests, total bytes).
     We report the delta and rate statistics over the aggregation window.
+
+    Note on rate metrics:
+    - rate_overall: Overall throughput (delta/duration) - always available if duration > 0
+    - rate_avg/min/max/std: Statistics computed between *change points* only
+
+    Change-point detection: Rates are computed between points where the counter value
+    actually changed, not between every sample. This avoids misleading statistics when
+    sampling faster than the server updates (e.g., sampling at 10Hz when server updates
+    at 1Hz would otherwise show many 0/s rates followed by a spike).
+
+    Rate fields are None when:
+    - Duration is zero (insufficient time)
+    - No value changes occurred (nothing to compute rates from)
     """
 
     # Delta statistics
     delta: float = Field(description="Change over the aggregation period")
-    # Rate statistics (delta per second)
-    rate_avg: float = Field(description="Average rate per second (delta/duration)")
-    rate_min: float = Field(description="Minimum instantaneous rate per second")
-    rate_max: float = Field(description="Maximum instantaneous rate per second")
-    rate_std: float = Field(description="Standard deviation of instantaneous rates")
+    # Overall rate (best measure of throughput)
+    rate_overall: float | None = Field(
+        default=None, description="Overall rate per second (delta/duration)"
+    )
+    # Instantaneous rate statistics (from rates between change points)
+    rate_avg: float | None = Field(
+        default=None, description="Time-weighted average rate between change points"
+    )
+    rate_min: float | None = Field(
+        default=None, description="Minimum point-to-point rate per second"
+    )
+    rate_max: float | None = Field(
+        default=None, description="Maximum point-to-point rate per second"
+    )
+    rate_std: float | None = Field(
+        default=None, description="Standard deviation of point-to-point rates"
+    )
 
     @classmethod
     def from_time_series(
@@ -192,125 +190,107 @@ class CounterExportStats(AIPerfBaseModel):
 
         # Total delta and duration
         total_delta = float(filtered_vals[-1]) - ref_value
-        duration_s = max((filtered_ts[-1] - ref_ts) / 1e9, 1e-9)
+        duration_ns = filtered_ts[-1] - ref_ts
 
-        # Point-to-point rates (include ref→first transition)
+        # Rate calculation - None if duration is zero
+        if duration_ns <= 0:
+            return cls(
+                delta=total_delta,
+                rate_overall=None,
+                rate_avg=None,
+                rate_min=None,
+                rate_max=None,
+                rate_std=None,
+            )
+
+        duration_s = duration_ns / NANOS_PER_SECOND
+
+        # Build full series including reference point
         if ref_idx is not None:
             all_ts = np.concatenate([[ref_ts], filtered_ts])
             all_vals = np.concatenate([[ref_value], filtered_vals])
         else:
             all_ts, all_vals = filtered_ts, filtered_vals
 
+        # Find change points (indices where value differs from previous)
+        # This avoids the "0/s 0/s 0/s 1000/s" problem when sampling faster than server updates
         if len(all_vals) > 1:
-            deltas = np.diff(all_vals)
-            time_deltas_s = np.maximum(np.diff(all_ts) / 1e9, 1e-9)
-            rates = deltas / time_deltas_s
-        else:
-            rates = np.array([total_delta / duration_s])
+            # Always include first point, then points where value changed
+            value_changed = np.diff(all_vals) != 0
+            change_indices = np.concatenate([[0], np.where(value_changed)[0] + 1])
 
+            if len(change_indices) > 1:
+                # Extract timestamps and values at change points
+                change_ts = all_ts[change_indices]
+                change_vals = all_vals[change_indices]
+
+                # Compute rates between consecutive change points
+                deltas = np.diff(change_vals)
+                time_deltas_ns = np.diff(change_ts)
+
+                # Filter out any zero-duration intervals (shouldn't happen, but safety)
+                valid_mask = time_deltas_ns > 0
+                if np.any(valid_mask):
+                    time_deltas_s = time_deltas_ns[valid_mask] / NANOS_PER_SECOND
+                    valid_deltas = deltas[valid_mask]
+                    rates = valid_deltas / time_deltas_s
+
+                    # Time-weighted average: sum(deltas) / sum(durations)
+                    # This weights each rate by how long that rate was observed
+                    rate_avg = float(np.sum(valid_deltas) / np.sum(time_deltas_s))
+
+                    # Use sample std (ddof=1) for unbiased estimate; 0 for single rate
+                    rate_std = float(np.std(rates, ddof=1)) if len(rates) > 1 else 0.0
+
+                    return cls(
+                        delta=total_delta,
+                        rate_overall=total_delta / duration_s,
+                        rate_avg=rate_avg,
+                        rate_min=float(np.min(rates)),
+                        rate_max=float(np.max(rates)),
+                        rate_std=rate_std,
+                    )
+
+        # Not enough change points for rate statistics
         return cls(
             delta=total_delta,
-            rate_avg=total_delta / duration_s,
-            rate_min=float(np.min(rates)),
-            rate_max=float(np.max(rates)),
-            rate_std=float(np.std(rates)),
+            rate_overall=total_delta / duration_s,
+            rate_avg=None,
+            rate_min=None,
+            rate_max=None,
+            rate_std=None,
         )
 
 
 class HistogramExportStats(AIPerfBaseModel):
-    """Export statistics for histogram metrics - value distribution + observation rates.
+    """Export statistics for histogram metrics - value distribution + rates.
 
     Histograms track distributions (e.g., request latencies). We report:
-    - Value stats: avg observed value (sum/count)
-    - Rate stats: observation_rate (count/sec) with variability over time
-    - Estimated percentiles from bucket distribution using histogram_quantile
+    - Delta stats: count_delta, sum_delta, avg over the aggregation period
+    - Rate: observations per second
     - Raw bucket data for downstream analysis
-
-    Note: Estimated percentiles use linear interpolation between bucket boundaries
-    and may have 10-30% error depending on bucket granularity. These are standard
-    Prometheus histogram_quantile estimates used for SLO monitoring.
     """
 
-    # Observation statistics
-    observation_count: int = Field(
-        description="Total number of observations recorded (e.g., total requests measured)"
+    # Delta statistics over the aggregation period
+    count_delta: float = Field(
+        description="Change in observation count over the aggregation period"
     )
-    sum: float = Field(
-        description="Sum of all observed values (e.g., total latency in seconds across all requests)"
+    sum_delta: float = Field(
+        description="Change in sum of observed values over the aggregation period"
     )
     avg: float = Field(
-        description="Average value per observation (sum/observation_count). E.g., for latency histograms, this is average latency per request"
+        description="Average value per observation (sum_delta/count_delta)"
     )
-    # Observation rate
-    observation_rate: float = Field(
-        default=0.0,
-        description="Average observation rate (observations per second)",
+    # Rate - None if duration is zero
+    rate: float | None = Field(
+        default=None,
+        description="Observations per second (count_delta/duration)",
     )
-    # Raw bucket data for custom analysis
-    buckets: dict[str, float] = Field(
-        description='Bucket upper bounds (le="less than or equal") to delta counts. Keys are strings like "0.01", "0.1", "1.0"'
+    # Raw bucket data for custom analysis (None if counter reset detected)
+    buckets: dict[str, float] | None = Field(
+        default=None,
+        description='Bucket upper bounds (le="less than or equal") to delta counts. None if counter reset detected during collection.',
     )
-    # Enhanced metrics
-    estimated_percentiles: dict[str, float] = Field(
-        description="Estimated percentiles from bucket distribution using histogram_quantile (p50, p90, p95, p99). Uses linear interpolation with ±10-30% accuracy depending on bucket granularity"
-    )
-
-    @staticmethod
-    def _process_buckets(buckets: dict[str, float]) -> list[tuple[float, float]]:
-        """Process and sort histogram buckets for percentile computation."""
-        if not buckets:
-            return []
-
-        numeric: list[tuple[float, float]] = []
-        inf_count = None
-
-        for le_str, count in buckets.items():
-            if le_str == "+Inf":
-                inf_count = count
-            else:
-                numeric.append((float(le_str), count))
-
-        numeric.sort()
-
-        if inf_count is not None:
-            upper_bound = numeric[-1][0] * 2 if numeric else 1e10
-            numeric.append((upper_bound, inf_count))
-
-        return numeric
-
-    @staticmethod
-    def _estimate_percentiles(
-        buckets: dict[str, float], total_count: float
-    ) -> dict[str, float]:
-        """Estimate p50, p90, p95, p99 from histogram buckets."""
-        if total_count == 0 or not buckets:
-            return {"p50": 0.0, "p90": 0.0, "p95": 0.0, "p99": 0.0}
-
-        processed = HistogramExportStats._process_buckets(buckets)
-
-        result = {}
-        for percentile, key in [
-            (0.50, "p50"),
-            (0.90, "p90"),
-            (0.95, "p95"),
-            (0.99, "p99"),
-        ]:
-            target_rank = percentile * total_count
-            prev_le, prev_count = 0.0, 0.0
-
-            for le, count in processed:
-                if count >= target_rank:
-                    if count == prev_count:
-                        result[key] = le
-                    else:
-                        fraction = (target_rank - prev_count) / (count - prev_count)
-                        result[key] = prev_le + fraction * (le - prev_le)
-                    break
-                prev_le, prev_count = le, count
-            else:
-                result[key] = processed[-1][0] if processed else 0.0
-
-        return result
 
     @classmethod
     def from_time_series(
@@ -340,36 +320,40 @@ class HistogramExportStats(AIPerfBaseModel):
         )
 
         # Compute deltas
-        total_sum = final_sum - ref_sum
-        total_count = int(final_count - ref_count)
-        duration_s = max((final_ts - ref_ts) / 1e9, 1e-9)
+        sum_delta = final_sum - ref_sum
+        count_delta = final_count - ref_count
+        duration_ns = final_ts - ref_ts
 
-        avg_value = total_sum / total_count if total_count > 0 else 0.0
-        observation_rate = total_count / duration_s
+        avg_value = sum_delta / count_delta if count_delta > 0 else 0.0
+        rate = (
+            count_delta / (duration_ns / NANOS_PER_SECOND) if duration_ns > 0 else None
+        )
 
         # Bucket delta calculation
-        if ref_idx is not None:
-            ref_buckets = (
-                ts._bucket_snapshots[ref_idx]
-                if ref_idx < len(ts._bucket_snapshots)
-                else {}
-            )
-            bucket_deltas = {
-                le: max(0.0, final_val - ref_buckets.get(le, 0.0))
-                for le, final_val in final_buckets.items()
-            }
-        else:
-            bucket_deltas = dict(final_buckets)
-
-        estimated_percentiles = cls._estimate_percentiles(bucket_deltas, total_count)
+        # If any delta is negative (counter reset), return None for buckets
+        # since the data is invalid/incomplete
+        ref_bucket_idx = ref_idx if ref_idx is not None else 0
+        ref_buckets = (
+            ts._bucket_snapshots[ref_bucket_idx]
+            if ref_bucket_idx < len(ts._bucket_snapshots)
+            else {}
+        )
+        bucket_deltas: dict[str, float] | None = {}
+        for le, final_val in final_buckets.items():
+            ref_val = ref_buckets.get(le, 0.0)
+            delta = final_val - ref_val
+            if delta < 0:
+                # Counter reset detected - data is invalid
+                bucket_deltas = None
+                break
+            bucket_deltas[le] = delta
 
         return cls(
-            observation_count=total_count,
-            sum=total_sum,
+            count_delta=count_delta,
+            sum_delta=sum_delta,
             avg=avg_value,
-            observation_rate=observation_rate,
+            rate=rate,
             buckets=bucket_deltas,
-            estimated_percentiles=estimated_percentiles,
         )
 
 
@@ -377,30 +361,31 @@ class SummaryExportStats(AIPerfBaseModel):
     """Export statistics for summary metrics - server-computed quantiles.
 
     Summaries provide pre-computed quantiles from the server. We report:
-    - Value stats: avg observed value (sum/count)
+    - Delta stats: count_delta, sum_delta, avg over the aggregation period
     - Quantiles: Final values from server (exact, not estimated)
-    - Rate stats: observation_rate (count/sec)
+    - Rate: observations per second
     """
 
-    # Observation statistics
-    observation_count: int = Field(
-        description="Total number of observations recorded (e.g., total requests measured)"
+    # Delta statistics over the aggregation period
+    count_delta: float = Field(
+        description="Change in observation count over the aggregation period"
     )
-    sum: float = Field(
-        description="Sum of all observed values (e.g., total latency in seconds across all requests)"
+    sum_delta: float = Field(
+        description="Change in sum of observed values over the aggregation period"
     )
     avg: float = Field(
-        description="Average value per observation (sum/observation_count). E.g., for latency summaries, this is average latency per request"
+        description="Average value per observation (sum_delta/count_delta)"
     )
-    # Server-computed quantiles (exact values from server, keys are quantile strings like "0.5", "0.99")
+    # Server-computed quantiles - NOTE: These are cumulative values over the server's lifetime,
+    # not period-specific. Prometheus summaries cannot provide quantiles for a specific time window.
     quantiles: dict[str, float] = Field(
         default_factory=dict,
-        description="Server-computed quantiles (exact values). Keys are quantile strings (e.g., '0.5', '0.9', '0.99')",
+        description="Server-computed quantiles (cumulative over server lifetime, not period-specific). Keys are quantile strings (e.g., '0.5', '0.9', '0.99')",
     )
-    # Observation rate
-    observation_rate: float = Field(
-        default=0.0,
-        description="Average observation rate (observations per second)",
+    # Rate - None if duration is zero
+    rate: float | None = Field(
+        default=None,
+        description="Observations per second (count_delta/duration)",
     )
 
     @classmethod
@@ -425,19 +410,21 @@ class SummaryExportStats(AIPerfBaseModel):
         final_ts = ts.timestamps[final_idx]
         final_quantiles = ts._quantile_snapshots[final_idx]
 
-        total_sum = final_sum - ref_sum
-        total_count = int(final_count - ref_count)
-        duration_s = max((final_ts - ref_ts) / 1e9, 1e-9)
+        sum_delta = final_sum - ref_sum
+        count_delta = final_count - ref_count
+        duration_ns = final_ts - ref_ts
 
-        avg_value = total_sum / total_count if total_count > 0 else 0.0
-        observation_rate = total_count / duration_s
+        avg_value = sum_delta / count_delta if count_delta > 0 else 0.0
+        rate = (
+            count_delta / (duration_ns / NANOS_PER_SECOND) if duration_ns > 0 else None
+        )
 
         return cls(
-            observation_count=total_count,
-            sum=total_sum,
+            count_delta=count_delta,
+            sum_delta=sum_delta,
             avg=avg_value,
             quantiles=dict(final_quantiles),
-            observation_rate=observation_rate,
+            rate=rate,
         )
 
 
@@ -529,6 +516,17 @@ class ServerMetricsEndpointSummary(AIPerfBaseModel):
     """
 
     endpoint_url: str
+    # Collection metadata
+    duration_seconds: float = Field(
+        description="Total duration of metrics collection for this endpoint"
+    )
+    scrape_count: int = Field(
+        description="Number of successful scrapes from this endpoint"
+    )
+    avg_scrape_latency_ms: float = Field(
+        description="Average time to scrape metrics from this endpoint in milliseconds"
+    )
+    # Metric data
     info_metrics: dict[str, InfoMetricData] | None = Field(
         default=None,
         description="Static info metrics (ending in _info) with their label data",

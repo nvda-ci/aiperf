@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.constants import NANOS_PER_SECOND
+from aiperf.common.constants import NANOS_PER_MILLIS, NANOS_PER_SECOND
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     AIPerfUIType,
@@ -855,8 +855,27 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                     for name, info in endpoint_data.metadata.info_metrics.items()
                 }
 
+            # Compute collection metadata from time series
+            ts = endpoint_data.time_series
+            duration_seconds = (
+                (ts.last_timestamp_ns - ts.first_timestamp_ns) / NANOS_PER_SECOND
+                if ts._snapshot_count > 0
+                else 0.0
+            )
+            scrape_count = ts._snapshot_count
+            avg_scrape_latency_ms = (
+                sum(ts._scrape_latencies_ns)
+                / len(ts._scrape_latencies_ns)
+                / NANOS_PER_MILLIS
+                if ts._scrape_latencies_ns
+                else 0.0
+            )
+
             summaries[endpoint_display] = ServerMetricsEndpointSummary(
                 endpoint_url=endpoint_url,
+                duration_seconds=duration_seconds,
+                scrape_count=scrape_count,
+                avg_scrape_latency_ms=avg_scrape_latency_ms,
                 info_metrics=info_metrics,
                 metrics=metrics,
             )
