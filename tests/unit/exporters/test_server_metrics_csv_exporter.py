@@ -364,14 +364,17 @@ class TestServerMetricsCsvExporterGenerateContent:
         exporter = ServerMetricsCsvExporter(config)
         content = exporter._generate_content()
 
-        # Check for column headers for each metric type
-        assert "avg,min,max,std,p50,p90,p95,p99" in content  # gauge columns
+        # Check for column headers for each metric type (all include Type column)
+        assert "Endpoint,Type,Metric,Labels,avg,min,max" in content  # gauge
+        assert "Endpoint,Type,Metric,Labels,delta,rate_overall" in content  # counter
         assert (
-            "delta,rate_overall,rate_avg,rate_min,rate_max,rate_std" in content
-        )  # counter
-        assert (
-            "count_delta,sum_delta,avg,rate" in content
-        )  # histogram/summary base columns
+            "Endpoint,Type,Metric,Labels,count_delta,sum_delta" in content
+        )  # histogram/summary
+        # Check that metric type values appear in the data
+        assert ",gauge," in content
+        assert ",counter," in content
+        assert ",histogram," in content
+        assert ",summary," in content
 
     def test_generate_content_gauge_section_has_correct_columns(
         self,

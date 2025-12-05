@@ -56,6 +56,7 @@ from aiperf.common.models.export_models import (
     TelemetrySummary,
     TimesliceCollectionExportData,
     TimesliceData,
+    histogram_quantile,
 )
 from aiperf.common.models.health_models import (
     CPUTimes,
@@ -272,4 +273,5 @@ __all__ = [
     "WorkerTaskStats",
     "create_balanced_distribution",
     "create_uniform_distribution",
+    "histogram_quantile",
 ]

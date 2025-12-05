@@ -145,7 +145,60 @@ Aggregated statistics computed from time-series data. Metrics from all endpoints
 }
 ```
 
-### 3. Metadata: `server_metrics_metadata.json`
+### 3. CSV Export: `server_metrics.csv`
+
+Tabular export for spreadsheet and pandas analysis. Sections are separated by blank lines, each with its own column headers based on metric type. Sections appear in order: gauge, counter, histogram, summary (only if metrics of that type exist).
+
+```csv
+Endpoint,Type,Metric,Labels,avg,min,max,std,p50,p90,p95,p99
+localhost:8000,gauge,vllm:gpu_cache_usage_perc,,0.6500,0.4500,0.8500,0.1200,0.6400,0.7900,0.8200,0.8400
+localhost:8000,gauge,vllm:num_requests_running,,4.2500,1.0000,8.0000,2.1000,4.0000,7.0000,7.5000,7.9000
+
+Endpoint,Type,Metric,Labels,delta,rate_overall,rate_avg,rate_min,rate_max,rate_std
+localhost:8000,counter,vllm:prompt_tokens_total,,125000,2500.0000,2450.0000,1800.0000,3200.0000,420.0000
+localhost:8000,counter,vllm:request_success_total,,1000.0000,200.0000,195.0000,150.0000,280.0000,35.2000
+
+Endpoint,Type,Metric,Labels,count_delta,sum_delta,avg,rate,0.01,0.1,1.0,+Inf
+localhost:8000,histogram,vllm:e2e_request_latency_seconds,,1000.0000,856.2000,0.8562,200.0000,10.0000,150.0000,920.0000,1000.0000
+localhost:8000,histogram,vllm:time_to_first_token_seconds,,1000.0000,125.5000,0.1255,200.0000,50.0000,450.0000,980.0000,1000.0000
+
+Endpoint,Type,Metric,Labels,count_delta,sum_delta,avg,rate,0.5,0.9,0.95,0.99
+localhost:8000,summary,vllm:request_latency_seconds,,1000.0000,245.8000,0.2458,200.0000,0.2200,0.3800,0.4500,0.6200
+```
+
+**Column structure by metric type:**
+- **Gauge:** `Endpoint,Type,Metric,Labels,avg,min,max,std,p50,p90,p95,p99`
+- **Counter:** `Endpoint,Type,Metric,Labels,delta,rate_overall,rate_avg,rate_min,rate_max,rate_std`
+- **Histogram:** `Endpoint,Type,Metric,Labels,count_delta,sum_delta,avg,rate,<bucket_boundaries>...`
+- **Summary:** `Endpoint,Type,Metric,Labels,count_delta,sum_delta,avg,rate,<quantile_keys>...`
+
+**Formatting details:**
+- Metrics are sorted alphabetically by metric name, then endpoint, then labels
+- Numbers are formatted to 4 decimal places; missing values are empty
+- Labels are formatted as `key1=value1,key2=value2` (sorted by key)
+- Histograms with different bucket boundaries get separate sub-sections
+- Summaries with different quantile keys get separate sub-sections
+
+**Loading with pandas:**
+```python
+from io import StringIO
+import pandas as pd
+
+with open("server_metrics.csv") as f:
+    content = f.read()
+
+# Split on blank lines and parse each section
+sections = [pd.read_csv(StringIO(s)) for s in content.strip().split('\n\n') if s.strip()]
+
+# Access by metric type
+by_type = {df["Type"].iloc[0]: df for df in sections}
+gauges = by_type.get("gauge")
+counters = by_type.get("counter")
+histograms = by_type.get("histogram")
+summaries = by_type.get("summary")
+```
+
+### 4. Metadata: `server_metrics_metadata.json`
 
 Metric schemas and info metrics:
 

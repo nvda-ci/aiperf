@@ -42,6 +42,82 @@ if TYPE_CHECKING:
 # ============================================================================
 
 
+def histogram_quantile(q: float, buckets: dict[str, float]) -> float | None:
+    """Estimate quantile from Prometheus histogram buckets using linear interpolation.
+
+    Implements Prometheus's histogram_quantile() algorithm. Assumes observations
+    are uniformly distributed within each bucket (linear interpolation).
+
+    Note: Accuracy depends on bucket granularity. Finer bucket boundaries around
+    percentiles of interest yield more accurate estimates.
+
+    Args:
+        q: Quantile to compute (0.0 to 1.0, e.g., 0.95 for p95)
+        buckets: Dict mapping bucket upper bounds to cumulative counts
+                 e.g., {"0.01": 50, "0.1": 200, "1.0": 950, "+Inf": 1000}
+
+    Returns:
+        Estimated quantile value, or None if insufficient data
+    """
+    if not buckets or q < 0 or q > 1:
+        return None
+
+    # Parse and sort buckets by upper bound
+    parsed: list[tuple[float, float]] = []
+    for le, count in buckets.items():
+        upper = float("inf") if le == "+Inf" else float(le)
+        parsed.append((upper, count))
+    parsed.sort(key=lambda x: x[0])
+
+    # Need at least 2 buckets (one real + +Inf)
+    if len(parsed) < 2:
+        return None
+
+    # Total observations (from +Inf bucket)
+    total = parsed[-1][1]
+    if total == 0:
+        return None
+
+    # Target rank
+    rank = q * total
+
+    # Find the bucket containing our target rank
+    prev_upper = 0.0
+    prev_count = 0.0
+
+    for i, (upper, cumulative_count) in enumerate(parsed):
+        if cumulative_count >= rank:
+            # Handle +Inf bucket: return upper bound of second-highest bucket
+            if upper == float("inf"):
+                if i > 0:
+                    return parsed[i - 1][0]
+                return None
+
+            # Count in this bucket
+            bucket_count = cumulative_count - prev_count
+            if bucket_count == 0:
+                prev_upper = upper
+                prev_count = cumulative_count
+                continue
+
+            # Rank within this bucket
+            rank_in_bucket = rank - prev_count
+
+            # Linear interpolation
+            # Handle first bucket: assume lower bound of 0 if upper > 0
+            bucket_start = prev_upper if prev_upper > 0 or i > 0 else 0.0
+
+            return bucket_start + (upper - bucket_start) * (
+                rank_in_bucket / bucket_count
+            )
+
+        prev_upper = upper
+        prev_count = cumulative_count
+
+    # Quantile beyond all buckets (shouldn't happen with +Inf)
+    return parsed[-2][0] if len(parsed) >= 2 else None
+
+
 class InfoMetricData(AIPerfBaseModel):
     """Complete data for an info metric including label data.
 
@@ -266,6 +342,7 @@ class HistogramExportStats(AIPerfBaseModel):
     Histograms track distributions (e.g., request latencies). We report:
     - Delta stats: count_delta, sum_delta, avg over the aggregation period
     - Rate: observations per second
+    - Estimated percentiles: p50, p90, p95, p99 computed via linear interpolation
     - Raw bucket data for downstream analysis
     """
 
@@ -283,6 +360,24 @@ class HistogramExportStats(AIPerfBaseModel):
     rate: float | None = Field(
         default=None,
         description="Observations per second (count_delta/duration)",
+    )
+    # Estimated percentiles from bucket interpolation (like Prometheus histogram_quantile)
+    # Accuracy depends on bucket granularity - finer buckets yield better estimates
+    p50: float | None = Field(
+        default=None,
+        description="Estimated 50th percentile (median) via linear interpolation from buckets",
+    )
+    p90: float | None = Field(
+        default=None,
+        description="Estimated 90th percentile via linear interpolation from buckets",
+    )
+    p95: float | None = Field(
+        default=None,
+        description="Estimated 95th percentile via linear interpolation from buckets",
+    )
+    p99: float | None = Field(
+        default=None,
+        description="Estimated 99th percentile via linear interpolation from buckets",
     )
     # Raw bucket data for custom analysis (None if counter reset detected)
     buckets: dict[str, float] | None = Field(
@@ -346,11 +441,21 @@ class HistogramExportStats(AIPerfBaseModel):
                 break
             bucket_deltas[le] = delta
 
+        # Compute estimated percentiles from bucket deltas
+        p50 = histogram_quantile(0.50, bucket_deltas) if bucket_deltas else None
+        p90 = histogram_quantile(0.90, bucket_deltas) if bucket_deltas else None
+        p95 = histogram_quantile(0.95, bucket_deltas) if bucket_deltas else None
+        p99 = histogram_quantile(0.99, bucket_deltas) if bucket_deltas else None
+
         return cls(
             count_delta=count_delta,
             sum_delta=sum_delta,
             avg=avg_value,
             rate=rate,
+            p50=p50,
+            p90=p90,
+            p95=p95,
+            p99=p99,
             buckets=bucket_deltas,
         )
 

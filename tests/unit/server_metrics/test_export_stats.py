@@ -9,6 +9,7 @@ from aiperf.common.models.export_models import (
     GaugeExportStats,
     HistogramExportStats,
     SummaryExportStats,
+    histogram_quantile,
 )
 from aiperf.common.models.server_metrics_models import (
     HistogramSnapshot,
@@ -236,12 +237,12 @@ class TestCounterExportStats:
         ts.append_snapshot(1 * NANOS_PER_SECOND, counter_metrics={"requests": 100.0})
         ts.append_snapshot(5 * NANOS_PER_SECOND, counter_metrics={"requests": 500.0})
 
-        stats = CounterExportStats.from_time_series(ts.counters["requests"])
+        _stats = CounterExportStats.from_time_series(ts.counters["requests"])
 
         # Rates: 100/s (1s interval), 100/s (4s interval)
         # Simple mean would be: (100 + 100) / 2 = 100
         # Time-weighted: (100 + 400) / (1 + 4) = 500 / 5 = 100
-        # (In this case they're equal because rates are the same)
+        # (In this case they're equal because rates are the same, so we skip assertions)
 
         # Let's verify with different rates:
         ts2 = ServerMetricsTimeSeries()
@@ -381,6 +382,175 @@ class TestHistogramExportStats:
 
         # Negative deltas indicate reset - return None for invalid data
         assert stats.buckets is None
+
+    def test_histogram_estimated_percentiles(self):
+        """Test histogram computes estimated p50, p90, p95, p99 from buckets."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.1": 0.0, "0.5": 0.0, "1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                # 1000 observations: 100 in [0,0.1], 400 in (0.1,0.5], 400 in (0.5,1.0], 100 in (1.0,+Inf]
+                (
+                    NANOS_PER_SECOND,
+                    hist(
+                        {"0.1": 100.0, "0.5": 500.0, "1.0": 900.0, "+Inf": 1000.0},
+                        500.0,
+                        1000.0,
+                    ),
+                ),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        # p50 = 500th observation, falls in (0.1, 0.5] bucket
+        # rank_in_bucket = 500 - 100 = 400, bucket_count = 400
+        # p50 = 0.1 + (0.5 - 0.1) * (400/400) = 0.5
+        assert stats.p50 == pytest.approx(0.5, rel=0.01)
+
+        # p90 = 900th observation, falls in (0.5, 1.0] bucket
+        # rank_in_bucket = 900 - 500 = 400, bucket_count = 400
+        # p90 = 0.5 + (1.0 - 0.5) * (400/400) = 1.0
+        assert stats.p90 == pytest.approx(1.0, rel=0.01)
+
+        # p95 = 950th observation, falls in (1.0, +Inf) bucket
+        # When quantile falls in +Inf bucket, return second-highest bound
+        assert stats.p95 == pytest.approx(1.0, rel=0.01)
+
+        # p99 = 990th observation, also in +Inf bucket
+        assert stats.p99 == pytest.approx(1.0, rel=0.01)
+
+    def test_histogram_percentiles_none_on_counter_reset(self):
+        """Test histogram percentiles are None when counter reset detected."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.1": 1000.0, "+Inf": 2000.0}, 500.0, 2000.0)),
+                # Counter reset - values decreased
+                (NANOS_PER_SECOND, hist({"0.1": 50.0, "+Inf": 100.0}, 25.0, 100.0)),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.buckets is None
+        assert stats.p50 is None
+        assert stats.p90 is None
+        assert stats.p95 is None
+        assert stats.p99 is None
+
+
+# =============================================================================
+# histogram_quantile Function Tests
+# =============================================================================
+
+
+class TestHistogramQuantile:
+    """Test histogram_quantile function (Prometheus-style linear interpolation)."""
+
+    def test_basic_linear_interpolation(self):
+        """Test basic linear interpolation within a bucket."""
+        # 100 observations total, evenly distributed:
+        # 50 in [0, 0.5], 50 in (0.5, 1.0]
+        buckets = {"0.5": 50.0, "1.0": 100.0, "+Inf": 100.0}
+
+        # p50 = 50th observation, at the boundary
+        assert histogram_quantile(0.50, buckets) == pytest.approx(0.5, rel=0.01)
+
+        # p25 = 25th observation, in first bucket
+        # rank=25, bucket_count=50, bucket_start=0, bucket_end=0.5
+        # 0 + (0.5 - 0) * (25/50) = 0.25
+        assert histogram_quantile(0.25, buckets) == pytest.approx(0.25, rel=0.01)
+
+        # p75 = 75th observation, in second bucket
+        # rank_in_bucket=75-50=25, bucket_count=50
+        # 0.5 + (1.0 - 0.5) * (25/50) = 0.75
+        assert histogram_quantile(0.75, buckets) == pytest.approx(0.75, rel=0.01)
+
+    def test_quantile_in_inf_bucket_returns_second_highest(self):
+        """Test quantile in +Inf bucket returns upper bound of second-highest bucket."""
+        buckets = {"0.1": 90.0, "1.0": 95.0, "+Inf": 100.0}
+
+        # p99 = 99th observation, in +Inf bucket (95-100)
+        # Should return 1.0 (second-highest bucket upper bound)
+        assert histogram_quantile(0.99, buckets) == 1.0
+
+    def test_first_bucket_assumes_zero_lower_bound(self):
+        """Test first bucket assumes lower bound of 0 when upper > 0."""
+        buckets = {"0.1": 100.0, "+Inf": 100.0}
+
+        # All 100 observations in first bucket [0, 0.1]
+        # p50 = 0 + (0.1 - 0) * (50/100) = 0.05
+        assert histogram_quantile(0.50, buckets) == pytest.approx(0.05, rel=0.01)
+
+    def test_empty_buckets_returns_none(self):
+        """Test empty buckets returns None."""
+        assert histogram_quantile(0.50, {}) is None
+        assert histogram_quantile(0.50, None) is None  # type: ignore[arg-type]
+
+    def test_zero_observations_returns_none(self):
+        """Test zero total observations returns None."""
+        buckets = {"0.1": 0.0, "1.0": 0.0, "+Inf": 0.0}
+        assert histogram_quantile(0.50, buckets) is None
+
+    def test_invalid_quantile_returns_none(self):
+        """Test invalid quantile values return None."""
+        buckets = {"0.1": 50.0, "+Inf": 100.0}
+        assert histogram_quantile(-0.1, buckets) is None
+        assert histogram_quantile(1.1, buckets) is None
+
+    def test_single_real_bucket(self):
+        """Test histogram with only one real bucket + Inf."""
+        buckets = {"1.0": 100.0, "+Inf": 100.0}
+
+        # All observations in [0, 1.0]
+        assert histogram_quantile(0.50, buckets) == pytest.approx(0.5, rel=0.01)
+        assert histogram_quantile(0.90, buckets) == pytest.approx(0.9, rel=0.01)
+
+    def test_unsorted_buckets_handled(self):
+        """Test buckets are sorted correctly regardless of input order."""
+        # Deliberately unsorted
+        buckets = {"+Inf": 100.0, "0.1": 25.0, "1.0": 75.0, "0.5": 50.0}
+
+        # Should work the same as sorted input
+        assert histogram_quantile(0.50, buckets) == pytest.approx(0.5, rel=0.01)
+
+    def test_boundary_quantiles(self):
+        """Test edge quantiles q=0 and q=1."""
+        buckets = {"0.5": 50.0, "1.0": 100.0, "+Inf": 100.0}
+
+        # q=0 should return 0 (start of first bucket)
+        assert histogram_quantile(0.0, buckets) == pytest.approx(0.0, rel=0.01)
+
+        # q=1 should return upper bound of second-highest (falls in +Inf)
+        assert histogram_quantile(1.0, buckets) == 1.0
+
+    def test_realistic_latency_histogram(self):
+        """Test with realistic latency bucket boundaries."""
+        # Typical latency distribution: most requests fast, long tail
+        buckets = {
+            "0.005": 100.0,  # 100 requests < 5ms
+            "0.01": 400.0,  # 300 more < 10ms (400 cumulative)
+            "0.025": 800.0,  # 400 more < 25ms (800 cumulative)
+            "0.05": 950.0,  # 150 more < 50ms (950 cumulative)
+            "0.1": 990.0,  # 40 more < 100ms (990 cumulative)
+            "0.25": 998.0,  # 8 more < 250ms (998 cumulative)
+            "0.5": 999.0,  # 1 more < 500ms (999 cumulative)
+            "1.0": 1000.0,  # 1 more < 1s (1000 cumulative)
+            "+Inf": 1000.0,  # no requests > 1s
+        }
+
+        # p50 = 500th request, in (0.01, 0.025] bucket
+        # rank_in_bucket = 500 - 400 = 100, bucket_count = 400
+        # p50 = 0.01 + (0.025 - 0.01) * (100/400) = 0.01 + 0.00375 = 0.01375
+        assert histogram_quantile(0.50, buckets) == pytest.approx(0.01375, rel=0.01)
+
+        # p99 = 990th request, at boundary of (0.05, 0.1] bucket
+        assert histogram_quantile(0.99, buckets) == pytest.approx(0.1, rel=0.01)
 
 
 # =============================================================================

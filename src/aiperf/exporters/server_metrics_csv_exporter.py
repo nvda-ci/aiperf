@@ -26,7 +26,16 @@ COUNTER_STAT_KEYS = [
     "rate_max",
     "rate_std",
 ]
-HISTOGRAM_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
+HISTOGRAM_STAT_KEYS = [
+    "count_delta",
+    "sum_delta",
+    "avg",
+    "rate",
+    "p50",
+    "p90",
+    "p95",
+    "p99",
+]
 SUMMARY_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
 
 
@@ -96,8 +105,6 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                 continue
 
             if not first_section:
-                # Add blank lines between sections
-                writer.writerow([])
                 writer.writerow([])
 
             self._write_section(writer, metric_type, metrics_by_type[metric_type])
@@ -166,7 +173,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
     ) -> None:
         """Write a simple section for gauge or counter metrics."""
         stat_keys = self._get_stat_keys_for_type(metric_type)
-        header = ["Endpoint", "Metric", "Labels"] + stat_keys
+        header = ["Endpoint", "Type", "Metric", "Labels"] + stat_keys
         writer.writerow(header)
 
         sorted_metrics = sorted(
@@ -175,7 +182,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
         for endpoint, metric_name, _description, labels, stats in sorted_metrics:
             self._write_metric_row(
-                writer, endpoint, metric_name, labels, stats, stat_keys
+                writer, metric_type, endpoint, metric_name, labels, stats, stat_keys
             )
 
     def _write_histogram_sections(
@@ -193,7 +200,9 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                 writer.writerow([])
 
             stat_keys = HISTOGRAM_STAT_KEYS
-            header = ["Endpoint", "Metric", "Labels"] + stat_keys + list(bucket_keys)
+            header = (
+                ["Endpoint", "Type", "Metric", "Labels"] + stat_keys + list(bucket_keys)
+            )
             writer.writerow(header)
 
             sorted_metrics = sorted(
@@ -202,7 +211,14 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
             for endpoint, metric_name, _description, labels, stats in sorted_metrics:
                 self._write_metric_row_with_dict(
-                    writer, endpoint, metric_name, labels, stats, stat_keys, "buckets"
+                    writer,
+                    "histogram",
+                    endpoint,
+                    metric_name,
+                    labels,
+                    stats,
+                    stat_keys,
+                    "buckets",
                 )
 
             first_group = False
@@ -222,7 +238,11 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                 writer.writerow([])
 
             stat_keys = SUMMARY_STAT_KEYS
-            header = ["Endpoint", "Metric", "Labels"] + stat_keys + list(quantile_keys)
+            header = (
+                ["Endpoint", "Type", "Metric", "Labels"]
+                + stat_keys
+                + list(quantile_keys)
+            )
             writer.writerow(header)
 
             sorted_metrics = sorted(
@@ -231,7 +251,14 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
             for endpoint, metric_name, _description, labels, stats in sorted_metrics:
                 self._write_metric_row_with_dict(
-                    writer, endpoint, metric_name, labels, stats, stat_keys, "quantiles"
+                    writer,
+                    "summary",
+                    endpoint,
+                    metric_name,
+                    labels,
+                    stats,
+                    stat_keys,
+                    "quantiles",
                 )
 
             first_group = False
@@ -267,6 +294,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
     def _write_metric_row(
         self,
         writer: csv.writer,
+        metric_type: str,
         endpoint: str,
         metric_name: str,
         labels: dict | None,
@@ -277,6 +305,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
         Args:
             writer: CSV writer object
+            metric_type: Type of metric (gauge, counter)
             endpoint: Normalized endpoint display name
             metric_name: Name of the metric
             labels: Label dict or None
@@ -287,7 +316,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
             ",".join(f"{k}={v}" for k, v in sorted(labels.items())) if labels else ""
         )
 
-        row = [endpoint, metric_name, labels_str]
+        row = [endpoint, metric_type, metric_name, labels_str]
 
         for stat in stat_keys:
             value = getattr(stats, stat, None)
@@ -298,6 +327,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
     def _write_metric_row_with_dict(
         self,
         writer: csv.writer,
+        metric_type: str,
         endpoint: str,
         metric_name: str,
         labels: dict | None,
@@ -309,6 +339,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
         Args:
             writer: CSV writer object
+            metric_type: Type of metric (histogram, summary)
             endpoint: Normalized endpoint display name
             metric_name: Name of the metric
             labels: Label dict or None
@@ -320,7 +351,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
             ",".join(f"{k}={v}" for k, v in sorted(labels.items())) if labels else ""
         )
 
-        row = [endpoint, metric_name, labels_str]
+        row = [endpoint, metric_type, metric_name, labels_str]
 
         for stat in stat_keys:
             value = getattr(stats, stat, None)
