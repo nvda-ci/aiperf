@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import re
 from collections.abc import Iterable
 from urllib.parse import urlparse
 
@@ -78,6 +79,9 @@ _METRIC_SUFFIX_TO_UNIT: dict[str, str] = {
     "_queries": "queries",
     "_preemptions": "preemptions",
     "_preemptions_total": "preemptions",  # Compound: preemption counter
+    "_reqs": "requests",  # Common shorthand (e.g., sglang:num_running_reqs)
+    # Rate units (unambiguous suffixes only)
+    "_gb_s": "GB/s",  # Throughput in GB/s (e.g., sglang:cache_transfer_gb_s)
     # Ratio/percentage units
     "_ratio": "ratio",
     "_percent": "percent",
@@ -116,6 +120,157 @@ def parse_unit_from_metric_name(metric_name: str) -> str | None:
         if name_lower.endswith(suffix):
             return _METRIC_SUFFIX_TO_UNIT[suffix]
     return None
+
+
+# Description-based unit patterns
+# Maps regex patterns to unit strings. Patterns are checked in order.
+# Uses named groups for clarity. All patterns are case-insensitive.
+_DESCRIPTION_UNIT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Explicit unit mentions: "in seconds", "in ms", etc.
+    (re.compile(r"\bin\s+seconds?\b", re.IGNORECASE), "seconds"),
+    (re.compile(r"\bin\s+milliseconds?\b", re.IGNORECASE), "milliseconds"),
+    (re.compile(r"\bin\s+ms\b", re.IGNORECASE), "milliseconds"),
+    (re.compile(r"\bin\s+nanoseconds?\b", re.IGNORECASE), "nanoseconds"),
+    (re.compile(r"\bin\s+ns\b", re.IGNORECASE), "nanoseconds"),
+    (re.compile(r"\bin\s+bytes?\b", re.IGNORECASE), "bytes"),
+    (re.compile(r"\bin\s+GB/s\b", re.IGNORECASE), "GB/s"),
+    (re.compile(r"\bin\s+MB/s\b", re.IGNORECASE), "MB/s"),
+    (re.compile(r"\bin\s+tokens?/s(?:ec(?:ond)?)?\b", re.IGNORECASE), "tokens/s"),
+    (re.compile(r"\bin\s+requests?/s(?:ec(?:ond)?)?\b", re.IGNORECASE), "requests/s"),
+    # Parenthetical unit mentions: "(seconds)", "(tokens/s)", etc.
+    (re.compile(r"\(seconds?\)", re.IGNORECASE), "seconds"),
+    (re.compile(r"\(milliseconds?\)", re.IGNORECASE), "milliseconds"),
+    (re.compile(r"\(ms\)", re.IGNORECASE), "milliseconds"),
+    (re.compile(r"\(nanoseconds?\)", re.IGNORECASE), "nanoseconds"),
+    (re.compile(r"\(ns\)", re.IGNORECASE), "nanoseconds"),
+    (re.compile(r"\(bytes?\)", re.IGNORECASE), "bytes"),
+    (re.compile(r"\(GB/s\)", re.IGNORECASE), "GB/s"),
+    (re.compile(r"\(MB/s\)", re.IGNORECASE), "MB/s"),
+    (re.compile(r"\(tokens?/s(?:ec(?:ond)?)?\)", re.IGNORECASE), "tokens/s"),
+    (re.compile(r"\(requests?/s(?:ec(?:ond)?)?\)", re.IGNORECASE), "requests/s"),
+]
+
+# Patterns for detecting ratio (0-1 scale) vs percent (0-100 scale)
+# These override suffix-based inference when present in descriptions.
+# Order matters: check ratio patterns first since they're more specific.
+_RATIO_RANGE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\(0\.0\s*[-–—to]+\s*1\.0\)", re.IGNORECASE),  # (0.0-1.0), (0.0 to 1.0)
+    re.compile(r"\(0\s*[-–—to]+\s*1\)", re.IGNORECASE),  # (0-1), (0 to 1)
+    re.compile(r"\b0\.0\s*[-–—to]+\s*1\.0\b", re.IGNORECASE),  # 0.0-1.0 without parens
+    re.compile(
+        r"\brange\s+0(?:\.0)?\s*(?:[-–—]|to)\s*1(?:\.0)?\b", re.IGNORECASE
+    ),  # range 0-1
+    # "1 means/is/equals/= 100 percent/%" patterns
+    re.compile(
+        r"(?:\b|\()1(?:\.0)?\s*(?:means|is|equals?|==?)\s*100\s*(?:%|percent)",
+        re.IGNORECASE,
+    ),
+]
+
+_PERCENT_RANGE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\(0\s*[-–—to]+\s*100\)", re.IGNORECASE),  # (0-100)
+    re.compile(r"\(0\.0\s*[-–—to]+\s*100\.0\)", re.IGNORECASE),  # (0.0-100.0)
+    re.compile(r"\b0\s*[-–—to]+\s*100\s*%", re.IGNORECASE),  # 0-100%
+    re.compile(r"\brange\s+0\s*[-–—to]+\s*100\b", re.IGNORECASE),  # range 0-100
+]
+
+
+def parse_scale_from_description(description: str | None) -> str | None:
+    """Detect ratio vs percent scale from description range indicators.
+
+    This function looks for explicit range indicators in descriptions to
+    distinguish between:
+    - ratio: Values in [0.0, 1.0] range (statistical convention)
+    - percent: Values in [0, 100] range
+
+    Args:
+        description: Metric description text, or None
+
+    Returns:
+        "ratio" if 0-1 range detected, "percent" if 0-100 range detected,
+        None if no range indicator found
+    """
+    if not description:
+        return None
+
+    # Check ratio patterns first (more specific)
+    for pattern in _RATIO_RANGE_PATTERNS:
+        if pattern.search(description):
+            return "ratio"
+
+    # Check percent patterns
+    for pattern in _PERCENT_RANGE_PATTERNS:
+        if pattern.search(description):
+            return "percent"
+
+    return None
+
+
+def parse_unit_from_description(description: str | None) -> str | None:
+    """Extract unit from metric description text.
+
+    Looks for explicit unit mentions like "in seconds", "(tokens/s)", etc.
+    This is more authoritative than suffix-based inference since descriptions
+    often contain the exact unit specification.
+
+    Args:
+        description: Metric description text, or None
+
+    Returns:
+        Unit string if a recognized pattern is found, None otherwise
+    """
+    if not description:
+        return None
+
+    for pattern, unit in _DESCRIPTION_UNIT_PATTERNS:
+        if pattern.search(description):
+            return unit
+
+    return None
+
+
+def infer_unit(
+    metric_name: str,
+    description: str | None = None,
+    existing_unit: str | None = None,
+) -> str | None:
+    """Infer the unit for a metric using multiple sources.
+
+    Priority order:
+    1. Scale from description (ratio vs percent range indicators)
+    2. Unit from description (explicit "in seconds", etc.)
+    3. Existing unit (if already set)
+    4. Unit from metric name suffix
+
+    The scale detection (step 1) can override suffix-based inference when
+    a metric has a suffix like "_percent" but the description indicates
+    a 0-1 range (which should be "ratio", not "percent").
+
+    Args:
+        metric_name: Full metric name (e.g., 'cache_hit_rate')
+        description: Optional description text from the metric
+        existing_unit: Optional pre-existing unit (e.g., from HELP text)
+
+    Returns:
+        Inferred unit string, or None if no unit can be determined
+    """
+    # Check for explicit scale indicators in description first
+    # This takes priority because it's the most authoritative source
+    scale = parse_scale_from_description(description)
+    if scale:
+        return scale
+
+    # Check for explicit unit in description
+    desc_unit = parse_unit_from_description(description)
+    if desc_unit:
+        return desc_unit
+
+    # Use existing unit if set
+    if existing_unit:
+        return existing_unit
+
+    # Fall back to suffix-based inference
+    return parse_unit_from_metric_name(metric_name)
 
 
 def to_display_unit(result: MetricResult, registry: MetricRegistry) -> MetricResult:

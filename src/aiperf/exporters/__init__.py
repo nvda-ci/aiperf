@@ -19,7 +19,10 @@ from aiperf.exporters.console_usage_discrepancy_exporter import (
 )
 from aiperf.exporters.display_units_utils import (
     convert_all_metrics_to_display_units,
+    infer_unit,
     normalize_endpoint_display,
+    parse_scale_from_description,
+    parse_unit_from_description,
     parse_unit_from_metric_name,
     to_display_unit,
 )
@@ -87,7 +90,10 @@ __all__ = [
     "TimesliceMetricsCsvExporter",
     "TimesliceMetricsJsonExporter",
     "convert_all_metrics_to_display_units",
+    "infer_unit",
     "normalize_endpoint_display",
+    "parse_scale_from_description",
+    "parse_unit_from_description",
     "parse_unit_from_metric_name",
     "to_display_unit",
 ]

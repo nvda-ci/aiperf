@@ -4,13 +4,15 @@
 -->
 # Server Metrics Reference
 
-This document provides semantic meanings for all metrics collected from NVIDIA Dynamo and vLLM inference servers.
+This document provides semantic meanings for all metrics collected from NVIDIA Dynamo, vLLM, SGLang, and TensorRT-LLM inference servers.
 
 ## Table of Contents
 
 - [Dynamo Frontend Metrics](#dynamo-frontend-metrics)
 - [Dynamo Component Metrics](#dynamo-component-metrics)
 - [vLLM Metrics](#vllm-metrics)
+- [SGLang Metrics](#sglang-metrics)
+- [TensorRT-LLM Metrics](#tensorrt-llm-metrics)
 
 ---
 
@@ -184,6 +186,123 @@ These histograms show the distribution of request parameters:
 
 ---
 
+## SGLang Metrics
+
+SGLang is a fast inference engine with RadixAttention for efficient prefix caching. These metrics provide visibility into SGLang's scheduling and execution.
+
+### Throughput & Performance
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `sglang:gen_throughput` | gauge | tokens/s | **Generation throughput** in tokens per second. Real-time throughput indicator. |
+| `sglang:cache_hit_rate` | gauge | ratio | Prefix cache hit rate (0.0-1.0). Higher = better prompt reuse via RadixAttention. |
+| `sglang:token_usage` | gauge | ratio | Token usage ratio (0.0-1.0). Indicates memory utilization. |
+| `sglang:utilization` | gauge | ratio | Overall utilization. -1.0 indicates idle, 0.0+ indicates active. |
+
+### Queue State
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sglang:num_running_reqs` | gauge | Requests currently executing in the batch. |
+| `sglang:num_queue_reqs` | gauge | Requests in the waiting queue. High values indicate saturation. |
+| `sglang:num_used_tokens` | gauge | Total tokens currently in use across all requests. |
+| `sglang:num_running_reqs_offline_batch` | gauge | Low-priority offline batch requests running. |
+| `sglang:num_paused_reqs` | gauge | Requests paused by async weight sync. |
+| `sglang:num_retracted_reqs` | gauge | Requests that were retracted/preempted. |
+| `sglang:num_grammar_queue_reqs` | gauge | Requests waiting for grammar processing. |
+
+### Disaggregated Inference Queues
+
+For disaggregated prefill/decode deployments:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sglang:num_prefill_prealloc_queue_reqs` | gauge | Requests in prefill preallocation queue. |
+| `sglang:num_prefill_inflight_queue_reqs` | gauge | Requests in prefill inflight queue. |
+| `sglang:num_decode_prealloc_queue_reqs` | gauge | Requests in decode preallocation queue. |
+| `sglang:num_decode_transfer_queue_reqs` | gauge | Requests in decode transfer queue. |
+
+### Request Latency Breakdown
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `sglang:queue_time_seconds` | histogram | seconds | Time spent in **WAITING** queue before execution starts. |
+| `sglang:per_stage_req_latency_seconds` | histogram | seconds | Per-stage latency breakdown. Label `stage` identifies the phase (see below). |
+
+**Stage labels for `sglang:per_stage_req_latency_seconds`:**
+
+| Stage | Description |
+|-------|-------------|
+| `prefill_waiting` | Time waiting before prefill begins |
+| `prefill_bootstrap` | Time to bootstrap prefill (scheduling overhead) |
+| `prefill_prepare` | Time preparing prefill batch |
+| `prefill_forward` | Time executing prefill forward pass |
+| `prefill_transfer_kv_cache` | Time transferring KV cache (disaggregated mode) |
+| `decode_waiting` | Time waiting before decode begins |
+| `decode_bootstrap` | Time to bootstrap decode |
+| `decode_prepare` | Time preparing decode batch |
+| `decode_transferred` | Total time in transferred/decode phase |
+
+### KV Cache Transfer (Disaggregated)
+
+For disaggregated prefill/decode deployments:
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `sglang:kv_transfer_latency_ms` | gauge | milliseconds | KV cache transfer latency. |
+| `sglang:kv_transfer_speed_gb_s` | gauge | GB/s | KV cache transfer throughput. |
+| `sglang:kv_transfer_alloc_ms` | gauge | milliseconds | Time waiting for KV cache allocation. |
+| `sglang:kv_transfer_bootstrap_ms` | gauge | milliseconds | KV transfer bootstrap time. |
+| `sglang:pending_prealloc_token_usage` | gauge | ratio | Token usage for pending preallocated tokens. |
+
+### Speculative Decoding
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sglang:spec_accept_rate` | gauge | Speculative decoding acceptance rate (accepted/draft tokens). Higher = better speculation. |
+| `sglang:spec_accept_length` | gauge | Average acceptance length of speculative decoding. |
+
+### System Configuration
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sglang:is_cuda_graph` | gauge | Whether batch is using CUDA graph (1=yes, 0=no). |
+| `sglang:engine_startup_time` | gauge | Engine startup time in seconds. |
+| `sglang:engine_load_weights_time` | gauge | Time to load model weights in seconds. |
+| `sglang:mamba_usage` | gauge | Token usage for Mamba layers (hybrid models). |
+| `sglang:swa_token_usage` | gauge | Token usage for sliding window attention layers. |
+
+---
+
+## TensorRT-LLM Metrics
+
+TensorRT-LLM (trtllm) is NVIDIA's high-performance inference engine. These metrics track request processing within the TensorRT-LLM backend.
+
+### Request Latency
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `trtllm:e2e_request_latency_seconds` | histogram | seconds | **End-to-end request latency** from submission to completion. Use `p99` for tail latency. |
+| `trtllm:request_queue_time_seconds` | histogram | seconds | Time spent in **WAITING** phase (queued before execution). |
+| `trtllm:time_to_first_token_seconds` | histogram | seconds | **TTFT** - time from request start to first output token. |
+| `trtllm:time_per_output_token_seconds` | histogram | seconds | Time per output token (inter-token latency). |
+
+### Request Completion
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `trtllm:request_success` | counter | Successfully completed requests. Label `finished_reason` indicates completion reason (e.g., `length`, `stop`). |
+
+**Common labels:**
+
+| Label | Description | Example Values |
+|-------|-------------|----------------|
+| `engine_type` | Engine type | `trtllm` |
+| `model_name` | Model identifier | `Qwen/Qwen3-0.6B` |
+| `finished_reason` | Why request completed | `length`, `stop`, `error` |
+
+---
+
 ## Key Metrics for Common Questions
 
 ### "What is my throughput?"
@@ -193,6 +312,7 @@ These histograms show the distribution of request parameters:
 | Requests per second | `dynamo_frontend_requests` | `rate_per_second` |
 | Output tokens per second | `dynamo_frontend_output_tokens` | `rate_per_second` |
 | Input tokens per second | `vllm:prompt_tokens` | `rate_per_second` |
+| Generation throughput (SGLang) | `sglang:gen_throughput` | `avg` |
 
 ### "What is my latency?"
 
@@ -202,6 +322,9 @@ These histograms show the distribution of request parameters:
 | Time to first token (p99) | `dynamo_frontend_time_to_first_token_seconds` | `p99` |
 | Inter-token latency (p99) | `dynamo_frontend_inter_token_latency_seconds` | `p99` |
 | Average request latency | `dynamo_frontend_request_duration_seconds` | `avg` |
+| TTFT (TensorRT-LLM) | `trtllm:time_to_first_token_seconds` | `p99` |
+| E2E latency (TensorRT-LLM) | `trtllm:e2e_request_latency_seconds` | `p99` |
+| Queue time (SGLang) | `sglang:queue_time_seconds` | `p99` |
 
 ### "Am I hitting capacity limits?"
 
@@ -211,6 +334,9 @@ These histograms show the distribution of request parameters:
 | Requests being preempted? | `vllm:num_preemptions` | `delta` | >0 indicates memory pressure |
 | Queue building up? | `vllm:num_requests_waiting` | `avg`, `max` | Growing over time is bad |
 | Requests queuing? | `dynamo_frontend_queued_requests` | `avg`, `max` | Non-zero indicates backpressure |
+| Token usage (SGLang) | `sglang:token_usage` | `avg`, `max` | >0.9 is concerning |
+| Queue depth (SGLang) | `sglang:num_queue_reqs` | `avg`, `max` | Growing over time is bad |
+| Queue time (TensorRT-LLM) | `trtllm:request_queue_time_seconds` | `avg` | High values indicate saturation |
 
 ### "What does my workload look like?"
 
@@ -240,6 +366,23 @@ vllm:e2e_request_latency_seconds ≈
 | Prefill | `vllm:request_prefill_time_seconds` | Processing input tokens |
 | Decode | `vllm:request_decode_time_seconds` | Generating output tokens |
 
+**SGLang latency breakdown** (via `sglang:per_stage_req_latency_seconds` with `stage` label):
+
+| Phase | Stage Label | What it means |
+|-------|-------------|---------------|
+| Queue | `prefill_waiting` | Waiting before prefill |
+| Prefill | `prefill_forward` | Prefill forward pass execution |
+| KV Transfer | `prefill_transfer_kv_cache` | KV cache transfer (disaggregated) |
+| Decode | `decode_transferred` | Decode phase execution |
+
+**TensorRT-LLM latency breakdown:**
+
+| Phase | Metric | What it means |
+|-------|--------|---------------|
+| Queue | `trtllm:request_queue_time_seconds` | Waiting for GPU resources |
+| TTFT | `trtllm:time_to_first_token_seconds` | Time to first output token |
+| Total | `trtllm:e2e_request_latency_seconds` | Complete request duration |
+
 ---
 
 ## Metric Labels
@@ -253,11 +396,30 @@ Common labels used across metrics:
 | `request_type` | Request type | `stream`, `unary` |
 | `status` | Request outcome | `success`, `error` |
 
+**SGLang-specific labels:**
+
+| Label | Description | Example Values |
+|-------|-------------|----------------|
+| `engine_type` | Engine type | `unified` |
+| `model_name` | Model identifier | `Qwen/Qwen3-0.6B` |
+| `tp_rank` | Tensor parallel rank | `0`, `1`, ... |
+| `pp_rank` | Pipeline parallel rank | `0`, `1`, ... |
+| `stage` | Processing stage | `prefill_forward`, `decode_transferred` |
+| `pid` | Process ID | `670` |
+
+**TensorRT-LLM-specific labels:**
+
+| Label | Description | Example Values |
+|-------|-------------|----------------|
+| `engine_type` | Engine type | `trtllm` |
+| `model_name` | Model identifier | `Qwen/Qwen3-0.6B` |
+| `finished_reason` | Completion reason | `length`, `stop`, `error` |
+
 ---
 
 ## Notes
 
-1. **Dynamo vs vLLM metrics**: Dynamo metrics measure at the HTTP/routing layer, vLLM metrics measure inside the inference engine. Use Dynamo for user-facing SLAs, vLLM for debugging performance.
+1. **Dynamo vs backend metrics**: Dynamo metrics measure at the HTTP/routing layer, while vLLM/SGLang/TensorRT-LLM metrics measure inside the inference engine. Use Dynamo for user-facing SLAs, backend metrics for debugging performance.
 
 2. **Counter vs Gauge interpretation**:
    - Counters: Use `delta` for total change, `rate_per_second` for rate
@@ -265,4 +427,9 @@ Common labels used across metrics:
 
 3. **Histogram percentiles**: Histogram percentiles (`p50`, `p90`, `p95`, `p99`) are *estimated* from bucket boundaries. Exact values depend on bucket configuration.
 
-4. **Multiple endpoints**: When scraping multiple vLLM instances, each series includes an `endpoint` field to identify the source.
+4. **Multiple endpoints**: When scraping multiple instances, each series includes an `endpoint` field to identify the source.
+
+5. **Backend-specific metrics**:
+   - **vLLM**: Comprehensive metrics for cache, queue state, and request phases
+   - **SGLang**: RadixAttention-based caching, disaggregated inference support, speculative decoding stats
+   - **TensorRT-LLM**: Focused on latency breakdown (queue, TTFT, e2e) and request completion
