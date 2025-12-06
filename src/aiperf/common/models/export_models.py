@@ -118,6 +118,929 @@ def histogram_quantile(q: float, buckets: dict[str, float]) -> float | None:
     return parsed[-2][0] if len(parsed) >= 2 else None
 
 
+def extract_observations_from_scrape(
+    count_delta: int,
+    sum_delta: float,
+    bucket_deltas: dict[str, float],
+) -> tuple[list[float], int, int]:
+    """Extract observations from a single scrape delta using bucket information.
+
+    When count_delta == 1, we know the exact observation value (sum_delta).
+    When count_delta > 1, we use bucket deltas to place observations within
+    their respective buckets using linear interpolation.
+
+    Args:
+        count_delta: Number of observations in this scrape interval
+        sum_delta: Sum of observation values in this scrape interval
+        bucket_deltas: Per-bucket count deltas for this scrape interval
+
+    Returns:
+        Tuple of (observations, exact_count, bucket_placed_count)
+        - observations: List of observation values (exact or bucket-interpolated)
+        - exact_count: Number of exact observations (count_delta == 1)
+        - bucket_placed_count: Number of bucket-interpolated observations
+    """
+    if count_delta <= 0:
+        return [], 0, 0
+
+    if count_delta == 1:
+        # Exact observation value!
+        return [sum_delta], 1, 0
+
+    # Multiple observations - use bucket deltas to place them
+    observations: list[float] = []
+
+    # Parse and sort buckets by upper bound
+    parsed: list[tuple[float, float]] = []
+    for le, count in bucket_deltas.items():
+        upper = float("inf") if le == "+Inf" else float(le)
+        parsed.append((upper, count))
+    parsed.sort(key=lambda x: x[0])
+
+    if not parsed:
+        return [], 0, 0
+
+    # Convert cumulative bucket counts to per-bucket counts and generate observations
+    prev_upper = 0.0
+    prev_cumulative = 0.0
+
+    for upper, cumulative in parsed:
+        bucket_obs_count = int(cumulative - prev_cumulative)
+        if bucket_obs_count > 0 and upper != float("inf"):
+            # Distribute observations within bucket using linear interpolation
+            for i in range(bucket_obs_count):
+                # Place at center of each "slot" within the bucket
+                frac = (i + 0.5) / bucket_obs_count
+                bucket_start = prev_upper if prev_upper > 0 else 0.0
+                value = bucket_start + (upper - bucket_start) * frac
+                observations.append(value)
+        prev_cumulative = cumulative
+        if upper != float("inf"):
+            prev_upper = upper
+
+    return observations, 0, len(observations)
+
+
+def extract_all_observations(
+    timestamps: np.ndarray,
+    sums: np.ndarray,
+    counts: np.ndarray,
+    bucket_snapshots: list[dict[str, float]],
+    start_idx: int = 0,
+) -> tuple[np.ndarray, int, int]:
+    """Extract all observations from histogram time series using per-scrape deltas.
+
+    Processes each scrape interval to extract exact observations (when count_delta == 1)
+    or bucket-placed observations (when count_delta > 1).
+
+    Args:
+        timestamps: Array of scrape timestamps (nanoseconds)
+        sums: Array of cumulative sum values per scrape
+        counts: Array of cumulative count values per scrape
+        bucket_snapshots: List of bucket snapshots per scrape
+        start_idx: Starting index (for time filtering, e.g., skip warmup)
+
+    Returns:
+        Tuple of (observations_array, exact_count, bucket_placed_count)
+    """
+    all_observations: list[float] = []
+    total_exact = 0
+    total_bucket_placed = 0
+
+    # Process each scrape interval
+    for i in range(start_idx + 1, len(timestamps)):
+        count_delta = int(counts[i] - counts[i - 1])
+        sum_delta = float(sums[i] - sums[i - 1])
+
+        if count_delta <= 0:
+            continue
+
+        # Compute bucket deltas for this interval
+        curr_buckets = bucket_snapshots[i] if i < len(bucket_snapshots) else {}
+        prev_buckets = (
+            bucket_snapshots[i - 1] if (i - 1) < len(bucket_snapshots) else {}
+        )
+
+        bucket_deltas: dict[str, float] = {}
+        for le, curr_val in curr_buckets.items():
+            prev_val = prev_buckets.get(le, 0.0)
+            delta = curr_val - prev_val
+            if delta >= 0:  # Skip negative deltas (counter reset)
+                bucket_deltas[le] = delta
+
+        # Extract observations from this scrape
+        obs, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta, sum_delta, bucket_deltas
+        )
+        all_observations.extend(obs)
+        total_exact += exact
+        total_bucket_placed += bucket_placed
+
+    return (
+        np.array(all_observations, dtype=np.float64),
+        total_exact,
+        total_bucket_placed,
+    )
+
+
+# ============================================================================
+# Polynomial Histogram Statistics (Per-Bucket Mean Tracking)
+# ============================================================================
+# Based on HistogramTools research (arXiv 2504.00001) showing 2.5x accuracy
+# improvement by storing per-bucket means instead of just counts.
+
+
+class BucketStatistics(AIPerfBaseModel):
+    """Statistics for a single histogram bucket learned from single-bucket scrape intervals.
+
+    When all observations in a scrape interval land in ONE bucket, we can compute the
+    exact mean for that bucket: mean = sum_delta / count_delta. Over many such intervals,
+    we learn the typical position of observations within each bucket.
+
+    This is a core component of the "polynomial histogram" approach which improves
+    percentile estimation accuracy by 2.5x compared to simple linear interpolation.
+    """
+
+    bucket_le: str = Field(description="Bucket upper bound (le value)")
+    observation_count: int = Field(
+        default=0, description="Total observations used to learn this bucket's mean"
+    )
+    weighted_mean_sum: float = Field(
+        default=0.0,
+        description="Sum of (mean * count) for weighted average calculation",
+    )
+    sample_count: int = Field(
+        default=0, description="Number of single-bucket intervals observed"
+    )
+
+    @property
+    def estimated_mean(self) -> float | None:
+        """Compute the weighted average position within this bucket.
+
+        Returns None if no single-bucket intervals have been observed.
+        """
+        if self.observation_count == 0:
+            return None
+        return self.weighted_mean_sum / self.observation_count
+
+    def record(self, mean: float, count: int) -> None:
+        """Record statistics from a single-bucket scrape interval.
+
+        Args:
+            mean: Exact mean value for observations in this interval (sum_delta/count_delta)
+            count: Number of observations in this interval
+        """
+        self.observation_count += count
+        self.weighted_mean_sum += mean * count
+        self.sample_count += 1
+
+
+def accumulate_bucket_statistics(
+    timestamps: np.ndarray,
+    sums: np.ndarray,
+    counts: np.ndarray,
+    bucket_snapshots: list[dict[str, float]],
+    start_idx: int = 0,
+) -> dict[str, BucketStatistics]:
+    """Learn per-bucket mean positions from single-bucket scrape intervals.
+
+    This implements the polynomial histogram approach: when all observations
+    in a scrape interval land in a single bucket, we can compute the exact mean
+    for that bucket (sum_delta / count_delta).
+
+    Over time, this learns the typical position of observations within each bucket,
+    which is more accurate than assuming uniform distribution (midpoint).
+
+    Args:
+        timestamps: Array of scrape timestamps (nanoseconds)
+        sums: Array of cumulative sum values per scrape
+        counts: Array of cumulative count values per scrape
+        bucket_snapshots: List of bucket snapshots per scrape
+        start_idx: Starting index for analysis
+
+    Returns:
+        Dict mapping bucket le values to BucketStatistics with learned means
+    """
+    bucket_stats: dict[str, BucketStatistics] = {}
+
+    for i in range(start_idx + 1, len(timestamps)):
+        count_delta = int(counts[i] - counts[i - 1])
+        sum_delta = float(sums[i] - sums[i - 1])
+
+        if count_delta <= 0:
+            continue
+
+        # Compute bucket deltas for this interval
+        curr_buckets = bucket_snapshots[i] if i < len(bucket_snapshots) else {}
+        prev_buckets = (
+            bucket_snapshots[i - 1] if (i - 1) < len(bucket_snapshots) else {}
+        )
+
+        # Compute cumulative bucket deltas for this interval
+        cumulative_deltas: dict[str, float] = {}
+        for le, curr_val in curr_buckets.items():
+            prev_val = prev_buckets.get(le, 0.0)
+            delta = curr_val - prev_val
+            if delta > 0:
+                cumulative_deltas[le] = delta
+
+        # Convert cumulative deltas to per-bucket deltas
+        per_bucket_deltas = cumulative_to_per_bucket(cumulative_deltas)
+
+        # Find active buckets (those with observations in this interval)
+        active_buckets: list[tuple[str, float]] = [
+            (le, delta) for le, delta in per_bucket_deltas.items() if delta > 0
+        ]
+
+        # If all observations landed in ONE bucket, we know the exact mean for that bucket
+        if len(active_buckets) == 1:
+            le, delta = active_buckets[0]
+            bucket_mean = sum_delta / count_delta  # Exact mean for this bucket
+
+            if le not in bucket_stats:
+                bucket_stats[le] = BucketStatistics(bucket_le=le)
+            bucket_stats[le].record(bucket_mean, count_delta)
+
+    return bucket_stats
+
+
+def get_bucket_bounds(le: str, sorted_buckets: list[str]) -> tuple[float, float]:
+    """Get the lower and upper bounds for a bucket.
+
+    Args:
+        le: The bucket's upper bound (le value)
+        sorted_buckets: List of all bucket le values sorted by numeric value
+
+    Returns:
+        Tuple of (lower_bound, upper_bound)
+    """
+    upper = float("inf") if le == "+Inf" else float(le)
+
+    # Find previous bucket for lower bound
+    idx = sorted_buckets.index(le)
+    if idx == 0:
+        lower = 0.0
+    else:
+        prev_le = sorted_buckets[idx - 1]
+        lower = float(prev_le) if prev_le != "+Inf" else 0.0
+
+    return lower, upper
+
+
+def cumulative_to_per_bucket(
+    bucket_deltas: dict[str, float],
+) -> dict[str, float]:
+    """Convert cumulative bucket counts to per-bucket counts.
+
+    Prometheus histograms use cumulative counts (le="less than or equal").
+    This converts to per-bucket counts (observations within each bucket range).
+
+    Args:
+        bucket_deltas: Cumulative bucket counts (Prometheus style)
+
+    Returns:
+        Dict mapping bucket le values to per-bucket counts
+    """
+    # Sort buckets by numeric value
+    finite_buckets = [le for le in bucket_deltas if le != "+Inf"]
+    sorted_buckets = sorted(finite_buckets, key=lambda x: float(x))
+
+    per_bucket: dict[str, float] = {}
+    prev_cumulative = 0.0
+
+    for le in sorted_buckets:
+        cumulative = bucket_deltas[le]
+        per_bucket[le] = cumulative - prev_cumulative
+        prev_cumulative = cumulative
+
+    # Handle +Inf bucket if present
+    if "+Inf" in bucket_deltas:
+        inf_cumulative = bucket_deltas["+Inf"]
+        per_bucket["+Inf"] = inf_cumulative - prev_cumulative
+
+    return per_bucket
+
+
+def estimate_bucket_sums(
+    bucket_deltas: dict[str, float],
+    bucket_stats: dict[str, BucketStatistics],
+) -> dict[str, float]:
+    """Estimate the sum of observations in each finite bucket.
+
+    Uses learned per-bucket means when available, falls back to midpoint interpolation.
+
+    Args:
+        bucket_deltas: Cumulative bucket counts (Prometheus style)
+        bucket_stats: Learned per-bucket statistics from polynomial histogram approach
+
+    Returns:
+        Dict mapping bucket le values to estimated sums (excludes +Inf bucket)
+    """
+    # Convert cumulative to per-bucket counts
+    per_bucket_counts = cumulative_to_per_bucket(bucket_deltas)
+
+    # Sort buckets by numeric value for bound calculation
+    finite_buckets = [le for le in bucket_deltas if le != "+Inf"]
+    sorted_buckets = sorted(finite_buckets, key=lambda x: float(x))
+
+    sums: dict[str, float] = {}
+    for le, count in per_bucket_counts.items():
+        if le == "+Inf" or count <= 0:
+            continue
+
+        # Try to use learned mean first
+        if le in bucket_stats and bucket_stats[le].estimated_mean is not None:
+            mean = bucket_stats[le].estimated_mean
+        else:
+            # Fall back to midpoint interpolation
+            lower, upper = get_bucket_bounds(le, sorted_buckets)
+            mean = (lower + upper) / 2
+
+        sums[le] = count * mean
+
+    return sums
+
+
+def estimate_inf_bucket_observations(
+    total_sum: float,
+    estimated_finite_sum: float,
+    inf_count: int,
+    max_finite_bucket: float,
+) -> list[float]:
+    """Estimate observation values for the +Inf bucket using back-calculation.
+
+    Key insight: We have the exact total sum from Prometheus. By estimating the
+    sum of finite bucket observations, we can back-calculate what the +Inf bucket
+    observations must be on average.
+
+    Args:
+        total_sum: Exact total sum from histogram (sum_delta)
+        estimated_finite_sum: Estimated sum of observations in finite buckets
+        inf_count: Number of observations in the +Inf bucket
+        max_finite_bucket: Upper bound of the highest finite bucket
+
+    Returns:
+        List of estimated observation values for +Inf bucket (all > max_finite_bucket)
+    """
+    if inf_count <= 0:
+        return []
+
+    # Back-calculate +Inf bucket sum
+    inf_sum = total_sum - estimated_finite_sum
+
+    # Validate: +Inf sum must be positive and mean must be > max finite bucket
+    if inf_sum <= 0:
+        # Estimation error - fall back to placing at 1.5x max bucket
+        inf_avg = max_finite_bucket * 1.5
+    else:
+        inf_avg = inf_sum / inf_count
+        # Validate: average must be > max_finite_bucket (by definition of +Inf bucket)
+        if inf_avg <= max_finite_bucket:
+            # Estimation error - use minimum valid value
+            inf_avg = max_finite_bucket * 1.5
+
+    # Generate observations spread around the estimated mean
+    # Using uniform distribution: [lower_bound, upper_bound] where mean = (lower + upper) / 2
+    # lower = max_finite_bucket, upper = 2 * inf_avg - max_finite_bucket
+    upper_estimate = 2 * inf_avg - max_finite_bucket
+
+    # Safety check: upper must be > lower
+    if upper_estimate <= max_finite_bucket:
+        upper_estimate = max_finite_bucket * 2
+
+    # Generate observations uniformly distributed to match estimated mean
+    observations = np.linspace(max_finite_bucket, upper_estimate, int(inf_count))
+
+    return observations.tolist()
+
+
+# ============================================================================
+# Histogram Percentile Models (Nested Structure)
+# ============================================================================
+
+
+class BucketPercentiles(AIPerfBaseModel):
+    """Percentiles estimated via Prometheus bucket interpolation.
+
+    Uses the standard histogram_quantile algorithm that assumes uniform
+    distribution within each bucket. Accuracy depends on bucket granularity.
+    """
+
+    p50: float | None = Field(
+        default=None, description="Estimated 50th percentile (median)"
+    )
+    p90: float | None = Field(default=None, description="Estimated 90th percentile")
+    p95: float | None = Field(default=None, description="Estimated 95th percentile")
+    p99: float | None = Field(default=None, description="Estimated 99th percentile")
+
+
+class ObservedPercentiles(AIPerfBaseModel):
+    """Percentiles computed from per-scrape observation extraction.
+
+    When scrape rate is high relative to observation rate, we can extract
+    individual observation values:
+    - count_delta == 1: Exact value from sum_delta
+    - count_delta > 1: Bucket-placed values using per-scrape bucket deltas
+
+    This approach can provide better accuracy than bucket interpolation,
+    especially when exact_count is high relative to total observations.
+    """
+
+    p50: float | None = Field(
+        default=None, description="50th percentile from extracted observations"
+    )
+    p90: float | None = Field(
+        default=None, description="90th percentile from extracted observations"
+    )
+    p95: float | None = Field(
+        default=None, description="95th percentile from extracted observations"
+    )
+    p99: float | None = Field(
+        default=None, description="99th percentile from extracted observations"
+    )
+    exact_count: int = Field(
+        default=0,
+        description="Number of observations with exact values (count_delta == 1)",
+    )
+    bucket_placed_count: int = Field(
+        default=0,
+        description="Number of observations placed via bucket interpolation (count_delta > 1)",
+    )
+    coverage: float = Field(
+        default=0.0,
+        description="Ratio of exact observations to total (higher = more accurate)",
+    )
+
+
+class BestGuessPercentiles(AIPerfBaseModel):
+    """Percentiles with +Inf bucket estimation using back-calculation.
+
+    This approach addresses a critical flaw in other methods:
+    - Bucket interpolation: Returns ceiling value for +Inf bucket (wrong)
+    - Observed extraction: Skips +Inf observations entirely (underestimates)
+
+    Best-guess uses the exact total sum to back-calculate +Inf bucket values:
+    1. Learn per-bucket means from single-bucket scrape intervals (polynomial histogram)
+    2. Estimate sum of finite bucket observations
+    3. Back-calculate: inf_sum = total_sum - finite_sum
+    4. Generate +Inf observations around estimated mean (all > max finite bucket)
+
+    This provides more accurate tail percentiles when +Inf bucket has observations.
+    """
+
+    p50: float | None = Field(
+        default=None, description="50th percentile including +Inf estimates"
+    )
+    p90: float | None = Field(
+        default=None, description="90th percentile including +Inf estimates"
+    )
+    p95: float | None = Field(
+        default=None, description="95th percentile including +Inf estimates"
+    )
+    p99: float | None = Field(
+        default=None, description="99th percentile including +Inf estimates"
+    )
+    p999: float | None = Field(
+        default=None, description="99.9th percentile including +Inf estimates"
+    )
+
+    # +Inf bucket handling metadata
+    inf_bucket_count: int = Field(
+        default=0, description="Number of observations in +Inf bucket"
+    )
+    inf_bucket_estimated_mean: float | None = Field(
+        default=None,
+        description="Estimated mean of +Inf observations (back-calculated from sum)",
+    )
+
+    # Estimation quality metrics
+    finite_observations_count: int = Field(
+        default=0, description="Number of observations in finite buckets"
+    )
+    buckets_with_learned_means: int = Field(
+        default=0,
+        description="Number of buckets with learned means (vs midpoint fallback)",
+    )
+    estimation_confidence: str = Field(
+        default="low",
+        description="Confidence level: high (inf<1%%, good coverage), medium (inf<5%%), low (inf>5%% or poor coverage)",
+    )
+
+
+def generate_observations_from_buckets(
+    bucket_deltas: dict[str, float],
+) -> np.ndarray:
+    """Generate observations from bucket counts using uniform distribution.
+
+    For each bucket, spreads observations uniformly across the bucket range.
+    This is the standard approach that preserves the distribution shape within buckets.
+
+    Args:
+        bucket_deltas: Cumulative bucket counts (Prometheus format)
+
+    Returns:
+        Array of generated observations for finite buckets (excludes +Inf)
+    """
+    # Convert cumulative to per-bucket counts
+    per_bucket = cumulative_to_per_bucket(bucket_deltas)
+
+    # Get sorted bucket boundaries
+    finite_buckets = [le for le in per_bucket if le != "+Inf"]
+    sorted_buckets = sorted(finite_buckets, key=lambda x: float(x))
+
+    observations: list[float] = []
+
+    for le in sorted_buckets:
+        count = int(per_bucket.get(le, 0))
+        if count <= 0:
+            continue
+
+        lower, upper = get_bucket_bounds(le, sorted_buckets)
+        bucket_width = upper - lower
+
+        # Uniform distribution across bucket
+        for i in range(count):
+            frac = (i + 0.5) / count
+            value = lower + bucket_width * frac
+            observations.append(value)
+
+    return np.array(observations, dtype=np.float64)
+
+
+def generate_observations_with_learned_means(
+    bucket_deltas: dict[str, float],
+    bucket_stats: dict[str, BucketStatistics],
+    target_sum: float,
+) -> np.ndarray:
+    """Generate observations using learned bucket means for better accuracy.
+
+    Instead of uniform distribution within each bucket, this approach:
+    1. Uses learned per-bucket means (from single-bucket scrape intervals) when available
+    2. Clusters observations around the learned mean using a triangular distribution
+    3. Falls back to uniform distribution when no learned mean exists
+    4. Adjusts final placement to match the exact target sum
+
+    This addresses the key limitation of uniform distribution: when observations
+    cluster near one end of a bucket (e.g., mean at 11.9% instead of 50%), uniform
+    distribution significantly overestimates or underestimates percentiles.
+
+    Args:
+        bucket_deltas: Cumulative bucket counts (Prometheus format)
+        bucket_stats: Learned per-bucket statistics from polynomial histogram approach
+        target_sum: The exact sum of observations (from histogram sum_delta)
+
+    Returns:
+        Array of generated observations with improved placement
+    """
+    # Convert cumulative to per-bucket counts
+    per_bucket = cumulative_to_per_bucket(bucket_deltas)
+
+    # Get sorted bucket boundaries
+    finite_buckets = [le for le in per_bucket if le != "+Inf"]
+    sorted_buckets = sorted(finite_buckets, key=lambda x: float(x))
+
+    observations: list[float] = []
+    bucket_info: list[
+        tuple[int, int, float, float, float | None]
+    ] = []  # (start_idx, count, lower, upper, learned_mean)
+
+    for le in sorted_buckets:
+        count = int(per_bucket.get(le, 0))
+        if count <= 0:
+            continue
+
+        lower, upper = get_bucket_bounds(le, sorted_buckets)
+        bucket_width = upper - lower
+        start_idx = len(observations)
+
+        # Check if we have a learned mean for this bucket
+        learned_mean: float | None = None
+        if le in bucket_stats and bucket_stats[le].estimated_mean is not None:
+            mean = bucket_stats[le].estimated_mean
+            # Validate: mean should be within bucket bounds
+            if lower < mean < upper:
+                learned_mean = mean
+
+        if learned_mean is not None:
+            # Use triangular distribution centered on learned mean
+            # This clusters observations around where they actually occur
+            # while maintaining the correct count
+
+            # Compute the position of learned mean within bucket (0 to 1)
+            mean_position = (learned_mean - lower) / bucket_width
+
+            # Generate observations using triangular distribution
+            # Mode (peak) at learned mean, spread across bucket
+            for i in range(count):
+                # Use inverse CDF of triangular distribution
+                u = (i + 0.5) / count  # Uniform position [0, 1]
+
+                # Triangular distribution with mode at mean_position
+                # CDF: F(x) = x²/c for x < c, 1 - (1-x)²/(1-c) for x >= c
+                # Inverse: x = sqrt(u*c) for u < c, 1 - sqrt((1-u)*(1-c)) for u >= c
+                c = mean_position
+                if c <= 0:
+                    c = 0.01
+                if c >= 1:
+                    c = 0.99
+
+                if u < c:
+                    frac = np.sqrt(u * c)
+                else:
+                    frac = 1.0 - np.sqrt((1.0 - u) * (1.0 - c))
+
+                value = lower + bucket_width * frac
+                observations.append(value)
+        else:
+            # Fall back to uniform distribution
+            for i in range(count):
+                frac = (i + 0.5) / count
+                value = lower + bucket_width * frac
+                observations.append(value)
+
+        bucket_info.append((start_idx, count, lower, upper, learned_mean))
+
+    if not observations:
+        return np.array([], dtype=np.float64)
+
+    observations = np.array(observations, dtype=np.float64)
+
+    # Pass 2: Fine-tune to match target sum
+    generated_sum = observations.sum()
+
+    if generated_sum <= 0 or target_sum <= 0:
+        return observations
+
+    sum_discrepancy = target_sum - generated_sum
+
+    if abs(sum_discrepancy) < 1e-6:
+        return observations
+
+    # Distribute the adjustment across all observations
+    total_count = len(observations)
+    avg_shift_needed = sum_discrepancy / total_count
+
+    for start_idx, count, lower, upper, _ in bucket_info:
+        if count == 0:
+            continue
+
+        bucket_width = upper - lower
+        max_shift = bucket_width * 0.4
+        shift = np.clip(avg_shift_needed, -max_shift, max_shift)
+
+        for i in range(count):
+            idx = start_idx + i
+            new_val = observations[idx] + shift
+            observations[idx] = np.clip(new_val, lower, upper)
+
+    return observations
+
+
+def generate_observations_with_sum_constraint(
+    bucket_deltas: dict[str, float],
+    target_sum: float,
+    bucket_stats: dict[str, BucketStatistics] | None = None,
+) -> np.ndarray:
+    """Generate observations constrained to match the exact total sum.
+
+    Uses per-bucket learned means (polynomial histogram approach) when available
+    to place observations at their likely positions within each bucket.
+
+    The key insight: we know the EXACT sum, and potentially per-bucket means.
+    This constrains where observations must be placed within buckets.
+
+    Args:
+        bucket_deltas: Cumulative bucket counts (Prometheus format)
+        target_sum: The exact sum of observations (from histogram sum_delta)
+        bucket_stats: Optional learned per-bucket statistics
+
+    Returns:
+        Array of generated observations centered on learned means where available
+    """
+    # Convert cumulative to per-bucket counts
+    per_bucket = cumulative_to_per_bucket(bucket_deltas)
+
+    # Get sorted bucket boundaries
+    finite_buckets = [le for le in per_bucket if le != "+Inf"]
+    sorted_buckets = sorted(finite_buckets, key=lambda x: float(x))
+
+    bucket_stats = bucket_stats or {}
+
+    # Generate observations centered on learned mean (or midpoint if unavailable)
+    observations: list[float] = []
+    bucket_info: list[
+        tuple[int, int, float, float, float]
+    ] = []  # (start_idx, count, lower, upper, center)
+
+    for le in sorted_buckets:
+        count = int(per_bucket.get(le, 0))
+        if count <= 0:
+            continue
+
+        lower, upper = get_bucket_bounds(le, sorted_buckets)
+        bucket_width = upper - lower
+        midpoint = (lower + upper) / 2
+        start_idx = len(observations)
+
+        # Use learned mean if available, otherwise midpoint
+        center = midpoint
+        if le in bucket_stats and bucket_stats[le].estimated_mean is not None:
+            learned_mean = bucket_stats[le].estimated_mean
+            # Validate: must be within bucket bounds
+            if lower < learned_mean < upper:
+                center = learned_mean
+
+        # Generate uniform distribution centered on 'center'
+        # Scale factor determines how spread out observations are
+        # If center != midpoint, we shift the distribution accordingly
+        shift = center - midpoint
+
+        for i in range(count):
+            # Standard uniform position
+            frac = (i + 0.5) / count
+            base_value = lower + bucket_width * frac
+            # Apply shift toward learned center, staying within bounds
+            value = np.clip(base_value + shift, lower, upper)
+            observations.append(value)
+
+        bucket_info.append((start_idx, count, lower, upper, center))
+
+    if not observations:
+        return np.array([], dtype=np.float64)
+
+    observations = np.array(observations, dtype=np.float64)
+
+    # Pass 2: Fine-tune to match target sum
+    # The per-bucket means should get us close, but we adjust for any residual
+    generated_sum = observations.sum()
+
+    if generated_sum <= 0 or target_sum <= 0:
+        return observations
+
+    sum_discrepancy = target_sum - generated_sum
+
+    if abs(sum_discrepancy) / target_sum < 0.001:
+        return observations  # Close enough
+
+    # Distribute residual across buckets proportionally to their sum contribution
+    # This ensures large buckets absorb more of the adjustment
+    for start_idx, count, lower, upper, center in bucket_info:
+        if count == 0:
+            continue
+
+        bucket_width = upper - lower
+        bucket_sum = sum(observations[start_idx : start_idx + count])
+        bucket_weight = (
+            bucket_sum / generated_sum if generated_sum > 0 else 1.0 / len(bucket_info)
+        )
+
+        # This bucket's share of the discrepancy
+        bucket_adjustment = sum_discrepancy * bucket_weight
+        per_obs_shift = bucket_adjustment / count if count > 0 else 0
+
+        # Limit shift to stay within bucket
+        max_shift = bucket_width * 0.4
+        shift = np.clip(per_obs_shift, -max_shift, max_shift)
+
+        for i in range(count):
+            idx = start_idx + i
+            observations[idx] = np.clip(observations[idx] + shift, lower, upper)
+
+    return observations
+
+
+def compute_best_guess_percentiles(
+    bucket_deltas: dict[str, float],
+    bucket_stats: dict[str, BucketStatistics],
+    total_sum: float,
+    total_count: int,
+    finite_observations: np.ndarray,  # kept for backward compat, but not used
+) -> BestGuessPercentiles | None:
+    """Compute percentiles including estimated +Inf bucket observations.
+
+    This is the main entry point for best-guess percentile estimation.
+    Uses learned bucket means for finite buckets and back-calculates +Inf estimates.
+
+    Args:
+        bucket_deltas: Per-bucket observation counts for the period
+        bucket_stats: Learned per-bucket statistics from polynomial histogram approach
+        total_sum: Exact total sum from histogram (sum_delta)
+        total_count: Total observation count (count_delta)
+        finite_observations: Array of observations extracted from finite buckets
+
+    Returns:
+        BestGuessPercentiles with estimates, or None if insufficient data
+    """
+    if total_count <= 0 or not bucket_deltas:
+        return None
+
+    # Get max finite bucket boundary
+    finite_buckets = [le for le in bucket_deltas if le != "+Inf"]
+    if not finite_buckets:
+        return None
+    max_finite_bucket = max(float(le) for le in finite_buckets)
+
+    # Convert cumulative bucket counts to per-bucket counts
+    per_bucket_counts = cumulative_to_per_bucket(bucket_deltas)
+
+    # Get +Inf bucket count (per-bucket, not cumulative)
+    inf_count = int(per_bucket_counts.get("+Inf", 0))
+
+    # Estimate sums for finite buckets
+    estimated_sums = estimate_bucket_sums(bucket_deltas, bucket_stats)
+    estimated_finite_sum = sum(estimated_sums.values())
+
+    # Count buckets with learned means
+    buckets_with_means = sum(
+        1
+        for le in bucket_deltas
+        if le != "+Inf"
+        and le in bucket_stats
+        and bucket_stats[le].estimated_mean is not None
+    )
+
+    # Estimate +Inf bucket observations using back-calculation
+    inf_observations = estimate_inf_bucket_observations(
+        total_sum, estimated_finite_sum, inf_count, max_finite_bucket
+    )
+
+    # Calculate actual finite sum (total minus what goes to +Inf)
+    inf_sum_estimate = (
+        float(np.sum(inf_observations)) if len(inf_observations) > 0 else 0.0
+    )
+    actual_finite_sum = total_sum - inf_sum_estimate
+
+    # Generate finite bucket observations using polynomial histogram approach
+    # Uses per-bucket learned means + sum constraint for improved accuracy
+    finite_obs_generated = generate_observations_with_sum_constraint(
+        bucket_deltas, actual_finite_sum, bucket_stats
+    )
+
+    # Combine finite and +Inf observations
+    if len(inf_observations) > 0:
+        all_observations = np.concatenate([finite_obs_generated, inf_observations])
+    else:
+        all_observations = finite_obs_generated
+
+    if len(all_observations) == 0:
+        return None
+
+    # Compute percentiles
+    pcts = np.percentile(all_observations, [50, 90, 95, 99, 99.9])
+
+    # Determine confidence level
+    inf_ratio = inf_count / total_count if total_count > 0 else 0
+    finite_bucket_count = len(finite_buckets)
+    mean_coverage = (
+        buckets_with_means / finite_bucket_count if finite_bucket_count > 0 else 0
+    )
+
+    if inf_ratio < 0.01 and mean_coverage > 0.5:
+        confidence = "high"
+    elif inf_ratio < 0.05:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    return BestGuessPercentiles(
+        p50=float(pcts[0]),
+        p90=float(pcts[1]),
+        p95=float(pcts[2]),
+        p99=float(pcts[3]),
+        p999=float(pcts[4]),
+        inf_bucket_count=inf_count,
+        inf_bucket_estimated_mean=float(np.mean(inf_observations))
+        if inf_observations
+        else None,
+        finite_observations_count=len(finite_obs_generated),
+        buckets_with_learned_means=buckets_with_means,
+        estimation_confidence=confidence,
+    )
+
+
+class HistogramPercentiles(AIPerfBaseModel):
+    """Container for all percentile computation approaches.
+
+    Provides three methods for estimating percentiles:
+    - bucket: Traditional Prometheus bucket interpolation (always available)
+    - observed: Per-scrape observation extraction (more accurate when coverage is high)
+    - best_guess: Includes +Inf bucket estimation (most accurate for tail percentiles)
+    """
+
+    bucket: BucketPercentiles = Field(
+        default_factory=BucketPercentiles,
+        description="Percentiles from bucket interpolation",
+    )
+    observed: ObservedPercentiles | None = Field(
+        default=None,
+        description="Percentiles from per-scrape observation extraction (None if unavailable)",
+    )
+    best_guess: BestGuessPercentiles | None = Field(
+        default=None,
+        description="Percentiles including +Inf bucket estimation (None if unavailable)",
+    )
+
+
 class InfoMetricData(AIPerfBaseModel):
     """Complete data for an info metric including label data.
 
@@ -342,7 +1265,7 @@ class HistogramExportStats(AIPerfBaseModel):
     Histograms track distributions (e.g., request latencies). We report:
     - Delta stats: count_delta, sum_delta, avg over the aggregation period
     - Rate: observations per second
-    - Estimated percentiles: p50, p90, p95, p99 computed via linear interpolation
+    - Percentiles: Two approaches (bucket interpolation and per-scrape observation extraction)
     - Raw bucket data for downstream analysis
     """
 
@@ -361,23 +1284,10 @@ class HistogramExportStats(AIPerfBaseModel):
         default=None,
         description="Observations per second (count_delta/duration)",
     )
-    # Estimated percentiles from bucket interpolation (like Prometheus histogram_quantile)
-    # Accuracy depends on bucket granularity - finer buckets yield better estimates
-    p50: float | None = Field(
+    # Percentiles computed via two approaches
+    percentiles: HistogramPercentiles | None = Field(
         default=None,
-        description="Estimated 50th percentile (median) via linear interpolation from buckets",
-    )
-    p90: float | None = Field(
-        default=None,
-        description="Estimated 90th percentile via linear interpolation from buckets",
-    )
-    p95: float | None = Field(
-        default=None,
-        description="Estimated 95th percentile via linear interpolation from buckets",
-    )
-    p99: float | None = Field(
-        default=None,
-        description="Estimated 99th percentile via linear interpolation from buckets",
+        description="Percentiles from bucket interpolation and per-scrape observation extraction",
     )
     # Raw bucket data for custom analysis (None if counter reset detected)
     buckets: dict[str, float] | None = Field(
@@ -441,21 +1351,74 @@ class HistogramExportStats(AIPerfBaseModel):
                 break
             bucket_deltas[le] = delta
 
-        # Compute estimated percentiles from bucket deltas
-        p50 = histogram_quantile(0.50, bucket_deltas) if bucket_deltas else None
-        p90 = histogram_quantile(0.90, bucket_deltas) if bucket_deltas else None
-        p95 = histogram_quantile(0.95, bucket_deltas) if bucket_deltas else None
-        p99 = histogram_quantile(0.99, bucket_deltas) if bucket_deltas else None
+        # Compute percentiles using both approaches
+        percentiles: HistogramPercentiles | None = None
+
+        if bucket_deltas:
+            # Approach 1: Bucket interpolation (traditional Prometheus histogram_quantile)
+            bucket_percentiles = BucketPercentiles(
+                p50=histogram_quantile(0.50, bucket_deltas),
+                p90=histogram_quantile(0.90, bucket_deltas),
+                p95=histogram_quantile(0.95, bucket_deltas),
+                p99=histogram_quantile(0.99, bucket_deltas),
+            )
+
+            # Approach 2: Per-scrape observation extraction
+            start_idx = ref_idx if ref_idx is not None else 0
+            observations, exact_count, bucket_placed_count = extract_all_observations(
+                ts.timestamps,
+                ts.sums,
+                ts.counts,
+                ts._bucket_snapshots,
+                start_idx=start_idx,
+            )
+
+            observed_percentiles: ObservedPercentiles | None = None
+            if len(observations) > 0:
+                total_obs = exact_count + bucket_placed_count
+                coverage = exact_count / total_obs if total_obs > 0 else 0.0
+
+                observed_percentiles = ObservedPercentiles(
+                    p50=float(np.percentile(observations, 50)),
+                    p90=float(np.percentile(observations, 90)),
+                    p95=float(np.percentile(observations, 95)),
+                    p99=float(np.percentile(observations, 99)),
+                    exact_count=exact_count,
+                    bucket_placed_count=bucket_placed_count,
+                    coverage=coverage,
+                )
+
+            # Approach 3: Best-guess with +Inf bucket estimation
+            # Learn per-bucket means from single-bucket scrape intervals
+            bucket_stats = accumulate_bucket_statistics(
+                ts.timestamps,
+                ts.sums,
+                ts.counts,
+                ts._bucket_snapshots,
+                start_idx=start_idx,
+            )
+
+            # Compute best-guess percentiles including +Inf bucket estimation
+            best_guess_percentiles = compute_best_guess_percentiles(
+                bucket_deltas=bucket_deltas,
+                bucket_stats=bucket_stats,
+                total_sum=sum_delta,
+                total_count=int(count_delta),
+                finite_observations=observations,
+            )
+
+            percentiles = HistogramPercentiles(
+                bucket=bucket_percentiles,
+                observed=observed_percentiles,
+                best_guess=best_guess_percentiles,
+            )
 
         return cls(
             count_delta=count_delta,
             sum_delta=sum_delta,
             avg=avg_value,
             rate=rate,
-            p50=p50,
-            p90=p90,
-            p95=p95,
-            p99=p99,
+            percentiles=percentiles,
             buckets=bucket_deltas,
         )
 

@@ -50,6 +50,8 @@ from aiperf.exporters.metrics_json_exporter import (
 from aiperf.exporters.server_metrics_csv_exporter import (
     COUNTER_STAT_KEYS,
     GAUGE_STAT_KEYS,
+    HISTOGRAM_BASE_STAT_KEYS,
+    HISTOGRAM_PERCENTILE_KEYS,
     HISTOGRAM_STAT_KEYS,
     SUMMARY_STAT_KEYS,
     ServerMetricsCsvExporter,
@@ -76,6 +78,8 @@ __all__ = [
     "FileExportInfo",
     "GAUGE_STAT_KEYS",
     "GPUTelemetryConsoleExporter",
+    "HISTOGRAM_BASE_STAT_KEYS",
+    "HISTOGRAM_PERCENTILE_KEYS",
     "HISTOGRAM_STAT_KEYS",
     "MetricsBaseExporter",
     "MetricsCsvExporter",

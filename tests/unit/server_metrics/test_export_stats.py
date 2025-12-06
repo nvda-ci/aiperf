@@ -5,10 +5,18 @@ import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models.export_models import (
+    BucketStatistics,
     CounterExportStats,
     GaugeExportStats,
     HistogramExportStats,
     SummaryExportStats,
+    accumulate_bucket_statistics,
+    compute_best_guess_percentiles,
+    estimate_bucket_sums,
+    estimate_inf_bucket_observations,
+    extract_all_observations,
+    extract_observations_from_scrape,
+    get_bucket_bounds,
     histogram_quantile,
 )
 from aiperf.common.models.server_metrics_models import (
@@ -405,22 +413,26 @@ class TestHistogramExportStats:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
+        # Verify we have percentiles with bucket interpolation
+        assert stats.percentiles is not None
+        assert stats.percentiles.bucket is not None
+
         # p50 = 500th observation, falls in (0.1, 0.5] bucket
         # rank_in_bucket = 500 - 100 = 400, bucket_count = 400
         # p50 = 0.1 + (0.5 - 0.1) * (400/400) = 0.5
-        assert stats.p50 == pytest.approx(0.5, rel=0.01)
+        assert stats.percentiles.bucket.p50 == pytest.approx(0.5, rel=0.01)
 
         # p90 = 900th observation, falls in (0.5, 1.0] bucket
         # rank_in_bucket = 900 - 500 = 400, bucket_count = 400
         # p90 = 0.5 + (1.0 - 0.5) * (400/400) = 1.0
-        assert stats.p90 == pytest.approx(1.0, rel=0.01)
+        assert stats.percentiles.bucket.p90 == pytest.approx(1.0, rel=0.01)
 
         # p95 = 950th observation, falls in (1.0, +Inf) bucket
         # When quantile falls in +Inf bucket, return second-highest bound
-        assert stats.p95 == pytest.approx(1.0, rel=0.01)
+        assert stats.percentiles.bucket.p95 == pytest.approx(1.0, rel=0.01)
 
         # p99 = 990th observation, also in +Inf bucket
-        assert stats.p99 == pytest.approx(1.0, rel=0.01)
+        assert stats.percentiles.bucket.p99 == pytest.approx(1.0, rel=0.01)
 
     def test_histogram_percentiles_none_on_counter_reset(self):
         """Test histogram percentiles are None when counter reset detected."""
@@ -438,10 +450,8 @@ class TestHistogramExportStats:
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
         assert stats.buckets is None
-        assert stats.p50 is None
-        assert stats.p90 is None
-        assert stats.p95 is None
-        assert stats.p99 is None
+        # When counter reset detected, percentiles should be None
+        assert stats.percentiles is None
 
 
 # =============================================================================
@@ -665,3 +675,763 @@ class TestEdgeCases:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
         assert stats.count_delta == 50.0  # 150 - 100
+
+
+# =============================================================================
+# Observation Extraction Tests
+# =============================================================================
+
+
+class TestExtractObservationsFromScrape:
+    """Test extract_observations_from_scrape function."""
+
+    def test_single_observation_returns_exact_value(self):
+        """When count_delta == 1, return exact observation value."""
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=1,
+            sum_delta=0.123,
+            bucket_deltas={"0.1": 0.0, "0.5": 1.0, "+Inf": 1.0},
+        )
+
+        assert observations == [0.123]
+        assert exact == 1
+        assert bucket_placed == 0
+
+    def test_zero_observations_returns_empty(self):
+        """When count_delta == 0, return empty list."""
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=0,
+            sum_delta=0.0,
+            bucket_deltas={"0.5": 0.0, "+Inf": 0.0},
+        )
+
+        assert observations == []
+        assert exact == 0
+        assert bucket_placed == 0
+
+    def test_negative_count_returns_empty(self):
+        """Counter reset (negative delta) returns empty list."""
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=-5,
+            sum_delta=-10.0,
+            bucket_deltas={"0.5": -5.0, "+Inf": -5.0},
+        )
+
+        assert observations == []
+        assert exact == 0
+        assert bucket_placed == 0
+
+    def test_multiple_observations_single_bucket(self):
+        """Multiple observations in single bucket use linear interpolation."""
+        # 3 observations all fell into (0.1, 0.5] bucket
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=3,
+            sum_delta=0.9,  # sum of the 3 observations
+            bucket_deltas={"0.1": 0.0, "0.5": 3.0, "+Inf": 3.0},
+        )
+
+        assert len(observations) == 3
+        assert bucket_placed == 3
+        assert exact == 0
+        # Values should be interpolated within (0.1, 0.5]
+        for obs in observations:
+            assert 0.1 < obs <= 0.5
+
+    def test_multiple_observations_multiple_buckets(self):
+        """Multiple observations spread across buckets."""
+        # 5 observations: 2 in [0, 0.1], 3 in (0.1, 0.5]
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=5,
+            sum_delta=1.5,
+            bucket_deltas={"0.1": 2.0, "0.5": 5.0, "+Inf": 5.0},
+        )
+
+        assert len(observations) == 5
+        assert bucket_placed == 5
+        assert exact == 0
+
+    def test_observations_in_first_bucket(self):
+        """Observations in first bucket (assumed 0 lower bound)."""
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=2,
+            sum_delta=0.08,
+            bucket_deltas={"0.1": 2.0, "0.5": 2.0, "+Inf": 2.0},
+        )
+
+        assert len(observations) == 2
+        assert bucket_placed == 2
+        # Values should be in [0, 0.1] bucket
+        for obs in observations:
+            assert 0.0 <= obs <= 0.1
+
+    def test_observations_in_inf_bucket_are_skipped(self):
+        """Observations in +Inf bucket are skipped (value unknown)."""
+        # 2 observations in (+Inf) bucket (above 1.0)
+        # We can't accurately place these, so they're not extracted
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=2,
+            sum_delta=3.0,  # values > 1.0
+            bucket_deltas={"0.5": 0.0, "1.0": 0.0, "+Inf": 2.0},
+        )
+
+        # +Inf bucket observations are not extracted
+        assert len(observations) == 0
+        assert bucket_placed == 0
+        assert exact == 0
+
+    def test_empty_bucket_deltas(self):
+        """Empty bucket deltas returns empty observations."""
+        observations, exact, bucket_placed = extract_observations_from_scrape(
+            count_delta=3,
+            sum_delta=1.0,
+            bucket_deltas={},
+        )
+
+        assert observations == []
+        assert exact == 0
+        assert bucket_placed == 0
+
+
+class TestExtractAllObservations:
+    """Test extract_all_observations function."""
+
+    def test_extracts_exact_observations(self):
+        """Test extraction of exact observations when count_delta == 1."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND, 2 * NANOS_PER_SECOND])
+        counts = np.array([0.0, 1.0, 2.0])  # +1, +1 per interval
+        sums = np.array([0.0, 0.15, 0.35])  # 0.15, then 0.20
+        bucket_snapshots = [
+            {"0.5": 0.0, "+Inf": 0.0},
+            {"0.5": 1.0, "+Inf": 1.0},
+            {"0.5": 2.0, "+Inf": 2.0},
+        ]
+
+        observations, exact, bucket_placed = extract_all_observations(
+            timestamps, sums, counts, bucket_snapshots
+        )
+
+        assert len(observations) == 2
+        assert exact == 2
+        assert bucket_placed == 0
+        assert observations[0] == pytest.approx(0.15)
+        assert observations[1] == pytest.approx(0.20)
+
+    def test_extracts_bucket_placed_observations(self):
+        """Test extraction of bucket-placed observations when count_delta > 1."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND])
+        counts = np.array([0.0, 10.0])  # 10 observations
+        sums = np.array([0.0, 3.0])
+        bucket_snapshots = [
+            {"0.1": 0.0, "0.5": 0.0, "+Inf": 0.0},
+            {"0.1": 5.0, "0.5": 10.0, "+Inf": 10.0},  # 5 in first, 5 in second
+        ]
+
+        observations, exact, bucket_placed = extract_all_observations(
+            timestamps, sums, counts, bucket_snapshots
+        )
+
+        assert len(observations) == 10
+        assert exact == 0
+        assert bucket_placed == 10
+
+    def test_mixed_exact_and_bucket_placed(self):
+        """Test extraction with mix of exact and bucket-placed observations."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND, 2 * NANOS_PER_SECOND])
+        counts = np.array([0.0, 1.0, 4.0])  # +1 (exact), +3 (bucket-placed)
+        sums = np.array([0.0, 0.25, 1.0])
+        bucket_snapshots = [
+            {"0.5": 0.0, "+Inf": 0.0},
+            {"0.5": 1.0, "+Inf": 1.0},
+            {"0.5": 4.0, "+Inf": 4.0},
+        ]
+
+        observations, exact, bucket_placed = extract_all_observations(
+            timestamps, sums, counts, bucket_snapshots
+        )
+
+        assert len(observations) == 4
+        assert exact == 1
+        assert bucket_placed == 3
+
+    def test_start_idx_skips_warmup(self):
+        """Test start_idx parameter skips initial observations."""
+        import numpy as np
+
+        timestamps = np.array(
+            [0, NANOS_PER_SECOND, 2 * NANOS_PER_SECOND, 3 * NANOS_PER_SECOND]
+        )
+        counts = np.array([0.0, 1.0, 2.0, 3.0])
+        sums = np.array([0.0, 0.1, 0.3, 0.6])
+        bucket_snapshots = [
+            {"0.5": 0.0, "+Inf": 0.0},
+            {"0.5": 1.0, "+Inf": 1.0},
+            {"0.5": 2.0, "+Inf": 2.0},
+            {"0.5": 3.0, "+Inf": 3.0},
+        ]
+
+        # Skip first interval (warmup)
+        observations, exact, bucket_placed = extract_all_observations(
+            timestamps, sums, counts, bucket_snapshots, start_idx=1
+        )
+
+        assert len(observations) == 2  # Only intervals 2 and 3
+        assert exact == 2
+        assert bucket_placed == 0
+
+    def test_empty_data_returns_empty(self):
+        """Test empty time series returns empty observations."""
+        import numpy as np
+
+        timestamps = np.array([0])  # Single timestamp, no intervals
+        counts = np.array([0.0])
+        sums = np.array([0.0])
+        bucket_snapshots = [{"0.5": 0.0, "+Inf": 0.0}]
+
+        observations, exact, bucket_placed = extract_all_observations(
+            timestamps, sums, counts, bucket_snapshots
+        )
+
+        assert len(observations) == 0
+        assert exact == 0
+        assert bucket_placed == 0
+
+
+class TestHistogramObservedPercentiles:
+    """Test histogram observed percentiles from per-scrape observation extraction."""
+
+    def test_observed_percentiles_from_exact_observations(self):
+        """Test observed percentiles computed from exact observations."""
+        ts = ServerMetricsTimeSeries()
+        # Create a histogram with one observation per scrape (exact values)
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.5": 0.0, "1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                (1 * NANOS_PER_SECOND, hist({"0.5": 1.0, "1.0": 1.0, "+Inf": 1.0}, 0.1, 1.0)),
+                (2 * NANOS_PER_SECOND, hist({"0.5": 2.0, "1.0": 2.0, "+Inf": 2.0}, 0.3, 2.0)),
+                (3 * NANOS_PER_SECOND, hist({"0.5": 3.0, "1.0": 3.0, "+Inf": 3.0}, 0.6, 3.0)),
+                (4 * NANOS_PER_SECOND, hist({"0.5": 4.0, "1.0": 4.0, "+Inf": 4.0}, 1.0, 4.0)),
+            ],
+        )  # fmt: skip
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.percentiles is not None
+        assert stats.percentiles.observed is not None
+
+        # We have 4 exact observations: 0.1, 0.2, 0.3, 0.4
+        assert stats.percentiles.observed.exact_count == 4
+        assert stats.percentiles.observed.bucket_placed_count == 0
+        assert stats.percentiles.observed.coverage == pytest.approx(1.0)
+
+        # Observed percentiles should be computed from exact values
+        assert stats.percentiles.observed.p50 is not None
+        assert stats.percentiles.observed.p90 is not None
+
+    def test_observed_percentiles_with_bucket_placed(self):
+        """Test observed percentiles with bucket-placed observations."""
+        ts = ServerMetricsTimeSeries()
+        # Multiple observations per scrape (bucket-placed)
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.1": 0.0, "0.5": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                # 10 observations in first interval
+                (
+                    NANOS_PER_SECOND,
+                    hist({"0.1": 5.0, "0.5": 10.0, "+Inf": 10.0}, 2.0, 10.0),
+                ),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.percentiles is not None
+        assert stats.percentiles.observed is not None
+
+        # All observations are bucket-placed
+        assert stats.percentiles.observed.exact_count == 0
+        assert stats.percentiles.observed.bucket_placed_count == 10
+        assert stats.percentiles.observed.coverage == pytest.approx(0.0)
+
+    def test_observed_percentiles_none_on_counter_reset(self):
+        """Test observed percentiles are None on counter reset."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.5": 100.0, "+Inf": 200.0}, 50.0, 200.0)),
+                # Counter reset
+                (NANOS_PER_SECOND, hist({"0.5": 10.0, "+Inf": 20.0}, 5.0, 20.0)),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.percentiles is None
+
+    def test_coverage_calculation(self):
+        """Test coverage is exact_count / total_count."""
+        ts = ServerMetricsTimeSeries()
+        # Mix of exact and bucket-placed: 2 exact (count_delta==1), 5 bucket-placed
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.5": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                (
+                    1 * NANOS_PER_SECOND,
+                    hist({"0.5": 1.0, "+Inf": 1.0}, 0.1, 1.0),
+                ),  # exact
+                (
+                    2 * NANOS_PER_SECOND,
+                    hist({"0.5": 6.0, "+Inf": 6.0}, 1.5, 6.0),
+                ),  # +5 bucket
+                (
+                    3 * NANOS_PER_SECOND,
+                    hist({"0.5": 7.0, "+Inf": 7.0}, 1.7, 7.0),
+                ),  # exact
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.percentiles is not None
+        assert stats.percentiles.observed is not None
+
+        assert stats.percentiles.observed.exact_count == 2
+        assert stats.percentiles.observed.bucket_placed_count == 5
+        # Coverage = 2 / 7 = 0.2857...
+        assert stats.percentiles.observed.coverage == pytest.approx(2 / 7, rel=0.01)
+
+
+# =============================================================================
+# Bucket Statistics Tests (Polynomial Histogram Approach)
+# =============================================================================
+
+
+class TestBucketStatistics:
+    """Test BucketStatistics model for polynomial histogram approach."""
+
+    def test_bucket_statistics_record_single(self):
+        """Test recording a single observation."""
+        stats = BucketStatistics(bucket_le="0.5")
+        stats.record(mean=0.25, count=1)
+
+        assert stats.observation_count == 1
+        assert stats.sample_count == 1
+        assert stats.estimated_mean == pytest.approx(0.25)
+
+    def test_bucket_statistics_record_multiple(self):
+        """Test recording multiple observations."""
+        stats = BucketStatistics(bucket_le="0.5")
+        stats.record(mean=0.2, count=10)
+        stats.record(mean=0.3, count=10)
+
+        assert stats.observation_count == 20
+        assert stats.sample_count == 2
+        # Weighted mean: (0.2*10 + 0.3*10) / 20 = 5/20 = 0.25
+        assert stats.estimated_mean == pytest.approx(0.25)
+
+    def test_bucket_statistics_weighted_average(self):
+        """Test that estimated_mean is weighted by count."""
+        stats = BucketStatistics(bucket_le="1.0")
+        stats.record(mean=0.1, count=1)  # weight 1
+        stats.record(mean=0.5, count=9)  # weight 9
+
+        # Weighted: (0.1*1 + 0.5*9) / 10 = 4.6/10 = 0.46
+        assert stats.estimated_mean == pytest.approx(0.46)
+
+    def test_bucket_statistics_empty_returns_none(self):
+        """Test empty bucket returns None for estimated_mean."""
+        stats = BucketStatistics(bucket_le="0.5")
+        assert stats.estimated_mean is None
+
+
+class TestAccumulateBucketStatistics:
+    """Test accumulate_bucket_statistics function."""
+
+    def test_single_bucket_intervals_learn_means(self):
+        """Test that single-bucket intervals are used to learn means."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND, 2 * NANOS_PER_SECOND])
+        # All observations in same bucket each interval
+        counts = np.array([0.0, 5.0, 10.0])  # +5, +5
+        sums = np.array([0.0, 1.5, 3.5])  # mean=0.3 first, mean=0.4 second
+        bucket_snapshots = [
+            {"0.5": 0.0, "1.0": 0.0, "+Inf": 0.0},
+            {"0.5": 5.0, "1.0": 5.0, "+Inf": 5.0},  # all in 0.5 bucket
+            {"0.5": 10.0, "1.0": 10.0, "+Inf": 10.0},  # all in 0.5 bucket
+        ]
+
+        stats = accumulate_bucket_statistics(timestamps, sums, counts, bucket_snapshots)
+
+        assert "0.5" in stats
+        assert stats["0.5"].observation_count == 10
+        # Weighted: (0.3*5 + 0.4*5) / 10 = 0.35
+        assert stats["0.5"].estimated_mean == pytest.approx(0.35)
+
+    def test_multi_bucket_intervals_not_learned(self):
+        """Test that multi-bucket intervals are NOT used to learn means."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND])
+        counts = np.array([0.0, 10.0])
+        sums = np.array([0.0, 3.0])
+        # Observations split across buckets
+        bucket_snapshots = [
+            {"0.1": 0.0, "0.5": 0.0, "+Inf": 0.0},
+            {"0.1": 3.0, "0.5": 10.0, "+Inf": 10.0},  # 3 in 0.1, 7 in 0.5
+        ]
+
+        stats = accumulate_bucket_statistics(timestamps, sums, counts, bucket_snapshots)
+
+        # No single-bucket intervals, so no stats learned
+        assert len(stats) == 0
+
+    def test_inf_bucket_learns_mean(self):
+        """Test that +Inf bucket can learn means when all observations land there."""
+        import numpy as np
+
+        timestamps = np.array([0, NANOS_PER_SECOND])
+        counts = np.array([0.0, 3.0])
+        sums = np.array([0.0, 45.0])  # mean = 15.0
+        bucket_snapshots = [
+            {"1.0": 0.0, "+Inf": 0.0},
+            {"1.0": 0.0, "+Inf": 3.0},  # all in +Inf
+        ]
+
+        stats = accumulate_bucket_statistics(timestamps, sums, counts, bucket_snapshots)
+
+        assert "+Inf" in stats
+        assert stats["+Inf"].estimated_mean == pytest.approx(15.0)
+
+
+class TestGetBucketBounds:
+    """Test get_bucket_bounds function."""
+
+    def test_first_bucket_has_zero_lower_bound(self):
+        """First bucket has lower bound of 0."""
+        sorted_buckets = ["0.1", "0.5", "1.0"]
+        lower, upper = get_bucket_bounds("0.1", sorted_buckets)
+
+        assert lower == 0.0
+        assert upper == 0.1
+
+    def test_middle_bucket_has_previous_as_lower(self):
+        """Middle bucket has previous bucket as lower bound."""
+        sorted_buckets = ["0.1", "0.5", "1.0"]
+        lower, upper = get_bucket_bounds("0.5", sorted_buckets)
+
+        assert lower == 0.1
+        assert upper == 0.5
+
+    def test_last_finite_bucket(self):
+        """Last finite bucket has previous bucket as lower bound."""
+        sorted_buckets = ["0.1", "0.5", "1.0"]
+        lower, upper = get_bucket_bounds("1.0", sorted_buckets)
+
+        assert lower == 0.5
+        assert upper == 1.0
+
+
+class TestEstimateBucketSums:
+    """Test estimate_bucket_sums function."""
+
+    def test_uses_learned_means_when_available(self):
+        """Test that learned means are used when available."""
+        # Cumulative counts: 10 in [0,0.1], 10 in (0.1,0.5], 10 in +Inf
+        bucket_deltas = {"0.1": 10.0, "0.5": 20.0, "+Inf": 30.0}
+        bucket_stats = {
+            "0.1": BucketStatistics(
+                bucket_le="0.1",
+                observation_count=100,
+                weighted_mean_sum=5.0,  # mean = 0.05
+                sample_count=10,
+            ),
+        }
+
+        sums = estimate_bucket_sums(bucket_deltas, bucket_stats)
+
+        # Per-bucket: 10 in 0.1, 10 in 0.5
+        # 0.1 bucket uses learned mean: 10 * 0.05 = 0.5
+        assert sums["0.1"] == pytest.approx(0.5)
+        # 0.5 bucket uses midpoint: 10 * (0.1 + 0.5) / 2 = 10 * 0.3 = 3.0
+        assert sums["0.5"] == pytest.approx(3.0)
+        # +Inf bucket is not included
+        assert "+Inf" not in sums
+
+    def test_falls_back_to_midpoint(self):
+        """Test fallback to midpoint when no learned means."""
+        # Cumulative counts: 10 in [0,0.2], 5 more in (0.2,1.0], 0 in +Inf
+        bucket_deltas = {"0.2": 10.0, "1.0": 15.0, "+Inf": 15.0}
+        bucket_stats = {}  # No learned stats
+
+        sums = estimate_bucket_sums(bucket_deltas, bucket_stats)
+
+        # Per-bucket: 10 in 0.2, 5 in 1.0
+        # 0.2 bucket: 10 * (0 + 0.2) / 2 = 10 * 0.1 = 1.0
+        assert sums["0.2"] == pytest.approx(1.0)
+        # 1.0 bucket: 5 * (0.2 + 1.0) / 2 = 5 * 0.6 = 3.0
+        assert sums["1.0"] == pytest.approx(3.0)
+
+
+class TestEstimateInfBucketObservations:
+    """Test estimate_inf_bucket_observations function."""
+
+    def test_back_calculates_inf_observations(self):
+        """Test back-calculation of +Inf bucket observations."""
+        total_sum = 100.0
+        estimated_finite_sum = 70.0
+        inf_count = 3
+        max_finite_bucket = 10.0
+
+        observations = estimate_inf_bucket_observations(
+            total_sum, estimated_finite_sum, inf_count, max_finite_bucket
+        )
+
+        # Back-calculated inf_sum = 100 - 70 = 30
+        # inf_avg = 30 / 3 = 10.0
+        # But 10.0 is not > max_finite_bucket, so fallback to 1.5x
+        # inf_avg = 10.0 * 1.5 = 15.0
+        # Observations spread from 10.0 to 20.0 (mean = 15.0)
+        assert len(observations) == 3
+        assert all(obs >= max_finite_bucket for obs in observations)
+        assert pytest.approx(sum(observations) / len(observations), rel=0.01) == 15.0
+
+    def test_inf_observations_above_max_finite(self):
+        """Test all +Inf observations are above max finite bucket."""
+        total_sum = 200.0
+        estimated_finite_sum = 50.0
+        inf_count = 10
+        max_finite_bucket = 5.0
+
+        observations = estimate_inf_bucket_observations(
+            total_sum, estimated_finite_sum, inf_count, max_finite_bucket
+        )
+
+        # inf_avg = 150 / 10 = 15.0 (> 5.0, valid)
+        assert len(observations) == 10
+        assert all(obs >= max_finite_bucket for obs in observations)
+
+    def test_zero_inf_count_returns_empty(self):
+        """Test zero inf_count returns empty list."""
+        observations = estimate_inf_bucket_observations(
+            total_sum=100.0,
+            estimated_finite_sum=100.0,
+            inf_count=0,
+            max_finite_bucket=10.0,
+        )
+
+        assert observations == []
+
+    def test_negative_inf_sum_falls_back(self):
+        """Test negative back-calculated sum falls back to 1.5x max."""
+        # When estimated_finite_sum > total_sum (estimation error)
+        observations = estimate_inf_bucket_observations(
+            total_sum=50.0,
+            estimated_finite_sum=100.0,  # Error: greater than total
+            inf_count=5,
+            max_finite_bucket=10.0,
+        )
+
+        # Should fall back to 1.5x max_finite_bucket = 15.0
+        assert len(observations) == 5
+        assert pytest.approx(sum(observations) / len(observations), rel=0.01) == 15.0
+
+
+class TestComputeBestGuessPercentiles:
+    """Test compute_best_guess_percentiles function."""
+
+    def test_computes_percentiles_with_inf_observations(self):
+        """Test percentile computation including +Inf bucket estimates."""
+        import numpy as np
+
+        # Cumulative: 90 <= 0.5, 97 <= 1.0, 100 total (3 in +Inf)
+        bucket_deltas = {"0.5": 90.0, "1.0": 97.0, "+Inf": 100.0}
+        bucket_stats = {}  # No learned stats
+        total_sum = 100.0
+        total_count = 100
+
+        # Finite observations (90 in 0.5, 7 in 1.0)
+        finite_observations = np.linspace(0.1, 0.9, 97)
+
+        result = compute_best_guess_percentiles(
+            bucket_deltas, bucket_stats, total_sum, total_count, finite_observations
+        )
+
+        assert result is not None
+        assert result.p50 is not None
+        assert result.p99 is not None
+        assert result.p999 is not None
+        assert result.inf_bucket_count == 3  # 100 - 97 = 3
+        assert result.inf_bucket_estimated_mean is not None
+        assert result.inf_bucket_estimated_mean > 1.0  # Must be > max finite bucket
+
+    def test_confidence_high_when_inf_small(self):
+        """Test confidence is high when +Inf bucket is small."""
+        import numpy as np
+
+        # Cumulative: 500 <= 0.5, 500 total (0 in +Inf)
+        bucket_deltas = {"0.5": 500.0, "+Inf": 500.0}
+        bucket_stats = {
+            "0.5": BucketStatistics(
+                bucket_le="0.5",
+                observation_count=100,
+                weighted_mean_sum=25.0,
+                sample_count=10,
+            )
+        }
+        finite_observations = np.linspace(0.1, 0.4, 500)
+
+        result = compute_best_guess_percentiles(
+            bucket_deltas, bucket_stats, 150.0, 500, finite_observations
+        )
+
+        # inf_ratio = 0/500 = 0, mean_coverage = 1/1 = 1.0
+        # Should be high confidence
+        assert result is not None
+        assert result.estimation_confidence == "high"
+
+    def test_confidence_low_when_inf_large(self):
+        """Test confidence is low when +Inf bucket is large."""
+        import numpy as np
+
+        # Cumulative: 50 <= 1.0, 100 total (50 in +Inf)
+        bucket_deltas = {"1.0": 50.0, "+Inf": 100.0}
+        bucket_stats = {}
+        finite_observations = np.linspace(0.1, 0.9, 50)
+
+        result = compute_best_guess_percentiles(
+            bucket_deltas, bucket_stats, 2000.0, 100, finite_observations
+        )
+
+        # inf_ratio = 50/100 = 0.5 > 0.05, should be low
+        assert result is not None
+        assert result.estimation_confidence == "low"
+
+    def test_returns_none_on_empty_data(self):
+        """Test returns None when data is empty."""
+        import numpy as np
+
+        result = compute_best_guess_percentiles(
+            bucket_deltas={},
+            bucket_stats={},
+            total_sum=0.0,
+            total_count=0,
+            finite_observations=np.array([]),
+        )
+
+        assert result is None
+
+
+class TestBestGuessPercentilesIntegration:
+    """Integration tests for best_guess percentiles in HistogramExportStats."""
+
+    def test_best_guess_computed_in_from_time_series(self):
+        """Test that best_guess percentiles are computed in from_time_series."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "ttft",
+            [
+                (0, hist({"0.5": 0.0, "1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                (
+                    NANOS_PER_SECOND,
+                    hist({"0.5": 50.0, "1.0": 90.0, "+Inf": 100.0}, 70.0, 100.0),
+                ),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+
+        assert stats.percentiles is not None
+        assert stats.percentiles.best_guess is not None
+        assert stats.percentiles.best_guess.p50 is not None
+        assert stats.percentiles.best_guess.p99 is not None
+        assert stats.percentiles.best_guess.p999 is not None
+
+    def test_best_guess_includes_inf_bucket_metadata(self):
+        """Test that best_guess includes +Inf bucket metadata."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "latency",
+            [
+                (0, hist({"1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                # 90 observations <= 1.0s, 10 in +Inf (>1.0s)
+                (NANOS_PER_SECOND, hist({"1.0": 90.0, "+Inf": 100.0}, 150.0, 100.0)),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
+
+        assert stats.percentiles is not None
+        best_guess = stats.percentiles.best_guess
+        assert best_guess is not None
+        assert best_guess.inf_bucket_count == 10
+        assert best_guess.inf_bucket_estimated_mean is not None
+        assert best_guess.inf_bucket_estimated_mean > 1.0
+
+    def test_best_guess_differs_from_observed_when_inf_present(self):
+        """Test best_guess differs from observed when +Inf bucket has observations."""
+        ts = ServerMetricsTimeSeries()
+        # Large +Inf bucket to show difference
+        add_histogram_snapshots(
+            ts,
+            "latency",
+            [
+                (0, hist({"1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
+                # 50 observations <= 1.0s, 50 in +Inf (>1.0s) with high values
+                (
+                    NANOS_PER_SECOND,
+                    hist({"1.0": 50.0, "+Inf": 100.0}, 750.0, 100.0),  # avg=7.5s
+                ),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
+
+        assert stats.percentiles is not None
+        observed = stats.percentiles.observed
+        best_guess = stats.percentiles.best_guess
+
+        assert observed is not None
+        assert best_guess is not None
+
+        # Observed ignores +Inf, so p99 should be in finite buckets (<=1.0)
+        assert observed.p99 is not None
+        assert observed.p99 <= 1.0
+
+        # Best_guess includes +Inf estimates, so p99 should be higher
+        # 50 of 100 observations are in +Inf, so p99 (99th percentile) should include +Inf
+        assert best_guess.p99 is not None
+        # With 50% in +Inf, the p99 should be in the +Inf region
+        assert best_guess.p99 > 1.0
+
+    def test_best_guess_none_on_counter_reset(self):
+        """Test best_guess is None when counter reset detected."""
+        ts = ServerMetricsTimeSeries()
+        add_histogram_snapshots(
+            ts,
+            "latency",
+            [
+                (0, hist({"1.0": 1000.0, "+Inf": 2000.0}, 500.0, 2000.0)),
+                # Counter reset
+                (NANOS_PER_SECOND, hist({"1.0": 50.0, "+Inf": 100.0}, 25.0, 100.0)),
+            ],
+        )
+
+        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
+
+        assert stats.percentiles is None

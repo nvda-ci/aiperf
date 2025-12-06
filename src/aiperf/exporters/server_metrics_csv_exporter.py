@@ -26,16 +26,32 @@ COUNTER_STAT_KEYS = [
     "rate_max",
     "rate_std",
 ]
-HISTOGRAM_STAT_KEYS = [
-    "count_delta",
-    "sum_delta",
-    "avg",
-    "rate",
-    "p50",
-    "p90",
-    "p95",
-    "p99",
+# Histogram base stats (before bucket columns)
+HISTOGRAM_BASE_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
+# Histogram percentile columns (nested under percentiles.bucket, percentiles.observed, percentiles.best_guess)
+HISTOGRAM_PERCENTILE_KEYS = [
+    "bucket.p50",
+    "bucket.p90",
+    "bucket.p95",
+    "bucket.p99",
+    "observed.p50",
+    "observed.p90",
+    "observed.p95",
+    "observed.p99",
+    "observed.exact_count",
+    "observed.bucket_placed_count",
+    "observed.coverage",
+    "best_guess.p50",
+    "best_guess.p90",
+    "best_guess.p95",
+    "best_guess.p99",
+    "best_guess.p999",
+    "best_guess.inf_bucket_count",
+    "best_guess.inf_bucket_estimated_mean",
+    "best_guess.estimation_confidence",
 ]
+# Combined histogram stat keys for CSV export
+HISTOGRAM_STAT_KEYS = HISTOGRAM_BASE_STAT_KEYS + HISTOGRAM_PERCENTILE_KEYS
 SUMMARY_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
 
 
@@ -354,7 +370,7 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
         row = [endpoint, metric_type, metric_name, labels_str]
 
         for stat in stat_keys:
-            value = getattr(stats, stat, None)
+            value = self._get_stat_value(stats, stat)
             row.append(self._format_number(value))
 
         # Add bucket/quantile values as separate columns
@@ -378,3 +394,34 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
         if isinstance(value, numbers.Real | Decimal):
             return f"{float(value):.4f}"
         return str(value)
+
+    def _get_stat_value(self, stats: object, stat_key: str) -> object:
+        """Get a stat value, handling nested paths for percentile fields.
+
+        For keys like "bucket.p50", accesses stats.percentiles.bucket.p50.
+        For simple keys like "avg", accesses stats.avg.
+
+        Args:
+            stats: Stats object with values
+            stat_key: Stat key, possibly with dot notation for nested access
+
+        Returns:
+            The stat value or None if not found
+        """
+        if "." in stat_key:
+            # Nested path like "bucket.p50" -> stats.percentiles.bucket.p50
+            parts = stat_key.split(".")
+            # First get the percentiles object
+            percentiles = getattr(stats, "percentiles", None)
+            if percentiles is None:
+                return None
+            # Then traverse the nested path
+            obj = percentiles
+            for part in parts:
+                obj = getattr(obj, part, None)
+                if obj is None:
+                    return None
+            return obj
+        else:
+            # Simple attribute access
+            return getattr(stats, stat_key, None)
