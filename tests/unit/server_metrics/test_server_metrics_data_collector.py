@@ -38,7 +38,7 @@ class TestServerMetricsDataCollectorInitialization:
         collector = ServerMetricsDataCollector("http://localhost:8081/metrics")
 
         assert collector._endpoint_url == "http://localhost:8081/metrics"
-        assert collector._collection_interval == 0.1  # SERVER_METRICS default (100ms)
+        assert collector._collection_interval == 0.333  # SERVER_METRICS default (333ms)
         assert collector.id == "server_metrics_collector"
 
 

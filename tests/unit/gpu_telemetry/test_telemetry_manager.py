@@ -194,7 +194,7 @@ class TestCallbackFunctions:
         manager._dcgm_endpoints = []
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         return manager
 
     @pytest.mark.asyncio
@@ -311,7 +311,7 @@ class TestStatusMessaging:
         manager._dcgm_endpoints = []
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         return manager
 
     @pytest.mark.asyncio
@@ -436,7 +436,7 @@ class TestCollectorManagement:
         manager._dcgm_endpoints = []
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         return manager
 
     @pytest.mark.asyncio
@@ -630,7 +630,7 @@ class TestProfileConfigureCommand:
         manager._dcgm_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         manager.error = MagicMock()
         manager.debug = MagicMock()
         return manager
@@ -706,7 +706,7 @@ class TestProfileStartCommand:
         manager._dcgm_endpoints = list(Environment.GPU.DEFAULT_DCGM_ENDPOINTS)
         manager._user_provided_endpoints = []
         manager._user_explicitly_configured_telemetry = False
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         manager.error = MagicMock()
         manager.warning = MagicMock()
         return manager
@@ -770,7 +770,7 @@ class TestSmartDefaultVisibility:
         )
         manager._user_provided_endpoints = user_endpoints
         manager._user_explicitly_configured_telemetry = user_requested
-        manager._collection_interval = 0.33
+        manager._collection_interval = 0.333
         manager.error = MagicMock()
         manager.debug = MagicMock()
         return manager

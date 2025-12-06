@@ -55,7 +55,7 @@ class TestTelemetryDataCollectorCore:
         collector = TelemetryDataCollector("http://localhost:9401/metrics")
 
         assert collector.endpoint_url == "http://localhost:9401/metrics"
-        assert collector.collection_interval == 0.33  # Default collection interval
+        assert collector.collection_interval == 0.333  # Default collection interval
         assert collector.id == "telemetry_collector"  # Default ID
         assert collector._record_callback is None
         assert collector._error_callback is None

@@ -132,8 +132,8 @@ class _GPUSettings(BaseSettings):
     COLLECTION_INTERVAL: float = Field(
         ge=0.01,
         le=300.0,
-        default=0.33,
-        description="GPU telemetry metrics collection interval in seconds (default: 330ms, ~3Hz)",
+        default=0.333,
+        description="GPU telemetry metrics collection interval in seconds (default: 333ms, ~3Hz)",
     )
     DEFAULT_DCGM_ENDPOINTS: Annotated[
         str | list[str],
@@ -351,8 +351,8 @@ class _ServerMetricsSettings(BaseSettings):
     COLLECTION_INTERVAL: float = Field(
         ge=0.001,
         le=300.0,
-        default=0.33,
-        description="Server metrics collection interval in seconds (default: 330ms, ~3Hz)",
+        default=0.333,
+        description="Server metrics collection interval in seconds (default: 333ms, ~3Hz)",
     )
     DEFAULT_BACKEND_PORTS: Annotated[
         str | list[int],

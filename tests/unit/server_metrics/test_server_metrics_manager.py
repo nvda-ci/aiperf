@@ -59,7 +59,7 @@ class TestServerMetricsManagerInitialization:
         assert manager._collectors == {}
         # Should include inference port by default
         assert manager._server_metrics_endpoints == ["http://localhost:8000/metrics"]
-        assert manager._collection_interval == 0.1  # SERVER_METRICS default (100ms)
+        assert manager._collection_interval == 0.333  # SERVER_METRICS default (333ms)
 
     def test_endpoint_discovery_from_inference_url(
         self,
