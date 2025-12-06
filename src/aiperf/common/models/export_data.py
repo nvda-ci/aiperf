@@ -7,8 +7,7 @@ This module provides data structures for exporting benchmark results to JSON:
 
 - JsonMetricResult: Single metric result with statistics
 - TelemetryExportData: GPU telemetry data for export
-- ServerMetricsExportData: Server metrics data for export (nested format)
-- ServerMetricsFlatExportData: Server metrics data for export (flat format)
+- ServerMetricsHybridExportData: Server metrics data for export (hybrid format)
 - JsonExportData: Complete benchmark results for JSON export
 
 These models are designed to be compatible with the GenAI-Perf JSON output format.
@@ -180,30 +179,6 @@ class ServerMetricsEndpointSummary(AIPerfBaseModel):
     metrics: dict[str, ServerMetricSummary] = Field(
         default_factory=dict,
         description="All metrics keyed by metric name, with description and type-specific statistics",
-    )
-
-
-class ServerMetricsExportData(AIPerfBaseModel):
-    """Server metrics data structure for JSON export."""
-
-    summary: ServerMetricsSummary
-    endpoints: dict[str, ServerMetricsEndpointSummary]
-
-
-class ServerMetricsMergedExportData(AIPerfBaseModel):
-    """Server metrics data structure with all endpoints merged into a single metrics dict.
-
-    This format merges series from all endpoints into each metric, with each series
-    item containing an 'endpoint' field to identify its source.
-
-    Info metrics (ending in _info) are included as gauges with value=1.0 since they
-    represent static configuration/version information that doesn't change.
-    """
-
-    summary: ServerMetricsSummary
-    metrics: dict[str, ServerMetricSummary] = Field(
-        default_factory=dict,
-        description="All metrics merged across endpoints, with endpoint field in each series item",
     )
 
 
@@ -415,7 +390,6 @@ class JsonExportData(AIPerfBaseModel):
     error_isl: JsonMetricResult | None = None
     total_error_isl: JsonMetricResult | None = None
     telemetry_data: TelemetryExportData | None = None
-    server_metrics_data: ServerMetricsExportData | None = None
     input_config: UserConfig | None = None
     was_cancelled: bool | None = None
     error_summary: list[ErrorDetailsCount] | None = None

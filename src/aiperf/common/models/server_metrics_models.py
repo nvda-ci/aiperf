@@ -6,7 +6,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterator
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.base_models import AIPerfBaseModel
@@ -99,6 +99,20 @@ class SlimMetricSample(AIPerfBaseModel):
         default=None,
         description="Total number of observations (for histogram/summary)",
     )
+
+    @model_validator(mode="after")
+    def validate_mutual_exclusivity(self) -> SlimMetricSample:
+        """Ensure only one of value, histogram, or summary is set."""
+        fields_set = [
+            self.value is not None,
+            self.histogram is not None,
+            self.summary is not None,
+        ]
+        if sum(fields_set) > 1:
+            raise ValueError(
+                "Only one of 'value', 'histogram', or 'summary' can be set"
+            )
+        return self
 
 
 class MetricSample(AIPerfBaseModel):

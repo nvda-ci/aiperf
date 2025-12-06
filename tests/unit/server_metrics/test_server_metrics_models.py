@@ -79,6 +79,69 @@ class TestMetricSampleConversion:
         assert slim.count == 100.0
 
 
+class TestSlimMetricSampleValidation:
+    """Test SlimMetricSample mutual exclusivity validation."""
+
+    def test_value_only_is_valid(self):
+        """Test that value-only sample is valid."""
+        sample = SlimMetricSample(value=42.0)
+        assert sample.value == 42.0
+
+    def test_histogram_only_is_valid(self):
+        """Test that histogram-only sample is valid."""
+        sample = SlimMetricSample(
+            histogram={"0.1": 10, "1.0": 50},
+            sum=100.0,
+            count=50,
+        )
+        assert sample.histogram == {"0.1": 10, "1.0": 50}
+
+    def test_summary_only_is_valid(self):
+        """Test that summary-only sample is valid."""
+        sample = SlimMetricSample(
+            summary={"0.5": 0.1, "0.99": 1.0},
+            sum=50.0,
+            count=100,
+        )
+        assert sample.summary == {"0.5": 0.1, "0.99": 1.0}
+
+    def test_none_fields_is_valid(self):
+        """Test that sample with no value/histogram/summary is valid (labels only)."""
+        sample = SlimMetricSample(labels={"key": "value"})
+        assert sample.labels == {"key": "value"}
+        assert sample.value is None
+        assert sample.histogram is None
+        assert sample.summary is None
+
+    def test_value_and_histogram_raises(self):
+        """Test that setting both value and histogram raises ValidationError."""
+        import pytest
+
+        with pytest.raises(ValueError, match="Only one of"):
+            SlimMetricSample(value=42.0, histogram={"0.1": 10})
+
+    def test_value_and_summary_raises(self):
+        """Test that setting both value and summary raises ValidationError."""
+        import pytest
+
+        with pytest.raises(ValueError, match="Only one of"):
+            SlimMetricSample(value=42.0, summary={"0.5": 0.1})
+
+    def test_histogram_and_summary_raises(self):
+        """Test that setting both histogram and summary raises ValidationError."""
+        import pytest
+
+        with pytest.raises(ValueError, match="Only one of"):
+            SlimMetricSample(histogram={"0.1": 10}, summary={"0.5": 0.1})
+
+    def test_all_three_raises(self):
+        """Test that setting all three raises ValidationError."""
+        import pytest
+
+        with pytest.raises(ValueError, match="Only one of"):
+            SlimMetricSample(value=42.0, histogram={"0.1": 10}, summary={"0.5": 0.1})
+
+
 class TestServerMetricsRecordConversion:
     """Test ServerMetricsRecord to slim format conversion."""
 

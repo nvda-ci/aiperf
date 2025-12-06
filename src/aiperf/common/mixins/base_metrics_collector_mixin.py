@@ -323,12 +323,14 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
             timing = self._trace_timing.pop(trace_ctx, HttpTraceTiming())
             return FetchResult(text=text, trace_timing=timing)
         except (aiohttp.ClientConnectionError, RuntimeError) as e:
-            # Clean up trace timing on error
-            self._trace_timing.pop(trace_ctx, None)
             # Convert connection errors during shutdown to CancelledError
             if self.stop_requested or session.closed:
                 raise asyncio.CancelledError from e
             raise
+        finally:
+            # Ensure cleanup for any exception (TimeoutError, CancelledError, etc.)
+            # Safe to call even after success path pop - just returns None
+            self._trace_timing.pop(trace_ctx, None)
 
     async def _send_records_via_callback(self, records: list[TRecord]) -> None:
         """Send records to the callback if configured.
