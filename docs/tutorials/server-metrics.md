@@ -43,7 +43,7 @@ aiperf profile --model MODEL ... --server-metrics \
 ### Disabling Server Metrics
 
 ```bash
-export AIPERF_SERVER_METRICS_ENABLED=false
+aiperf profile --model MODEL ... --no-server-metrics
 ```
 
 ## Configuration
