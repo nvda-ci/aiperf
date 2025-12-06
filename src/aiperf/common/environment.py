@@ -352,7 +352,7 @@ class _ServerMetricsSettings(BaseSettings):
         ge=0.001,
         le=300.0,
         default=0.33,
-        description="Server metrics collection interval in seconds (default: 100ms, ~10Hz)",
+        description="Server metrics collection interval in seconds (default: 330ms, ~3Hz)",
     )
     DEFAULT_BACKEND_PORTS: Annotated[
         str | list[int],

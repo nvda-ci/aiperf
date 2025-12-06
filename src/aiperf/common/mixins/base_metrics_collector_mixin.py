@@ -8,7 +8,6 @@ used by both GPU telemetry and server metrics systems.
 """
 
 import asyncio
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Generic, TypeVar
@@ -152,45 +151,30 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
         except (aiohttp.ClientError, asyncio.TimeoutError):
             return False
 
-    @background_task(immediate=True, interval=None)
-    async def _collect_metrics_task(self) -> None:
+    @background_task(immediate=True, interval=lambda self: self.collection_interval)
+    async def _collect_metrics_loop(self) -> None:
         """Background task for collecting metrics at regular intervals.
 
         This uses the @background_task decorator which automatically handles
         lifecycle management and stopping when the collector is stopped.
-
-        Errors during collection are caught and sent via error_callback if configured.
-        CancelledError is propagated to allow graceful shutdown.
         """
-        next_time_sec = time.perf_counter()
-        while not self.stop_requested:
-            curr_time = time.perf_counter()
-            sleep_sec = next_time_sec - curr_time
-            if sleep_sec <= 0:
-                # Behind schedule: scrape immediately and reset next target
-                sleep_sec = 0
-                next_time_sec = curr_time + self.collection_interval
+        self.execute_async(self._collect_metrics_task())
+
+    async def _collect_metrics_task(self) -> None:
+        """Collect metrics from the endpoint."""
+        try:
+            await self._collect_and_process_metrics()
+        except Exception as e:
+            if self._error_callback:
+                try:
+                    await self._error_callback(
+                        ErrorDetails.from_exception(e),
+                        self.id,
+                    )
+                except Exception as callback_error:
+                    self.error(f"Failed to send error via callback: {callback_error}")
             else:
-                # Ahead of schedule: wait then advance next target
-                next_time_sec += self.collection_interval
-
-            await asyncio.sleep(sleep_sec)
-
-            try:
-                await self._collect_and_process_metrics()
-            except Exception as e:
-                if self._error_callback:
-                    try:
-                        await self._error_callback(
-                            ErrorDetails.from_exception(e),
-                            self.id,
-                        )
-                    except Exception as callback_error:
-                        self.error(
-                            f"Failed to send error via callback: {callback_error}"
-                        )
-                else:
-                    self.error(f"Metrics collection error: {e}")
+                self.error(f"Metrics collection error: {e}")
 
     @abstractmethod
     async def _collect_and_process_metrics(self) -> None:
