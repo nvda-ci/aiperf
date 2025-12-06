@@ -140,10 +140,28 @@ def compute_summaries(
         ) in endpoint_data.time_series.iter_export_stats(time_filter):
             base_name, labels = parse_metric_key(metric_key)
 
-            series_stats = ServerMetricLabeledStats(
-                labels=labels if labels else None,
-                stats=export_stats,
-            )
+            # Simplify metrics with no meaningful data
+            # - Gauges with std == 0: value never changed, show constant value
+            # - Histograms/Summaries with count_delta == 0: no observations, show count_delta only
+            if metric_type == PrometheusMetricType.GAUGE and export_stats.std == 0:
+                series_stats = ServerMetricLabeledStats(
+                    labels=labels if labels else None,
+                    value=export_stats.avg,  # All values were identical
+                )
+            elif (
+                metric_type
+                in (PrometheusMetricType.HISTOGRAM, PrometheusMetricType.SUMMARY)
+                and export_stats.count_delta == 0
+            ):
+                series_stats = ServerMetricLabeledStats(
+                    labels=labels if labels else None,
+                    count_delta=0.0,  # No observations recorded
+                )
+            else:
+                series_stats = ServerMetricLabeledStats(
+                    labels=labels if labels else None,
+                    stats=export_stats,
+                )
 
             if base_name not in metrics:
                 # Look up description from metadata
@@ -170,6 +188,10 @@ def compute_summaries(
         avg_scrape_latency_ms = (
             sum(latencies) / len(latencies) / 1e6 if latencies else 0.0
         )
+        # Average interval between samples (milliseconds)
+        avg_scrape_period_ms = (
+            (duration_seconds * 1000) / (scrape_count - 1) if scrape_count > 1 else 0.0
+        )
 
         # Get info metrics from metadata
         info_metrics = endpoint_data.metadata.info_metrics or None
@@ -179,6 +201,7 @@ def compute_summaries(
             duration_seconds=duration_seconds,
             scrape_count=scrape_count,
             avg_scrape_latency_ms=avg_scrape_latency_ms,
+            avg_scrape_period_ms=avg_scrape_period_ms,
             info_metrics=info_metrics,
             metrics=metrics,
         )
@@ -278,28 +301,18 @@ def main():
         # Show a few histogram metrics with percentiles
         histogram_count = 0
         for name, metric in summary.metrics.items():
-            if metric.type == "histogram" and histogram_count < 3:
+            if metric.type == PrometheusMetricType.HISTOGRAM and histogram_count < 3:
                 for series in metric.series[:1]:
                     stats = series.stats
-                    if hasattr(stats, "percentiles") and stats.percentiles:
-                        bucket = stats.percentiles.bucket
-                        observed = stats.percentiles.observed
+                    if stats is not None and stats.p50_estimate is not None:
                         print(f"    {name}:")
-                        if bucket:
-                            print(
-                                f"      bucket: p50={bucket.p50:.4f}, p99={bucket.p99:.4f}"
-                                if bucket.p50
-                                else "      bucket: None"
-                            )
-                        if observed:
-                            p50_str = (
-                                f"{observed.p50:.4f}"
-                                if observed.p50 is not None
-                                else "None"
-                            )
-                            print(
-                                f"      observed: p50={p50_str}, coverage={observed.coverage:.2%}"
-                            )
+                        p50_str = f"{stats.p50_estimate:.4f}"
+                        p99_str = (
+                            f"{stats.p99_estimate:.4f}"
+                            if stats.p99_estimate is not None
+                            else "None"
+                        )
+                        print(f"      p50_estimate={p50_str}, p99_estimate={p99_str}")
                         histogram_count += 1
 
 

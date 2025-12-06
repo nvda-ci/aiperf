@@ -66,6 +66,7 @@ def server_metrics_results_with_all_types():
         duration_seconds=300.0,
         scrape_count=60,
         avg_scrape_latency_ms=10.5,
+        avg_scrape_period_ms=5084.7,
         info_metrics={
             "vllm_version_info": InfoMetricData(
                 description="vLLM version information",
@@ -119,7 +120,7 @@ def server_metrics_results_with_all_types():
                             count_delta=1000.0,
                             sum_delta=125.5,
                             avg=0.1255,
-                            rate=3.33,
+                            count_rate=3.33,
                             buckets={
                                 "0.01": 50.0,
                                 "0.1": 450.0,
@@ -140,7 +141,7 @@ def server_metrics_results_with_all_types():
                             count_delta=1000.0,
                             sum_delta=250.0,
                             avg=0.25,
-                            rate=3.33,
+                            count_rate=3.33,
                             quantiles={
                                 "0.5": 0.2,
                                 "0.9": 0.4,
@@ -159,6 +160,7 @@ def server_metrics_results_with_all_types():
         duration_seconds=300.0,
         scrape_count=58,
         avg_scrape_latency_ms=12.3,
+        avg_scrape_period_ms=5263.2,
         info_metrics=None,
         metrics={
             "vllm:kv_cache_usage_perc": ServerMetricSummary(
@@ -228,6 +230,7 @@ def server_metrics_results_with_labeled_metrics():
         duration_seconds=100.0,
         scrape_count=20,
         avg_scrape_latency_ms=8.0,
+        avg_scrape_period_ms=5263.2,
         info_metrics=None,
         metrics={
             "http_requests_total": ServerMetricSummary(
@@ -631,6 +634,7 @@ class TestServerMetricsCsvExporterGenerateContent:
             duration_seconds=100.0,
             scrape_count=20,
             avg_scrape_latency_ms=8.0,
+            avg_scrape_period_ms=5263.2,
             info_metrics=None,
             metrics={
                 "request_duration_seconds": ServerMetricSummary(
@@ -643,7 +647,7 @@ class TestServerMetricsCsvExporterGenerateContent:
                                 count_delta=100.0,
                                 sum_delta=50.0,
                                 avg=0.5,
-                                rate=1.0,
+                                count_rate=1.0,
                                 buckets={
                                     "0.1": 10.0,
                                     "0.5": 50.0,
@@ -664,7 +668,7 @@ class TestServerMetricsCsvExporterGenerateContent:
                                 count_delta=200.0,
                                 sum_delta=10.0,
                                 avg=0.05,
-                                rate=2.0,
+                                count_rate=2.0,
                                 buckets={
                                     "0.01": 50.0,
                                     "0.05": 150.0,

@@ -349,10 +349,10 @@ class _ServerMetricsSettings(BaseSettings):
         "allowing server-side metrics to flush/finalize before shutting down (default: 2.0s)",
     )
     COLLECTION_INTERVAL: float = Field(
-        ge=0.01,
+        ge=0.001,
         le=300.0,
-        default=0.1,
-        description="Server metrics collection interval in seconds (default: 330ms, ~3Hz)",
+        default=0.33,
+        description="Server metrics collection interval in seconds (default: 100ms, ~10Hz)",
     )
     DEFAULT_BACKEND_PORTS: Annotated[
         str | list[int],

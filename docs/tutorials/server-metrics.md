@@ -92,7 +92,9 @@ Line-delimited JSON with metrics snapshots over time:
 
 ### 2. Aggregated Statistics: `server_metrics.json`
 
-Aggregated statistics computed from time-series data. Metrics from all endpoints are merged together, with each series item tagged with its source endpoint:
+Aggregated statistics computed from time-series data. Metrics from all endpoints are merged together, with each series item tagged with its source endpoint.
+
+Info metrics (ending in `_info`) are included as gauges with `value: 1.0` since they represent static configuration/version information.
 
 ```json
 {
@@ -106,11 +108,21 @@ Aggregated statistics computed from time-series data. Metrics from all endpoints
         "endpoint_url": "http://localhost:8000/metrics",
         "duration_seconds": 305.5,
         "scrape_count": 61,
-        "avg_scrape_latency_ms": 12.5
+        "avg_scrape_latency_ms": 12.5,
+        "avg_scrape_period_ms": 5008.2
       }
     }
   },
   "metrics": {
+    "vllm_version_info": {
+      "description": "vLLM version information.",
+      "type": "gauge",
+      "series": [{
+        "endpoint": "localhost:8000",
+        "labels": {"version": "0.6.0", "build": "abc123"},
+        "value": 1.0
+      }]
+    },
     "vllm:gpu_cache_usage_perc": {
       "description": "GPU KV-cache usage.",
       "type": "gauge",
@@ -133,11 +145,16 @@ Aggregated statistics computed from time-series data. Metrics from all endpoints
       "series": [{
         "endpoint": "localhost:8000",
         "stats": {
-          "count_delta": 1000.0,
+          "count_delta": 1000,
+          "count_rate": 200.0,
           "sum_delta": 125.5,
+          "sum_rate": 25.1,
           "avg": 0.1255,
-          "rate": 200.0,
-          "buckets": {"0.01": 50.0, "0.1": 450.0, "1.0": 980.0, "+Inf": 1000.0}
+          "p50_estimate": 0.0823,
+          "p90_estimate": 0.2156,
+          "p95_estimate": 0.3421,
+          "p99_estimate": 0.8765,
+          "buckets": {"0.01": 50, "0.1": 450, "1.0": 980, "+Inf": 1000}
         }
       }]
     }
@@ -227,9 +244,17 @@ Metric schemas and info metrics:
 
 ### Gauge (point-in-time values)
 
+For gauges that vary during collection:
 ```json
-{"avg": 0.65, "min": 0.45, "max": 0.85, "std": 0.12, "p50": 0.64, "p90": 0.79, "p95": 0.82, "p99": 0.84}
+{"stats": {"avg": 0.65, "min": 0.45, "max": 0.85, "std": 0.12, "p50": 0.64, "p90": 0.79, "p95": 0.82, "p99": 0.84}}
 ```
+
+For constant gauges (std == 0), a simplified format is used:
+```json
+{"value": 42.0}
+```
+
+This allows checking `if "stats" in series` to determine if the metric varied during collection.
 
 ### Counter (cumulative totals)
 
@@ -255,29 +280,65 @@ Note: Change-point detection avoids misleading rates when sampling faster than s
 
 ```json
 {
-  "count_delta": 1000.0,
+  "count_delta": 1000,
   "sum_delta": 125.5,
   "avg": 0.1255,
-  "rate": 200.0,
-  "buckets": {"0.01": 50.0, "0.1": 450.0, "1.0": 980.0, "+Inf": 1000.0}
+  "count_rate": 200.0,
+  "sum_rate": 25.1,
+  "p50_estimate": 0.0823,
+  "p90_estimate": 0.2156,
+  "p95_estimate": 0.3421,
+  "p99_estimate": 0.8765,
+  "buckets": {"0.01": 50, "0.1": 450, "1.0": 980, "+Inf": 1000}
 }
 ```
 
-- `buckets`: Cumulative bucket counts (le="less than or equal"). Use for percentile computation or downstream analysis.
+- `count_rate`: Observations per second (count_delta/duration)
+- `sum_rate`: Sum per second (sum_delta/duration). Useful for token/byte histograms.
+- `p50_estimate`, `p90_estimate`, `p95_estimate`, `p99_estimate`: Percentile estimates using polynomial histogram algorithm (see below)
+- `buckets`: Cumulative bucket counts (le="less than or equal") for downstream analysis
+
+#### Histogram Percentile Estimation
+
+AIPerf uses a polynomial histogram algorithm to estimate percentiles from Prometheus histogram buckets. This approach provides more accurate estimates than traditional bucket interpolation, especially for tail percentiles (p99) when observations fall in the +Inf bucket.
+
+**Algorithm:**
+1. **Learn per-bucket means**: When all observations in a scrape interval fall into a single bucket, we learn the exact mean for that bucket
+2. **Sum-constrained observation generation**: Place observations using learned means (or midpoint fallback), then adjust positions to match the exact histogram sum
+3. **+Inf bucket back-calculation**: Estimate +Inf bucket observations using `inf_sum = total_sum - estimated_finite_sum`
+
+**Note:** All histogram percentile estimates are approximations. For the most accurate data, use the `avg` field (sum/count) which is exact. Tail percentiles (p99) should be treated with appropriate skepticism, especially when many observations fall in the +Inf bucket.
+
+For histograms with no observations during collection (count_delta == 0), a simplified format is used:
+```json
+{"count_delta": 0}
+```
+
+This allows checking `if "stats" in series` to determine if the histogram had any observations.
 
 ### Summary (server-computed quantiles)
 
 ```json
 {
-  "count_delta": 1000.0,
+  "count_delta": 1000,
   "sum_delta": 245.8,
   "avg": 0.2458,
-  "rate": 200.0,
+  "count_rate": 200.0,
+  "sum_rate": 49.16,
   "quantiles": {"0.5": 0.220, "0.9": 0.380, "0.95": 0.450, "0.99": 0.620}
 }
 ```
 
+- `count_rate`: Observations per second (count_delta/duration)
+- `sum_rate`: Sum per second (sum_delta/duration)
 - `quantiles`: Cumulative values computed by the server over all observations since server start (not period-specific)
+
+For summaries with no observations during collection (count_delta == 0), a simplified format is used:
+```json
+{"count_delta": 0}
+```
+
+This allows checking `if "stats" in series` to determine if the summary had any observations.
 
 ## Labeled Metrics
 

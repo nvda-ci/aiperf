@@ -4,13 +4,7 @@
 """Histogram percentile models and computation functions.
 
 This module provides percentile estimation for Prometheus histograms using
-multiple approaches:
-
-1. BucketPercentiles: Traditional Prometheus bucket interpolation
-2. ObservedPercentiles: Per-scrape observation extraction
-3. BestGuessPercentiles: Polynomial histogram with +Inf bucket estimation
-
-The "best guess" approach implements a polynomial histogram algorithm that:
+a polynomial histogram algorithm that:
 - Learns per-bucket mean positions from single-bucket scrape intervals
 - Uses exact sum constraint to improve observation placement
 - Back-calculates +Inf bucket observations for accurate tail percentiles
@@ -35,135 +29,23 @@ from aiperf.common.models.histogram_analysis import (
 # =============================================================================
 
 
-class BucketPercentiles(AIPerfBaseModel):
-    """Percentiles estimated via Prometheus bucket interpolation.
+class EstimatedPercentiles(AIPerfBaseModel):
+    """Estimated percentiles from histogram data using polynomial histogram algorithm.
 
-    Uses the standard histogram_quantile algorithm that assumes uniform
-    distribution within each bucket. Accuracy depends on bucket granularity.
+    Uses learned per-bucket means and +Inf bucket back-calculation for accurate estimates.
     """
 
-    p50: float | None = Field(
+    p50_estimate: float | None = Field(
         default=None, description="Estimated 50th percentile (median)"
     )
-    p90: float | None = Field(default=None, description="Estimated 90th percentile")
-    p95: float | None = Field(default=None, description="Estimated 95th percentile")
-    p99: float | None = Field(default=None, description="Estimated 99th percentile")
-
-
-class ObservedPercentiles(AIPerfBaseModel):
-    """Percentiles computed from per-scrape observation extraction.
-
-    When scrape rate is high relative to observation rate, we can extract
-    individual observation values:
-    - count_delta == 1: Exact value from sum_delta
-    - count_delta > 1: Bucket-placed values using per-scrape bucket deltas
-
-    This approach can provide better accuracy than bucket interpolation,
-    especially when exact_count is high relative to total observations.
-    """
-
-    p50: float | None = Field(
-        default=None, description="50th percentile from extracted observations"
+    p90_estimate: float | None = Field(
+        default=None, description="Estimated 90th percentile"
     )
-    p90: float | None = Field(
-        default=None, description="90th percentile from extracted observations"
+    p95_estimate: float | None = Field(
+        default=None, description="Estimated 95th percentile"
     )
-    p95: float | None = Field(
-        default=None, description="95th percentile from extracted observations"
-    )
-    p99: float | None = Field(
-        default=None, description="99th percentile from extracted observations"
-    )
-    exact_count: int = Field(
-        default=0,
-        description="Number of observations with exact values (count_delta == 1)",
-    )
-    bucket_placed_count: int = Field(
-        default=0,
-        description="Number of observations placed via bucket interpolation (count_delta > 1)",
-    )
-    coverage: float = Field(
-        default=0.0,
-        description="Ratio of exact observations to total (higher = more accurate)",
-    )
-
-
-class BestGuessPercentiles(AIPerfBaseModel):
-    """Percentiles with +Inf bucket estimation using back-calculation.
-
-    This approach addresses a critical flaw in other methods:
-    - Bucket interpolation: Returns ceiling value for +Inf bucket (wrong)
-    - Observed extraction: Skips +Inf observations entirely (underestimates)
-
-    Best-guess uses the exact total sum to back-calculate +Inf bucket values:
-    1. Learn per-bucket means from single-bucket scrape intervals (polynomial histogram)
-    2. Estimate sum of finite bucket observations
-    3. Back-calculate: inf_sum = total_sum - finite_sum
-    4. Generate +Inf observations around estimated mean (all > max finite bucket)
-
-    This provides more accurate tail percentiles when +Inf bucket has observations.
-    """
-
-    p50: float | None = Field(
-        default=None, description="50th percentile including +Inf estimates"
-    )
-    p90: float | None = Field(
-        default=None, description="90th percentile including +Inf estimates"
-    )
-    p95: float | None = Field(
-        default=None, description="95th percentile including +Inf estimates"
-    )
-    p99: float | None = Field(
-        default=None, description="99th percentile including +Inf estimates"
-    )
-    p999: float | None = Field(
-        default=None, description="99.9th percentile including +Inf estimates"
-    )
-
-    # +Inf bucket handling metadata
-    inf_bucket_count: int = Field(
-        default=0, description="Number of observations in +Inf bucket"
-    )
-    inf_bucket_estimated_mean: float | None = Field(
-        default=None,
-        description="Estimated mean of +Inf observations (back-calculated from sum)",
-    )
-
-    # Estimation quality metrics
-    finite_observations_count: int = Field(
-        default=0, description="Number of observations in finite buckets"
-    )
-    buckets_with_learned_means: int = Field(
-        default=0,
-        description="Number of buckets with learned means (vs midpoint fallback)",
-    )
-    estimation_confidence: str = Field(
-        default="low",
-        description="Confidence level: high (inf<1% AND >50% buckets have learned means), "
-        "medium (inf<5%), low (otherwise)",
-    )
-
-
-class HistogramPercentiles(AIPerfBaseModel):
-    """Container for all percentile computation approaches.
-
-    Provides three methods for estimating percentiles:
-    - bucket: Traditional Prometheus bucket interpolation (always available)
-    - observed: Per-scrape observation extraction (more accurate when coverage is high)
-    - best_guess: Includes +Inf bucket estimation (most accurate for tail percentiles)
-    """
-
-    bucket: BucketPercentiles = Field(
-        default_factory=BucketPercentiles,
-        description="Percentiles from bucket interpolation",
-    )
-    observed: ObservedPercentiles | None = Field(
-        default=None,
-        description="Percentiles from per-scrape observation extraction (None if unavailable)",
-    )
-    best_guess: BestGuessPercentiles | None = Field(
-        default=None,
-        description="Percentiles including +Inf bucket estimation (None if unavailable)",
+    p99_estimate: float | None = Field(
+        default=None, description="Estimated 99th percentile"
     )
 
 
@@ -216,6 +98,21 @@ def generate_observations_with_sum_constraint(
 
     bucket_stats = bucket_stats or {}
 
+    # Detect single-bucket dominance: when 95%+ of observations are in one bucket,
+    # use avg as the center instead of midpoint. This handles narrow distributions
+    # where all data clusters in a single bucket (e.g., decode-only worker metrics).
+    total_count = sum(per_bucket.get(le, 0) for le in finite_buckets)
+    avg = target_sum / total_count if total_count > 0 else 0
+    dominant_bucket = None
+    if total_count > 0:
+        max_count = max(per_bucket.get(le, 0) for le in finite_buckets)
+        if max_count / total_count >= 0.95:
+            # Find the dominant bucket
+            for le in finite_buckets:
+                if per_bucket.get(le, 0) == max_count:
+                    dominant_bucket = le
+                    break
+
     # Generate observations centered on learned mean (or midpoint if unavailable)
     observations: list[float] = []
     bucket_info: list[
@@ -239,6 +136,11 @@ def generate_observations_with_sum_constraint(
             # Validate: must be within bucket bounds
             if lower < learned_mean < upper:
                 center = learned_mean
+
+        # For dominant bucket (95%+ of observations), use avg as center.
+        # This is more accurate than midpoint for narrow distributions.
+        if le == dominant_bucket and lower < avg < upper:
+            center = avg
 
         # Generate uniform distribution centered on 'center'
         # Scale factor determines how spread out observations are
@@ -304,12 +206,12 @@ def generate_observations_with_sum_constraint(
 # =============================================================================
 
 
-def compute_best_guess_percentiles(
+def compute_estimated_percentiles(
     bucket_deltas: dict[str, float],
     bucket_stats: dict[str, BucketStatistics],
     total_sum: float,
     total_count: int,
-) -> BestGuessPercentiles | None:
+) -> EstimatedPercentiles | None:
     """Compute percentiles including estimated +Inf bucket observations.
 
     This implements a two-phase polynomial histogram approach:
@@ -342,6 +244,16 @@ def compute_best_guess_percentiles(
     if total_count <= 0 or not bucket_deltas:
         return None
 
+    # Special case: if sum is 0 but count > 0, all observations were exactly 0
+    # Don't use bucket interpolation which would give misleading non-zero estimates
+    if total_sum == 0:
+        return EstimatedPercentiles(
+            p50_estimate=0.0,
+            p90_estimate=0.0,
+            p95_estimate=0.0,
+            p99_estimate=0.0,
+        )
+
     # Get max finite bucket boundary
     finite_buckets = [le for le in bucket_deltas if le != "+Inf"]
     if not finite_buckets:
@@ -357,15 +269,6 @@ def compute_best_guess_percentiles(
     # Estimate sums for finite buckets
     estimated_sums = estimate_bucket_sums(bucket_deltas, bucket_stats)
     estimated_finite_sum = sum(estimated_sums.values())
-
-    # Count buckets with learned means
-    buckets_with_means = sum(
-        1
-        for le in bucket_deltas
-        if le != "+Inf"
-        and le in bucket_stats
-        and bucket_stats[le].estimated_mean is not None
-    )
 
     # Estimate +Inf bucket observations using back-calculation
     inf_observations = estimate_inf_bucket_observations(
@@ -394,33 +297,11 @@ def compute_best_guess_percentiles(
         return None
 
     # Compute percentiles
-    pcts = np.percentile(all_observations, [50, 90, 95, 99, 99.9])
+    pcts = np.percentile(all_observations, [50, 90, 95, 99])
 
-    # Determine confidence level
-    inf_ratio = inf_count / total_count if total_count > 0 else 0
-    finite_bucket_count = len(finite_buckets)
-    mean_coverage = (
-        buckets_with_means / finite_bucket_count if finite_bucket_count > 0 else 0
-    )
-
-    if inf_ratio < 0.01 and mean_coverage > 0.5:
-        confidence = "high"
-    elif inf_ratio < 0.05:
-        confidence = "medium"
-    else:
-        confidence = "low"
-
-    return BestGuessPercentiles(
-        p50=float(pcts[0]),
-        p90=float(pcts[1]),
-        p95=float(pcts[2]),
-        p99=float(pcts[3]),
-        p999=float(pcts[4]),
-        inf_bucket_count=inf_count,
-        inf_bucket_estimated_mean=float(np.mean(inf_observations))
-        if inf_observations
-        else None,
-        finite_observations_count=len(finite_obs_generated),
-        buckets_with_learned_means=buckets_with_means,
-        estimation_confidence=confidence,
+    return EstimatedPercentiles(
+        p50_estimate=float(pcts[0]),
+        p90_estimate=float(pcts[1]),
+        p95_estimate=float(pcts[2]),
+        p99_estimate=float(pcts[3]),
     )

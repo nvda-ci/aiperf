@@ -66,6 +66,7 @@ def server_metrics_results_with_summaries():
         duration_seconds=300.0,
         scrape_count=60,
         avg_scrape_latency_ms=10.5,
+        avg_scrape_period_ms=5084.7,
         info_metrics={
             "vllm_version_info": InfoMetricData(
                 description="vLLM version information",
@@ -119,12 +120,12 @@ def server_metrics_results_with_summaries():
                             count_delta=1000.0,
                             sum_delta=125.5,
                             avg=0.1255,
-                            rate=3.33,
+                            count_rate=3.33,
                             buckets={
-                                "0.01": 50.0,
-                                "0.1": 450.0,
-                                "1.0": 980.0,
-                                "+Inf": 1000.0,
+                                "0.01": 50,
+                                "0.1": 450,
+                                "1.0": 980,
+                                "+Inf": 1000,
                             },
                         ),
                     ),
@@ -140,7 +141,7 @@ def server_metrics_results_with_summaries():
                             count_delta=1000.0,
                             sum_delta=250.0,
                             avg=0.25,
-                            rate=3.33,
+                            count_rate=3.33,
                             quantiles={
                                 "0.5": 0.2,
                                 "0.9": 0.4,
@@ -159,6 +160,7 @@ def server_metrics_results_with_summaries():
         duration_seconds=300.0,
         scrape_count=58,
         avg_scrape_latency_ms=12.3,
+        avg_scrape_period_ms=5263.2,
         info_metrics={
             "vllm_version_info": InfoMetricData(
                 description="vLLM version information",
@@ -233,6 +235,7 @@ def server_metrics_results_with_labeled_metrics():
         duration_seconds=100.0,
         scrape_count=20,
         avg_scrape_latency_ms=8.0,
+        avg_scrape_period_ms=5263.2,
         info_metrics=None,
         metrics={
             "http_requests_total": ServerMetricSummary(
@@ -460,13 +463,13 @@ class TestServerMetricsJsonExporterGenerateContent:
                 assert not series["endpoint"].startswith("http://")
                 assert not series["endpoint"].endswith("/metrics")
 
-    def test_generate_content_includes_info_metrics(
+    def test_generate_content_includes_info_metrics_as_gauges(
         self,
         mock_user_config,
         mock_profile_results,
         server_metrics_results_with_summaries,
     ):
-        """Test that info metrics are included and merged."""
+        """Test that info metrics are included as gauges with value=1.0."""
         config = create_exporter_config(
             profile_results=mock_profile_results,
             user_config=mock_user_config,
@@ -476,15 +479,20 @@ class TestServerMetricsJsonExporterGenerateContent:
         content = exporter._generate_content()
         data = json.loads(content)
 
-        assert "info_metrics" in data
-        assert "vllm_version_info" in data["info_metrics"]
+        # Info metrics should be in metrics (not a separate info_metrics key)
+        assert "info_metrics" not in data
+        assert "vllm_version_info" in data["metrics"]
 
-        info_metric = data["info_metrics"]["vllm_version_info"]
-        # Should have labels from both endpoints
-        assert len(info_metric["labels"]) == 2
-        # Each label set should have endpoint field
-        for label_set in info_metric["labels"]:
-            assert "endpoint" in label_set
+        info_metric = data["metrics"]["vllm_version_info"]
+        assert info_metric["type"] == "gauge"
+        # Should have series from both endpoints
+        assert len(info_metric["series"]) == 2
+        # Each series should have endpoint field and value=1.0
+        for series in info_metric["series"]:
+            assert "endpoint" in series
+            assert series["value"] == 1.0
+            assert "labels" in series
+            assert "version" in series["labels"]
 
     def test_generate_content_handles_labeled_metrics(
         self,

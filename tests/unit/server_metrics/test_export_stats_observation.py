@@ -7,13 +7,10 @@ import numpy as np
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_stats import HistogramExportStats
 from aiperf.common.models.histogram_analysis import (
     extract_all_observations,
     extract_observations_from_scrape,
 )
-from aiperf.common.models.server_metrics_models import ServerMetricsTimeSeries
-from tests.unit.server_metrics.helpers import add_histogram_snapshots, hist
 
 # =============================================================================
 # Observation Extraction Tests
@@ -228,115 +225,3 @@ class TestExtractAllObservations:
         assert len(observations) == 0
         assert exact == 0
         assert bucket_placed == 0
-
-
-class TestHistogramObservedPercentiles:
-    """Test histogram observed percentiles from per-scrape observation extraction."""
-
-    def test_observed_percentiles_from_exact_observations(self):
-        """Test observed percentiles computed from exact observations."""
-        ts = ServerMetricsTimeSeries()
-        # Create a histogram with one observation per scrape (exact values)
-        add_histogram_snapshots(
-            ts,
-            "ttft",
-            [
-                (0, hist({"0.5": 0.0, "1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
-                (1 * NANOS_PER_SECOND, hist({"0.5": 1.0, "1.0": 1.0, "+Inf": 1.0}, 0.1, 1.0)),
-                (2 * NANOS_PER_SECOND, hist({"0.5": 2.0, "1.0": 2.0, "+Inf": 2.0}, 0.3, 2.0)),
-                (3 * NANOS_PER_SECOND, hist({"0.5": 3.0, "1.0": 3.0, "+Inf": 3.0}, 0.6, 3.0)),
-                (4 * NANOS_PER_SECOND, hist({"0.5": 4.0, "1.0": 4.0, "+Inf": 4.0}, 1.0, 4.0)),
-            ],
-        )  # fmt: skip
-
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
-
-        assert stats.percentiles is not None
-        assert stats.percentiles.observed is not None
-
-        # We have 4 exact observations: 0.1, 0.2, 0.3, 0.4
-        assert stats.percentiles.observed.exact_count == 4
-        assert stats.percentiles.observed.bucket_placed_count == 0
-        assert stats.percentiles.observed.coverage == pytest.approx(1.0)
-
-        # Observed percentiles should be computed from exact values
-        assert stats.percentiles.observed.p50 is not None
-        assert stats.percentiles.observed.p90 is not None
-
-    def test_observed_percentiles_with_bucket_placed(self):
-        """Test observed percentiles with bucket-placed observations."""
-        ts = ServerMetricsTimeSeries()
-        # Multiple observations per scrape (bucket-placed)
-        add_histogram_snapshots(
-            ts,
-            "ttft",
-            [
-                (0, hist({"0.1": 0.0, "0.5": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
-                # 10 observations in first interval
-                (
-                    NANOS_PER_SECOND,
-                    hist({"0.1": 5.0, "0.5": 10.0, "+Inf": 10.0}, 2.0, 10.0),
-                ),
-            ],
-        )
-
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
-
-        assert stats.percentiles is not None
-        assert stats.percentiles.observed is not None
-
-        # All observations are bucket-placed
-        assert stats.percentiles.observed.exact_count == 0
-        assert stats.percentiles.observed.bucket_placed_count == 10
-        assert stats.percentiles.observed.coverage == pytest.approx(0.0)
-
-    def test_observed_percentiles_none_on_counter_reset(self):
-        """Test observed percentiles are None on counter reset."""
-        ts = ServerMetricsTimeSeries()
-        add_histogram_snapshots(
-            ts,
-            "ttft",
-            [
-                (0, hist({"0.5": 100.0, "+Inf": 200.0}, 50.0, 200.0)),
-                # Counter reset
-                (NANOS_PER_SECOND, hist({"0.5": 10.0, "+Inf": 20.0}, 5.0, 20.0)),
-            ],
-        )
-
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
-
-        assert stats.percentiles is None
-
-    def test_coverage_calculation(self):
-        """Test coverage is exact_count / total_count."""
-        ts = ServerMetricsTimeSeries()
-        # Mix of exact and bucket-placed: 2 exact (count_delta==1), 5 bucket-placed
-        add_histogram_snapshots(
-            ts,
-            "ttft",
-            [
-                (0, hist({"0.5": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
-                (
-                    1 * NANOS_PER_SECOND,
-                    hist({"0.5": 1.0, "+Inf": 1.0}, 0.1, 1.0),
-                ),  # exact
-                (
-                    2 * NANOS_PER_SECOND,
-                    hist({"0.5": 6.0, "+Inf": 6.0}, 1.5, 6.0),
-                ),  # +5 bucket
-                (
-                    3 * NANOS_PER_SECOND,
-                    hist({"0.5": 7.0, "+Inf": 7.0}, 1.7, 7.0),
-                ),  # exact
-            ],
-        )
-
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
-
-        assert stats.percentiles is not None
-        assert stats.percentiles.observed is not None
-
-        assert stats.percentiles.observed.exact_count == 2
-        assert stats.percentiles.observed.bucket_placed_count == 5
-        # Coverage = 2 / 7 = 0.2857...
-        assert stats.percentiles.observed.coverage == pytest.approx(2 / 7, rel=0.01)

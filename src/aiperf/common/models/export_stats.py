@@ -24,15 +24,8 @@ from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.histogram_analysis import (
     accumulate_bucket_statistics,
-    extract_all_observations,
-    histogram_quantile,
 )
-from aiperf.common.models.histogram_percentiles import (
-    BucketPercentiles,
-    HistogramPercentiles,
-    ObservedPercentiles,
-    compute_best_guess_percentiles,
-)
+from aiperf.common.models.histogram_percentiles import compute_estimated_percentiles
 
 if TYPE_CHECKING:
     from aiperf.common.models.timeseries_storage import (
@@ -238,32 +231,43 @@ class HistogramExportStats(AIPerfBaseModel):
     Histograms track distributions (e.g., request latencies). We report:
     - Delta stats: count_delta, sum_delta, avg over the aggregation period
     - Rate: observations per second
-    - Percentiles: Two approaches (bucket interpolation and per-scrape observation extraction)
+    - Estimated percentiles: Polynomial histogram algorithm with +Inf bucket estimation
     - Raw bucket data for downstream analysis
     """
 
     # Delta statistics over the aggregation period
-    count_delta: float = Field(
+    count_delta: int = Field(
         description="Change in observation count over the aggregation period"
+    )
+    count_rate: float | None = Field(
+        default=None,
+        description="Observations per second (count_delta/duration)",
     )
     sum_delta: float = Field(
         description="Change in sum of observed values over the aggregation period"
     )
+    sum_rate: float | None = Field(
+        default=None,
+        description="Sum per second (sum_delta/duration). Useful for token/byte histograms.",
+    )
     avg: float = Field(
         description="Average value per observation (sum_delta/count_delta)"
     )
-    # Rate - None if duration is zero
-    rate: float | None = Field(
-        default=None,
-        description="Observations per second (count_delta/duration)",
+    # Estimated percentiles using polynomial histogram algorithm
+    p50_estimate: float | None = Field(
+        default=None, description="Estimated 50th percentile (median)"
     )
-    # Percentiles computed via two approaches
-    percentiles: HistogramPercentiles | None = Field(
-        default=None,
-        description="Percentiles from bucket interpolation and per-scrape observation extraction",
+    p90_estimate: float | None = Field(
+        default=None, description="Estimated 90th percentile"
+    )
+    p95_estimate: float | None = Field(
+        default=None, description="Estimated 95th percentile"
+    )
+    p99_estimate: float | None = Field(
+        default=None, description="Estimated 99th percentile"
     )
     # Raw bucket data for custom analysis (None if counter reset detected)
-    buckets: dict[str, float] | None = Field(
+    buckets: dict[str, int] | None = Field(
         default=None,
         description='Bucket upper bounds (le="less than or equal") to delta counts. None if counter reset detected during collection.',
     )
@@ -301,9 +305,9 @@ class HistogramExportStats(AIPerfBaseModel):
         duration_ns = final_ts - ref_ts
 
         avg_value = sum_delta / count_delta if count_delta > 0 else 0.0
-        rate = (
-            count_delta / (duration_ns / NANOS_PER_SECOND) if duration_ns > 0 else None
-        )
+        duration_s = duration_ns / NANOS_PER_SECOND if duration_ns > 0 else 0
+        count_rate = count_delta / duration_s if duration_s > 0 else None
+        sum_rate = sum_delta / duration_s if duration_s > 0 else None
 
         # Bucket delta calculation
         # If any delta is negative (counter reset), return None for buckets
@@ -314,7 +318,7 @@ class HistogramExportStats(AIPerfBaseModel):
             if ref_bucket_idx < len(ts._bucket_snapshots)
             else {}
         )
-        bucket_deltas: dict[str, float] | None = {}
+        bucket_deltas: dict[str, int] | None = {}
         for le, final_val in final_buckets.items():
             ref_val = ref_buckets.get(le, 0.0)
             delta = final_val - ref_val
@@ -322,47 +326,17 @@ class HistogramExportStats(AIPerfBaseModel):
                 # Counter reset detected - data is invalid
                 bucket_deltas = None
                 break
-            bucket_deltas[le] = delta
+            bucket_deltas[le] = int(delta)
 
-        # Compute percentiles using both approaches
-        percentiles: HistogramPercentiles | None = None
+        # Compute estimated percentiles using polynomial histogram algorithm
+        p50_estimate: float | None = None
+        p90_estimate: float | None = None
+        p95_estimate: float | None = None
+        p99_estimate: float | None = None
 
         if bucket_deltas:
-            # Approach 1: Bucket interpolation (traditional Prometheus histogram_quantile)
-            bucket_percentiles = BucketPercentiles(
-                p50=histogram_quantile(0.50, bucket_deltas),
-                p90=histogram_quantile(0.90, bucket_deltas),
-                p95=histogram_quantile(0.95, bucket_deltas),
-                p99=histogram_quantile(0.99, bucket_deltas),
-            )
-
-            # Approach 2: Per-scrape observation extraction
-            start_idx = ref_idx if ref_idx is not None else 0
-            observations, exact_count, bucket_placed_count = extract_all_observations(
-                ts.timestamps,
-                ts.sums,
-                ts.counts,
-                ts._bucket_snapshots,
-                start_idx=start_idx,
-            )
-
-            observed_percentiles: ObservedPercentiles | None = None
-            if len(observations) > 0:
-                total_obs = exact_count + bucket_placed_count
-                coverage = exact_count / total_obs if total_obs > 0 else 0.0
-
-                observed_percentiles = ObservedPercentiles(
-                    p50=float(np.percentile(observations, 50)),
-                    p90=float(np.percentile(observations, 90)),
-                    p95=float(np.percentile(observations, 95)),
-                    p99=float(np.percentile(observations, 99)),
-                    exact_count=exact_count,
-                    bucket_placed_count=bucket_placed_count,
-                    coverage=coverage,
-                )
-
-            # Approach 3: Best-guess with +Inf bucket estimation
             # Learn per-bucket means from single-bucket scrape intervals
+            start_idx = ref_idx if ref_idx is not None else 0
             bucket_stats = accumulate_bucket_statistics(
                 ts.timestamps,
                 ts.sums,
@@ -371,26 +345,30 @@ class HistogramExportStats(AIPerfBaseModel):
                 start_idx=start_idx,
             )
 
-            # Compute best-guess percentiles including +Inf bucket estimation
-            best_guess_percentiles = compute_best_guess_percentiles(
+            # Compute estimated percentiles including +Inf bucket estimation
+            estimated = compute_estimated_percentiles(
                 bucket_deltas=bucket_deltas,
                 bucket_stats=bucket_stats,
                 total_sum=sum_delta,
                 total_count=int(count_delta),
             )
 
-            percentiles = HistogramPercentiles(
-                bucket=bucket_percentiles,
-                observed=observed_percentiles,
-                best_guess=best_guess_percentiles,
-            )
+            if estimated:
+                p50_estimate = estimated.p50_estimate
+                p90_estimate = estimated.p90_estimate
+                p95_estimate = estimated.p95_estimate
+                p99_estimate = estimated.p99_estimate
 
         return cls(
-            count_delta=count_delta,
+            count_delta=int(count_delta),
             sum_delta=sum_delta,
             avg=avg_value,
-            rate=rate,
-            percentiles=percentiles,
+            count_rate=count_rate,
+            sum_rate=sum_rate,
+            p50_estimate=p50_estimate,
+            p90_estimate=p90_estimate,
+            p95_estimate=p95_estimate,
+            p99_estimate=p99_estimate,
             buckets=bucket_deltas,
         )
 
@@ -410,7 +388,7 @@ class SummaryExportStats(AIPerfBaseModel):
     """
 
     # Delta statistics over the aggregation period
-    count_delta: float = Field(
+    count_delta: int = Field(
         description="Change in observation count over the aggregation period"
     )
     sum_delta: float = Field(
@@ -425,10 +403,14 @@ class SummaryExportStats(AIPerfBaseModel):
         default_factory=dict,
         description="Server-computed quantiles (cumulative over server lifetime, not period-specific). Keys are quantile strings (e.g., '0.5', '0.9', '0.99')",
     )
-    # Rate - None if duration is zero
-    rate: float | None = Field(
+    # Rates - None if duration is zero
+    count_rate: float | None = Field(
         default=None,
         description="Observations per second (count_delta/duration)",
+    )
+    sum_rate: float | None = Field(
+        default=None,
+        description="Sum per second (sum_delta/duration). Useful for token/byte summaries.",
     )
 
     @classmethod
@@ -458,16 +440,17 @@ class SummaryExportStats(AIPerfBaseModel):
         duration_ns = final_ts - ref_ts
 
         avg_value = sum_delta / count_delta if count_delta > 0 else 0.0
-        rate = (
-            count_delta / (duration_ns / NANOS_PER_SECOND) if duration_ns > 0 else None
-        )
+        duration_s = duration_ns / NANOS_PER_SECOND if duration_ns > 0 else 0
+        count_rate = count_delta / duration_s if duration_s > 0 else None
+        sum_rate = sum_delta / duration_s if duration_s > 0 else None
 
         return cls(
-            count_delta=count_delta,
+            count_delta=int(count_delta),
             sum_delta=sum_delta,
             avg=avg_value,
             quantiles=dict(final_quantiles),
-            rate=rate,
+            count_rate=count_rate,
+            sum_rate=sum_rate,
         )
 
 

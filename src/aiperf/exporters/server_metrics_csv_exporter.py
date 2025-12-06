@@ -8,7 +8,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DataExporterType
+from aiperf.common.enums import DataExporterType, PrometheusMetricType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.protocols import DataExporterProtocol
@@ -27,7 +27,7 @@ COUNTER_STAT_KEYS = [
     "rate_std",
 ]
 # Histogram base stats (before bucket columns)
-HISTOGRAM_BASE_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
+HISTOGRAM_BASE_STAT_KEYS = ["count_delta", "sum_delta", "avg", "count_rate", "sum_rate"]
 # Histogram percentile columns (nested under percentiles.bucket, percentiles.observed, percentiles.best_guess)
 HISTOGRAM_PERCENTILE_KEYS = [
     "bucket.p50",
@@ -52,7 +52,7 @@ HISTOGRAM_PERCENTILE_KEYS = [
 ]
 # Combined histogram stat keys for CSV export
 HISTOGRAM_STAT_KEYS = HISTOGRAM_BASE_STAT_KEYS + HISTOGRAM_PERCENTILE_KEYS
-SUMMARY_STAT_KEYS = ["count_delta", "sum_delta", "avg", "rate"]
+SUMMARY_STAT_KEYS = ["count_delta", "sum_delta", "avg", "count_rate", "sum_rate"]
 
 
 @DataExporterFactory.register(DataExporterType.SERVER_METRICS_CSV)
@@ -155,6 +155,8 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                             metric_summary.description,
                             series_item.labels,
                             series_item.stats,
+                            series_item.value,  # For constant gauges
+                            series_item.count_delta,  # For empty histograms/summaries
                         )
                     )
 
@@ -164,19 +166,21 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
         self,
         writer: csv.writer,
         metric_type: str,
-        metrics: list[tuple[str, str, str, dict | None, object]],
+        metrics: list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
     ) -> None:
         """Write a section for a specific metric type.
 
         Args:
             writer: CSV writer object
             metric_type: Type of metrics (gauge, counter, histogram, summary)
-            metrics: List of (endpoint, metric_name, description, labels, stats) tuples
+            metrics: List of (endpoint, metric_name, description, labels, stats, value, count_delta) tuples
         """
         # For histogram and summary, group by bucket/quantile keys and write sub-sections
-        if metric_type == "histogram":
+        if metric_type == PrometheusMetricType.HISTOGRAM:
             self._write_histogram_sections(writer, metrics)
-        elif metric_type == "summary":
+        elif metric_type == PrometheusMetricType.SUMMARY:
             self._write_summary_sections(writer, metrics)
         else:
             self._write_simple_section(writer, metric_type, metrics)
@@ -185,7 +189,9 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
         self,
         writer: csv.writer,
         metric_type: str,
-        metrics: list[tuple[str, str, str, dict | None, object]],
+        metrics: list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
     ) -> None:
         """Write a simple section for gauge or counter metrics."""
         stat_keys = self._get_stat_keys_for_type(metric_type)
@@ -196,15 +202,32 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
             metrics, key=lambda x: (x[1], x[0], str(x[3]) if x[3] else "")
         )
 
-        for endpoint, metric_name, _description, labels, stats in sorted_metrics:
+        for (
+            endpoint,
+            metric_name,
+            _description,
+            labels,
+            stats,
+            value,
+            _count_delta,
+        ) in sorted_metrics:
             self._write_metric_row(
-                writer, metric_type, endpoint, metric_name, labels, stats, stat_keys
+                writer,
+                metric_type,
+                endpoint,
+                metric_name,
+                labels,
+                stats,
+                value,
+                stat_keys,
             )
 
     def _write_histogram_sections(
         self,
         writer: csv.writer,
-        metrics: list[tuple[str, str, str, dict | None, object]],
+        metrics: list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
     ) -> None:
         """Write histogram sections grouped by bucket boundaries."""
         # Group metrics by their bucket keys
@@ -225,7 +248,15 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                 group_metrics, key=lambda x: (x[1], x[0], str(x[3]) if x[3] else "")
             )
 
-            for endpoint, metric_name, _description, labels, stats in sorted_metrics:
+            for (
+                endpoint,
+                metric_name,
+                _description,
+                labels,
+                stats,
+                _value,
+                _count_delta,
+            ) in sorted_metrics:
                 self._write_metric_row_with_dict(
                     writer,
                     "histogram",
@@ -242,7 +273,9 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
     def _write_summary_sections(
         self,
         writer: csv.writer,
-        metrics: list[tuple[str, str, str, dict | None, object]],
+        metrics: list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
     ) -> None:
         """Write summary sections grouped by quantile keys."""
         # Group metrics by their quantile keys
@@ -265,7 +298,15 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
                 group_metrics, key=lambda x: (x[1], x[0], str(x[3]) if x[3] else "")
             )
 
-            for endpoint, metric_name, _description, labels, stats in sorted_metrics:
+            for (
+                endpoint,
+                metric_name,
+                _description,
+                labels,
+                stats,
+                _value,
+                _count_delta,
+            ) in sorted_metrics:
                 self._write_metric_row_with_dict(
                     writer,
                     "summary",
@@ -281,13 +322,31 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
     def _group_by_keys(
         self,
-        metrics: list[tuple[str, str, str, dict | None, object]],
+        metrics: list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
         dict_attr: str,
-    ) -> dict[tuple, list[tuple[str, str, str, dict | None, object]]]:
+    ) -> dict[
+        tuple,
+        list[
+            tuple[str, str, str, dict | None, object | None, float | None, float | None]
+        ],
+    ]:
         """Group metrics by the keys of a dict attribute (buckets or quantiles)."""
-        grouped: dict[tuple, list[tuple[str, str, str, dict | None, object]]] = (
-            defaultdict(list)
-        )
+        grouped: dict[
+            tuple,
+            list[
+                tuple[
+                    str,
+                    str,
+                    str,
+                    dict | None,
+                    object | None,
+                    float | None,
+                    float | None,
+                ]
+            ],
+        ] = defaultdict(list)
 
         for metric in metrics:
             stats = metric[4]
@@ -314,7 +373,8 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
         endpoint: str,
         metric_name: str,
         labels: dict | None,
-        stats: object,
+        stats: object | None,
+        constant_value: float | None,
         stat_keys: list[str],
     ) -> None:
         """Write a single metric row for gauge/counter metrics.
@@ -325,7 +385,8 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
             endpoint: Normalized endpoint display name
             metric_name: Name of the metric
             labels: Label dict or None
-            stats: Stats object with values
+            stats: Stats object with values, or None for constant metrics
+            constant_value: Constant value for metrics that didn't change
             stat_keys: List of stat keys for this metric type
         """
         labels_str = (
@@ -334,9 +395,22 @@ class ServerMetricsCsvExporter(MetricsBaseExporter):
 
         row = [endpoint, metric_type, metric_name, labels_str]
 
-        for stat in stat_keys:
-            value = getattr(stats, stat, None)
-            row.append(self._format_number(value))
+        # For constant gauges (stats is None, value is set), synthesize the row
+        # All stat values equal the constant value, with std=0
+        if (
+            stats is None
+            and constant_value is not None
+            and metric_type == PrometheusMetricType.GAUGE
+        ):
+            for stat in stat_keys:
+                if stat == "std":
+                    row.append(self._format_number(0.0))
+                else:
+                    row.append(self._format_number(constant_value))
+        else:
+            for stat in stat_keys:
+                stat_value = getattr(stats, stat, None) if stats else None
+                row.append(self._format_number(stat_value))
 
         writer.writerow(row)
 

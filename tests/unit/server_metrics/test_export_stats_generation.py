@@ -236,6 +236,35 @@ class TestGenerateObservationsWithSumConstraint:
         second_bucket = observations[50:]
         assert np.mean(second_bucket) > 0.3  # Near 0.4
 
+    def test_single_bucket_dominance_uses_avg_as_center(self):
+        """Test that when 95%+ observations are in one bucket, avg is used as center.
+
+        This handles narrow distributions (e.g., decode-only worker metrics) where
+        all data clusters in a single bucket but the actual mean is far from midpoint.
+        """
+        # Scenario: 100% of observations in [0, 0.3] bucket
+        # Midpoint = 0.15, but actual avg = 0.01 (like decode worker E2E)
+        bucket_deltas = {"0.3": 5000.0, "+Inf": 5000.0}
+        actual_avg = 0.01  # 10ms average in a [0, 300ms] bucket
+        target_sum = 5000 * actual_avg  # 50.0
+
+        observations = generate_observations_with_sum_constraint(
+            bucket_deltas, target_sum=target_sum, bucket_stats=None
+        )
+
+        assert len(observations) == 5000
+
+        # Without the fix, midpoint=0.15 would give p50 around 0.15
+        # With the fix, using avg=0.01 as center should give p50 around 0.01
+        p50 = np.percentile(observations, 50)
+
+        # p50 should be close to avg (within 2x), not close to midpoint (0.15)
+        assert p50 < 0.05, f"p50={p50} should be < 0.05 (near avg=0.01), not ~0.15"
+        # More specifically, should be reasonably close to avg
+        assert abs(p50 - actual_avg) < 0.02, (
+            f"p50={p50} should be close to avg={actual_avg}"
+        )
+
 
 class TestGenerateObservationsAccuracy:
     """Test accuracy of polynomial histogram approach vs standard interpolation."""

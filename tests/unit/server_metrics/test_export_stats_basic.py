@@ -239,7 +239,7 @@ class TestHistogramExportStats:
         assert stats.count_delta == 150.0
         assert stats.sum_delta == 40.0
         assert stats.avg == pytest.approx(40.0 / 150, rel=0.01)
-        assert stats.rate == 150.0  # 150 obs / 1s
+        assert stats.count_rate == 150.0  # 150 obs / 1s
 
     def test_histogram_bucket_delta_uses_correct_reference(self):
         """CRITICAL: Test histogram bucket deltas use ref_idx, not first snapshot."""
@@ -291,8 +291,8 @@ class TestHistogramExportStats:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
-        assert isinstance(stats.rate, float)
-        assert stats.rate == 40.0  # 200 obs / 5s
+        assert isinstance(stats.count_rate, float)
+        assert stats.count_rate == 40.0  # 200 obs / 5s
 
     def test_histogram_no_data_raises_key_error(self):
         """Test histogram raises KeyError when metric doesn't exist."""
@@ -332,7 +332,7 @@ class TestHistogramExportStats:
         # Negative deltas indicate reset - return None for invalid data
         assert stats.buckets is None
 
-    def test_histogram_estimated_percentiles(self):
+    def test_histogram_percentile_estimates(self):
         """Test histogram computes estimated p50, p90, p95, p99 from buckets."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
@@ -354,29 +354,20 @@ class TestHistogramExportStats:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
-        # Verify we have percentiles with bucket interpolation
-        assert stats.percentiles is not None
-        assert stats.percentiles.bucket is not None
+        # p50 should be around 0.3-0.5 (in the 0.1-0.5 bucket range)
+        assert stats.p50_estimate is not None
+        assert 0.1 <= stats.p50_estimate <= 0.6
 
-        # p50 = 500th observation, falls in (0.1, 0.5] bucket
-        # rank_in_bucket = 500 - 100 = 400, bucket_count = 400
-        # p50 = 0.1 + (0.5 - 0.1) * (400/400) = 0.5
-        assert stats.percentiles.bucket.p50 == pytest.approx(0.5, rel=0.01)
+        # p90 should be around 0.75-1.0 (in the 0.5-1.0 bucket range)
+        assert stats.p90_estimate is not None
+        assert 0.5 <= stats.p90_estimate <= 1.1
 
-        # p90 = 900th observation, falls in (0.5, 1.0] bucket
-        # rank_in_bucket = 900 - 500 = 400, bucket_count = 400
-        # p90 = 0.5 + (1.0 - 0.5) * (400/400) = 1.0
-        assert stats.percentiles.bucket.p90 == pytest.approx(1.0, rel=0.01)
+        # p95 and p99 - with +Inf bucket, these should be estimated above 1.0
+        assert stats.p95_estimate is not None
+        assert stats.p99_estimate is not None
 
-        # p95 = 950th observation, falls in (1.0, +Inf) bucket
-        # When quantile falls in +Inf bucket, return second-highest bound
-        assert stats.percentiles.bucket.p95 == pytest.approx(1.0, rel=0.01)
-
-        # p99 = 990th observation, also in +Inf bucket
-        assert stats.percentiles.bucket.p99 == pytest.approx(1.0, rel=0.01)
-
-    def test_histogram_percentiles_none_on_counter_reset(self):
-        """Test histogram percentiles are None when counter reset detected."""
+    def test_histogram_percentile_estimates_none_on_counter_reset(self):
+        """Test histogram percentile estimates are None when counter reset detected."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
             ts,
@@ -391,8 +382,9 @@ class TestHistogramExportStats:
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
         assert stats.buckets is None
-        # When counter reset detected, percentiles should be None
-        assert stats.percentiles is None
+        # When counter reset detected, percentile estimates should be None
+        assert stats.p50_estimate is None
+        assert stats.p99_estimate is None
 
 
 # =============================================================================
@@ -541,7 +533,7 @@ class TestSummaryExportStats:
         assert stats.count_delta == 200.0  # 300 - 100
         assert stats.sum_delta == 100.0  # 150 - 50
         assert stats.avg == 0.5  # 100 / 200
-        assert stats.rate == 100.0  # 200 obs / 2s
+        assert stats.count_rate == 100.0  # 200 obs / 2s
         assert stats.quantiles["0.5"] == 0.12
         assert stats.quantiles["0.9"] == 0.55
         assert stats.quantiles["0.95"] == 0.85
@@ -564,8 +556,8 @@ class TestSummaryExportStats:
 
         stats = SummaryExportStats.from_time_series(ts.summaries["latency"])
 
-        assert isinstance(stats.rate, float)
-        assert stats.rate == 50.0  # 500 obs / 10s
+        assert isinstance(stats.count_rate, float)
+        assert stats.count_rate == 50.0  # 500 obs / 10s
 
 
 # =============================================================================

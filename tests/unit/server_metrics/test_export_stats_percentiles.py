@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for best guess percentiles computation and edge cases."""
+"""Tests for estimated percentiles computation and edge cases."""
 
 import numpy as np
 import pytest
@@ -17,19 +17,19 @@ from aiperf.common.models.histogram_analysis import (
     histogram_quantile,
 )
 from aiperf.common.models.histogram_percentiles import (
-    compute_best_guess_percentiles,
+    compute_estimated_percentiles,
     generate_observations_with_sum_constraint,
 )
 from aiperf.common.models.server_metrics_models import ServerMetricsTimeSeries
 from tests.unit.server_metrics.helpers import add_histogram_snapshots, hist
 
 # =============================================================================
-# Best Guess Percentiles Tests
+# Estimated Percentiles Tests
 # =============================================================================
 
 
-class TestComputeBestGuessPercentiles:
-    """Test compute_best_guess_percentiles function."""
+class TestComputeEstimatedPercentiles:
+    """Test compute_estimated_percentiles function."""
 
     def test_computes_percentiles_with_inf_observations(self):
         """Test percentile computation including +Inf bucket estimates."""
@@ -39,55 +39,17 @@ class TestComputeBestGuessPercentiles:
         total_sum = 100.0
         total_count = 100
 
-        result = compute_best_guess_percentiles(
+        result = compute_estimated_percentiles(
             bucket_deltas, bucket_stats, total_sum, total_count
         )
 
         assert result is not None
-        assert result.p50 is not None
-        assert result.p99 is not None
-        assert result.p999 is not None
-        assert result.inf_bucket_count == 3  # 100 - 97 = 3
-        assert result.inf_bucket_estimated_mean is not None
-        assert result.inf_bucket_estimated_mean > 1.0  # Must be > max finite bucket
-
-    def test_confidence_high_when_inf_small(self):
-        """Test confidence is high when +Inf bucket is small."""
-        # Cumulative: 500 <= 0.5, 500 total (0 in +Inf)
-        bucket_deltas = {"0.5": 500.0, "+Inf": 500.0}
-        bucket_stats = {
-            "0.5": BucketStatistics(
-                bucket_le="0.5",
-                observation_count=100,
-                weighted_mean_sum=25.0,
-                sample_count=10,
-            )
-        }
-
-        result = compute_best_guess_percentiles(bucket_deltas, bucket_stats, 150.0, 500)
-
-        # inf_ratio = 0/500 = 0, mean_coverage = 1/1 = 1.0
-        # Should be high confidence
-        assert result is not None
-        assert result.estimation_confidence == "high"
-
-    def test_confidence_low_when_inf_large(self):
-        """Test confidence is low when +Inf bucket is large."""
-        # Cumulative: 50 <= 1.0, 100 total (50 in +Inf)
-        bucket_deltas = {"1.0": 50.0, "+Inf": 100.0}
-        bucket_stats = {}
-
-        result = compute_best_guess_percentiles(
-            bucket_deltas, bucket_stats, 2000.0, 100
-        )
-
-        # inf_ratio = 50/100 = 0.5 > 0.05, should be low
-        assert result is not None
-        assert result.estimation_confidence == "low"
+        assert result.p50_estimate is not None
+        assert result.p99_estimate is not None
 
     def test_returns_none_on_empty_data(self):
         """Test returns None when data is empty."""
-        result = compute_best_guess_percentiles(
+        result = compute_estimated_percentiles(
             bucket_deltas={},
             bucket_stats={},
             total_sum=0.0,
@@ -96,12 +58,41 @@ class TestComputeBestGuessPercentiles:
 
         assert result is None
 
+    def test_zero_sum_with_observations_returns_zero_percentiles(self):
+        """Test that zero sum with nonzero count returns all-zero percentiles.
 
-class TestBestGuessPercentilesIntegration:
-    """Integration tests for best_guess percentiles in HistogramExportStats."""
+        This handles the case where all observations are exactly 0 (e.g., decode time
+        for a prefill-only worker). Without this check, bucket interpolation would
+        give misleading non-zero estimates based on bucket boundaries.
+        """
+        # All 50 observations fall in first bucket (0.3), but sum is 0
+        bucket_deltas = {
+            "0.3": 50.0,
+            "0.5": 50.0,
+            "0.8": 50.0,
+            "1.0": 50.0,
+            "+Inf": 50.0,
+        }
+        bucket_stats = {}
+        total_sum = 0.0  # All observations were exactly 0
+        total_count = 50
 
-    def test_best_guess_computed_in_from_time_series(self):
-        """Test that best_guess percentiles are computed in from_time_series."""
+        result = compute_estimated_percentiles(
+            bucket_deltas, bucket_stats, total_sum, total_count
+        )
+
+        assert result is not None
+        assert result.p50_estimate == 0.0
+        assert result.p90_estimate == 0.0
+        assert result.p95_estimate == 0.0
+        assert result.p99_estimate == 0.0
+
+
+class TestEstimatedPercentilesIntegration:
+    """Integration tests for estimated percentiles in HistogramExportStats."""
+
+    def test_percentile_estimates_computed_in_from_time_series(self):
+        """Test that percentile estimates are computed in from_time_series."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
             ts,
@@ -117,38 +108,13 @@ class TestBestGuessPercentilesIntegration:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
 
-        assert stats.percentiles is not None
-        assert stats.percentiles.best_guess is not None
-        assert stats.percentiles.best_guess.p50 is not None
-        assert stats.percentiles.best_guess.p99 is not None
-        assert stats.percentiles.best_guess.p999 is not None
+        assert stats.p50_estimate is not None
+        assert stats.p99_estimate is not None
 
-    def test_best_guess_includes_inf_bucket_metadata(self):
-        """Test that best_guess includes +Inf bucket metadata."""
+    def test_percentile_estimates_handle_inf_bucket(self):
+        """Test percentile estimates include +Inf bucket in tail percentiles."""
         ts = ServerMetricsTimeSeries()
-        add_histogram_snapshots(
-            ts,
-            "latency",
-            [
-                (0, hist({"1.0": 0.0, "+Inf": 0.0}, 0.0, 0.0)),
-                # 90 observations <= 1.0s, 10 in +Inf (>1.0s)
-                (NANOS_PER_SECOND, hist({"1.0": 90.0, "+Inf": 100.0}, 150.0, 100.0)),
-            ],
-        )
-
-        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
-
-        assert stats.percentiles is not None
-        best_guess = stats.percentiles.best_guess
-        assert best_guess is not None
-        assert best_guess.inf_bucket_count == 10
-        assert best_guess.inf_bucket_estimated_mean is not None
-        assert best_guess.inf_bucket_estimated_mean > 1.0
-
-    def test_best_guess_differs_from_observed_when_inf_present(self):
-        """Test best_guess differs from observed when +Inf bucket has observations."""
-        ts = ServerMetricsTimeSeries()
-        # Large +Inf bucket to show difference
+        # Large +Inf bucket to test tail percentile estimation
         add_histogram_snapshots(
             ts,
             "latency",
@@ -164,25 +130,13 @@ class TestBestGuessPercentilesIntegration:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
 
-        assert stats.percentiles is not None
-        observed = stats.percentiles.observed
-        best_guess = stats.percentiles.best_guess
-
-        assert observed is not None
-        assert best_guess is not None
-
-        # Observed ignores +Inf, so p99 should be in finite buckets (<=1.0)
-        assert observed.p99 is not None
-        assert observed.p99 <= 1.0
-
-        # Best_guess includes +Inf estimates, so p99 should be higher
         # 50 of 100 observations are in +Inf, so p99 (99th percentile) should include +Inf
-        assert best_guess.p99 is not None
-        # With 50% in +Inf, the p99 should be in the +Inf region
-        assert best_guess.p99 > 1.0
+        assert stats.p99_estimate is not None
+        # With 50% in +Inf, the p99 should be in the +Inf region (above 1.0)
+        assert stats.p99_estimate > 1.0
 
-    def test_best_guess_none_on_counter_reset(self):
-        """Test best_guess is None when counter reset detected."""
+    def test_percentile_estimates_none_on_counter_reset(self):
+        """Test percentile estimates are None when counter reset detected."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
             ts,
@@ -196,7 +150,8 @@ class TestBestGuessPercentilesIntegration:
 
         stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
 
-        assert stats.percentiles is None
+        assert stats.p50_estimate is None
+        assert stats.p99_estimate is None
 
 
 # =============================================================================
@@ -323,24 +278,22 @@ class TestEdgeCasesValidation:
         assert len(observations) == 10
         assert all(obs >= 10.0 for obs in observations)  # All above max finite
 
-    def test_compute_best_guess_handles_all_in_inf_bucket(self):
-        """Test best_guess handles case where all observations in +Inf."""
+    def test_compute_estimated_percentiles_handles_all_in_inf_bucket(self):
+        """Test estimated_percentiles handles case where all observations in +Inf."""
         # All 100 observations in +Inf bucket
         bucket_deltas = {"1.0": 0.0, "+Inf": 100.0}
         bucket_stats = {}
         total_sum = 1500.0  # Average of 15 per observation
         total_count = 100
 
-        result = compute_best_guess_percentiles(
+        result = compute_estimated_percentiles(
             bucket_deltas, bucket_stats, total_sum, total_count
         )
 
         assert result is not None
-        assert result.inf_bucket_count == 100
-        assert result.finite_observations_count == 0
         # All percentiles should be in the +Inf region
-        assert result.p50 is not None
-        assert result.p50 > 1.0
+        assert result.p50_estimate is not None
+        assert result.p50_estimate > 1.0
 
 
 class TestEdgeCasesNumericalStability:

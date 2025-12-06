@@ -108,7 +108,10 @@ class ServerMetricsEndpointInfo(AIPerfBaseModel):
         description="Number of successful scrapes from this endpoint"
     )
     avg_scrape_latency_ms: float = Field(
-        description="Average time to scrape metrics from this endpoint in milliseconds"
+        description="Average time to complete each scrape in milliseconds"
+    )
+    avg_scrape_period_ms: float = Field(
+        description="Average time between consecutive scrapes in milliseconds"
     )
 
 
@@ -134,6 +137,12 @@ class ServerMetricLabeledStats(AIPerfBaseModel):
 
     In Prometheus, each unique label combination is a separate time series.
     This model represents statistics for one such combination.
+
+    Simplified formats for metrics with no meaningful data:
+    - Gauges with std == 0: Use 'value' field (constant gauge value)
+    - Histograms/Summaries with count_delta == 0: Use 'count_delta' field (no observations)
+
+    Check for presence of 'stats' to determine if full statistics are available.
     """
 
     endpoint: str | None = Field(
@@ -144,8 +153,19 @@ class ServerMetricLabeledStats(AIPerfBaseModel):
         default=None,
         description="Metric labels for this series. None if the metric has no labels.",
     )
-    stats: SerializeAsAny[ServerMetricStats] = Field(
-        description="Type-specific aggregated statistics (gauge, counter, histogram, or summary)",
+    value: float | None = Field(
+        default=None,
+        description="Constant value for gauges that didn't change during collection (std == 0).",
+    )
+    count_delta: int | None = Field(
+        default=None,
+        description="Observation count for histograms/summaries with no data (count_delta == 0). "
+        "Present instead of stats when no observations were recorded.",
+    )
+    stats: SerializeAsAny[ServerMetricStats] | None = Field(
+        default=None,
+        description="Type-specific aggregated statistics (gauge, counter, histogram, or summary). "
+        "None if the metric was constant (use 'value' field) or had no observations (use 'count_delta').",
     )
 
 
@@ -184,6 +204,9 @@ class ServerMetricsEndpointSummary(AIPerfBaseModel):
     avg_scrape_latency_ms: float = Field(
         description="Average time to scrape metrics from this endpoint in milliseconds"
     )
+    avg_scrape_period_ms: float = Field(
+        description="Average time between consecutive scrapes in milliseconds"
+    )
     # Metric data
     info_metrics: dict[str, InfoMetricData] | None = Field(
         default=None,
@@ -207,13 +230,12 @@ class ServerMetricsMergedExportData(AIPerfBaseModel):
 
     This format merges series from all endpoints into each metric, with each series
     item containing an 'endpoint' field to identify its source.
+
+    Info metrics (ending in _info) are included as gauges with value=1.0 since they
+    represent static configuration/version information that doesn't change.
     """
 
     summary: ServerMetricsSummary
-    info_metrics: dict[str, InfoMetricData] | None = Field(
-        default=None,
-        description="Static info metrics merged from all endpoints",
-    )
     metrics: dict[str, ServerMetricSummary] = Field(
         default_factory=dict,
         description="All metrics merged across endpoints, with endpoint field in each series item",

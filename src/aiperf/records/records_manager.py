@@ -17,6 +17,7 @@ from aiperf.common.enums import (
     CreditPhase,
     GPUTelemetryMode,
     MessageType,
+    PrometheusMetricType,
     ResultsProcessorType,
     ServiceType,
 )
@@ -748,7 +749,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             telemetry_data=telemetry_hierarchy,
             start_ns=self.start_time_ns or time.time_ns(),
             end_ns=self.end_time_ns or time.time_ns(),
-            endpoints_tested=list(telemetry_hierarchy.dcgm_endpoints.keys()),
+            endpoints_configured=list(telemetry_hierarchy.dcgm_endpoints.keys()),
             endpoints_successful=list(telemetry_hierarchy.dcgm_endpoints.keys()),
             error_summary=await self.get_telemetry_error_summary(),
         )
@@ -827,10 +828,28 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             ) in endpoint_data.time_series.iter_export_stats(time_filter):
                 base_name, labels = self._parse_metric_key(metric_key)
 
-                series_stats = ServerMetricLabeledStats(
-                    labels=labels if labels else None,
-                    stats=export_stats,
-                )
+                # Simplify metrics with no meaningful data
+                # - Gauges with std == 0: value never changed, show constant value
+                # - Histograms/Summaries with count_delta == 0: no observations, show count_delta only
+                if metric_type == PrometheusMetricType.GAUGE and export_stats.std == 0:
+                    series_stats = ServerMetricLabeledStats(
+                        labels=labels if labels else None,
+                        value=export_stats.avg,  # All values were identical
+                    )
+                elif (
+                    metric_type
+                    in (PrometheusMetricType.HISTOGRAM, PrometheusMetricType.SUMMARY)
+                    and export_stats.count_delta == 0
+                ):
+                    series_stats = ServerMetricLabeledStats(
+                        labels=labels if labels else None,
+                        count_delta=0.0,  # No observations recorded
+                    )
+                else:
+                    series_stats = ServerMetricLabeledStats(
+                        labels=labels if labels else None,
+                        stats=export_stats,
+                    )
 
                 if base_name not in metrics:
                     schema = endpoint_data.metadata.metric_schemas.get(base_name)
@@ -870,12 +889,19 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 if ts._scrape_latencies_ns
                 else 0.0
             )
+            # Average time between consecutive scrapes (milliseconds)
+            avg_scrape_period_ms = (
+                (duration_seconds * 1000) / (scrape_count - 1)
+                if scrape_count > 1
+                else 0.0
+            )
 
             summaries[endpoint_display] = ServerMetricsEndpointSummary(
                 endpoint_url=endpoint_url,
                 duration_seconds=duration_seconds,
                 scrape_count=scrape_count,
                 avg_scrape_latency_ms=avg_scrape_latency_ms,
+                avg_scrape_period_ms=avg_scrape_period_ms,
                 info_metrics=info_metrics,
                 metrics=metrics,
             )
