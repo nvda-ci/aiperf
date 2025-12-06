@@ -7,7 +7,8 @@ This module provides data structures for exporting benchmark results to JSON:
 
 - JsonMetricResult: Single metric result with statistics
 - TelemetryExportData: GPU telemetry data for export
-- ServerMetricsExportData: Server metrics data for export
+- ServerMetricsExportData: Server metrics data for export (nested format)
+- ServerMetricsFlatExportData: Server metrics data for export (flat format)
 - JsonExportData: Complete benchmark results for JSON export
 
 These models are designed to be compatible with the GenAI-Perf JSON output format.
@@ -239,6 +240,136 @@ class ServerMetricsMergedExportData(AIPerfBaseModel):
     metrics: dict[str, ServerMetricSummary] = Field(
         default_factory=dict,
         description="All metrics merged across endpoints, with endpoint field in each series item",
+    )
+
+
+# =============================================================================
+# Server Metrics Hybrid Export Data (keyed metrics + flat stats)
+# =============================================================================
+
+
+class FlatSeriesStats(AIPerfBaseModel):
+    """Flat statistics for a single time series within a metric.
+
+    Contains endpoint info, labels, and flattened stats fields.
+    Used within HybridMetricData for the hybrid export format.
+    """
+
+    # Endpoint fields
+    endpoint: str = Field(
+        description="Normalized endpoint identifier (e.g., 'localhost:8081')"
+    )
+    endpoint_url: str = Field(
+        description="Full endpoint URL (e.g., 'http://localhost:8081/metrics')"
+    )
+
+    # Labels
+    labels: dict[str, str] | None = Field(
+        default=None,
+        description="Metric labels. None if the metric has no labels.",
+    )
+
+    # Common statistics
+    observation_count: int | None = Field(
+        default=None,
+        description="Number of observations/samples. Computed differently per type.",
+    )
+    # Histogram/Summary shared fields
+    observations_per_second: float | None = Field(
+        default=None, description="Observations per second (histogram/summary)"
+    )
+
+    avg: float | None = Field(default=None, description="Average value")
+
+    # Gauge-specific fields
+    min: float | None = Field(default=None, description="Minimum value (gauge only)")
+    max: float | None = Field(default=None, description="Maximum value (gauge only)")
+    std: float | None = Field(
+        default=None, description="Standard deviation (gauge only)"
+    )
+
+    # Unified percentile fields (no more p99_estimate vs p99)
+    p50: float | None = Field(default=None, description="50th percentile")
+    p90: float | None = Field(default=None, description="90th percentile")
+    p95: float | None = Field(default=None, description="95th percentile")
+    p99: float | None = Field(default=None, description="99th percentile")
+    estimated_percentiles: bool | None = Field(
+        default=None,
+        description="True if percentiles are estimated (histogram), False if exact (gauge/summary)",
+    )
+
+    # Counter and Histogram/Summary shared fields
+    delta: float | None = Field(
+        default=None,
+        description="Value change over collection period. "
+        "Counter: change in counter value. Histogram/Summary: change in sum.",
+    )
+    rate_per_second: float | None = Field(
+        default=None,
+        description="Delta per second. Counter: counter rate. Histogram/Summary: sum rate.",
+    )
+
+    # Counter-specific rate statistics
+    rate_avg: float | None = Field(
+        default=None,
+        description="Time-weighted average rate between change points (counter)",
+    )
+    rate_min: float | None = Field(
+        default=None, description="Minimum point-to-point rate per second (counter)"
+    )
+    rate_max: float | None = Field(
+        default=None, description="Maximum point-to-point rate per second (counter)"
+    )
+    rate_std: float | None = Field(
+        default=None, description="Standard deviation of point-to-point rates (counter)"
+    )
+
+    # Histogram-specific
+    buckets: dict[str, int] | None = Field(
+        default=None,
+        description="Histogram bucket upper bounds to delta counts (e.g., {'0.1': 2000, '+Inf': 5000})",
+    )
+
+    # Summary-specific
+    quantiles: dict[str, float] | None = Field(
+        default=None,
+        description="Server-computed quantiles from Prometheus summary (e.g., {'0.5': 0.1, '0.99': 0.5})",
+    )
+
+
+class HybridMetricData(AIPerfBaseModel):
+    """Metric data with type, description, unit, and flat series stats.
+
+    Used in hybrid export format where metrics are keyed by name for O(1) lookup,
+    but stats within each series are flattened for easy access.
+    """
+
+    type: str = Field(description="Metric type: gauge, counter, histogram, or summary")
+    description: str = Field(description="Metric description from HELP text")
+    unit: str | None = Field(
+        default=None,
+        description="Unit inferred from metric name suffix (_seconds, _bytes, etc.)",
+    )
+    series: list[FlatSeriesStats] = Field(
+        default_factory=list,
+        description="Statistics for each unique endpoint + label combination",
+    )
+
+
+class ServerMetricsHybridExportData(AIPerfBaseModel):
+    """Server metrics in hybrid format: keyed metrics with flat stats.
+
+    Provides O(1) metric lookup by name while keeping stats flat within each series.
+    Best of both worlds: easy to find specific metrics AND easy to access their stats.
+
+    Example access:
+        data["metrics"]["vllm:kv_cache_usage_perc"]["series"][0]["p99"]
+    """
+
+    summary: ServerMetricsSummary
+    metrics: dict[str, HybridMetricData] = Field(
+        default_factory=dict,
+        description="Metrics keyed by name, each with flat series stats",
     )
 
 

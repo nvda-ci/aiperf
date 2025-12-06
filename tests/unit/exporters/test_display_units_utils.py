@@ -11,6 +11,7 @@ from aiperf.common.models import MetricResult
 from aiperf.exporters.display_units_utils import (
     _logger,
     convert_all_metrics_to_display_units,
+    parse_unit_from_metric_name,
     to_display_unit,
 )
 
@@ -143,3 +144,99 @@ class TestDisplayUnitsUtils:
         assert set(out.keys()) == {"time_to_first_token", "foo"}
         assert out["time_to_first_token"].unit == "ms"
         assert out["foo"].avg == pytest.approx(2.0)
+
+
+class TestParseUnitFromMetricName:
+    """Tests for parse_unit_from_metric_name function."""
+
+    @pytest.mark.parametrize(
+        "metric_name,expected_unit",
+        [
+            # Time units
+            ("request_duration_seconds", "seconds"),
+            ("vllm:time_to_first_token_seconds", "seconds"),
+            ("processing_time_milliseconds", "milliseconds"),
+            ("dynamo_component_nats_service_processing_ms", "milliseconds"),
+            ("latency_nanoseconds", "nanoseconds"),
+            ("event_time_ns", "nanoseconds"),
+            # Size/data units
+            ("response_size_bytes", "bytes"),
+            ("memory_kilobytes", "kilobytes"),
+            ("disk_megabytes", "megabytes"),
+            ("storage_gigabytes", "gigabytes"),
+            # Count/quantity units
+            ("requests_total", "count"),
+            ("error_count", "count"),
+            ("vllm:generation_tokens", "tokens"),
+            ("vllm:prompt_tokens", "tokens"),
+            ("dynamo_component_requests", "requests"),
+            ("nats_client_in_messages", "messages"),
+            ("kvstats_active_blocks", "blocks"),
+            ("nats_client_current_connections", "connections"),
+            ("frontend_disconnected_clients", "clients"),
+            ("nats_service_active_services", "services"),
+            ("nats_service_active_endpoints", "endpoints"),
+            ("dynamo_component_errors", "errors"),
+            ("cache_hits", "hits"),
+            ("cache_misses", "misses"),
+            ("prefix_cache_queries", "queries"),
+            ("vllm:num_preemptions", "preemptions"),
+            # Compound suffixes (_X_total -> X, not count)
+            ("vllm:iteration_tokens_total", "tokens"),
+            ("dynamo_component_nats_service_requests_total", "requests"),
+            ("dynamo_component_nats_service_errors_total", "errors"),
+            ("dynamo_component_nats_service_processing_ms_total", "milliseconds"),
+            ("request_duration_seconds_total", "seconds"),
+            ("latency_ns_total", "nanoseconds"),
+            ("http_server_requests_messages_total", "messages"),
+            ("network_bytes_total", "bytes"),
+            ("cache_hits_total", "hits"),
+            ("cache_misses_total", "misses"),
+            ("scheduler_preemptions_total", "preemptions"),
+            # Ratio/percentage units
+            ("memory_ratio", "ratio"),
+            ("cache_usage_percent", "percent"),
+            ("vllm:kv_cache_usage_perc", "percent"),
+            # Physical units
+            ("temperature_celsius", "celsius"),
+            ("voltage_volts", "volts"),
+            # Special types
+            ("vllm:cache_config_info", "info"),
+            # Case insensitivity
+            ("REQUEST_DURATION_SECONDS", "seconds"),
+            ("Vllm:Kv_Cache_Usage_Perc", "percent"),
+        ],
+    )  # fmt: skip
+    def test_parses_known_suffixes(self, metric_name: str, expected_unit: str):
+        """Test that known suffixes are correctly parsed."""
+        assert parse_unit_from_metric_name(metric_name) == expected_unit
+
+    @pytest.mark.parametrize(
+        "metric_name",
+        [
+            "dynamo_frontend_inflight_requests_gauge",  # No known suffix
+            "vllm:num_requests_running",  # _running is not a unit
+            "model_context_length",  # _length is not a unit
+            "unknown_metric",
+        ],
+    )  # fmt: skip
+    def test_returns_none_for_unknown_suffixes(self, metric_name: str):
+        """Test that unknown suffixes return None."""
+        assert parse_unit_from_metric_name(metric_name) is None
+
+    def test_longer_suffix_takes_priority(self):
+        """Test that longer suffixes match before shorter ones."""
+        # _milliseconds should match before _seconds
+        assert parse_unit_from_metric_name("latency_milliseconds") == "milliseconds"
+        # _nanoseconds should match before _seconds
+        assert parse_unit_from_metric_name("latency_nanoseconds") == "nanoseconds"
+        # _tokens_total should match before _total (tokens, not count)
+        assert parse_unit_from_metric_name("iteration_tokens_total") == "tokens"
+        # _requests_total should match before _total (requests, not count)
+        assert parse_unit_from_metric_name("http_requests_total") == "requests"
+        # _errors_total should match before _total (errors, not count)
+        assert parse_unit_from_metric_name("server_errors_total") == "errors"
+        # _ms_total should match before _total (milliseconds, not count)
+        assert parse_unit_from_metric_name("processing_ms_total") == "milliseconds"
+        # _seconds_total should match before _total (seconds, not count)
+        assert parse_unit_from_metric_name("duration_seconds_total") == "seconds"

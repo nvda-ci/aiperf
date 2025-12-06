@@ -36,6 +36,88 @@ def normalize_endpoint_display(url: str) -> str:
     return display
 
 
+# Mapping of Prometheus metric name suffixes to unit strings
+# Note: Suffixes are sorted by length (longest first) for matching,
+# so compound suffixes like _tokens_total will match before _total
+_METRIC_SUFFIX_TO_UNIT: dict[str, str] = {
+    # Time units
+    "_seconds": "seconds",
+    "_seconds_total": "seconds",  # Compound: seconds counter
+    "_milliseconds": "milliseconds",
+    "_ms": "milliseconds",
+    "_ms_total": "milliseconds",  # Compound: milliseconds counter
+    "_nanoseconds": "nanoseconds",
+    "_ns": "nanoseconds",
+    "_ns_total": "nanoseconds",  # Compound: nanoseconds counter
+    # Size/data units
+    "_bytes": "bytes",
+    "_kilobytes": "kilobytes",
+    "_megabytes": "megabytes",
+    "_gigabytes": "gigabytes",
+    "_bytes_total": "bytes",  # Compound: bytes counter
+    # Count/quantity units
+    "_total": "count",
+    "_count": "count",
+    "_tokens": "tokens",
+    "_tokens_total": "tokens",  # Compound: token counter
+    "_requests": "requests",
+    "_requests_total": "requests",  # Compound: request counter
+    "_messages": "messages",
+    "_messages_total": "messages",  # Compound: message counter
+    "_blocks": "blocks",
+    "_connections": "connections",
+    "_clients": "clients",
+    "_services": "services",
+    "_endpoints": "endpoints",
+    "_errors": "errors",
+    "_errors_total": "errors",  # Compound: error counter
+    "_hits": "hits",
+    "_hits_total": "hits",  # Compound: hit counter
+    "_misses": "misses",
+    "_misses_total": "misses",  # Compound: miss counter
+    "_queries": "queries",
+    "_preemptions": "preemptions",
+    "_preemptions_total": "preemptions",  # Compound: preemption counter
+    # Ratio/percentage units
+    "_ratio": "ratio",
+    "_percent": "percent",
+    "_perc": "percent",  # Common shorthand (e.g., vllm:kv_cache_usage_perc)
+    # Physical units
+    "_celsius": "celsius",
+    "_volts": "volts",
+    "_amperes": "amperes",
+    "_joules": "joules",
+    "_watts": "watts",
+    "_meters": "meters",
+    # Special types
+    "_info": "info",
+}
+
+# Pre-compute sorted suffixes (longest first) for efficient matching
+_SORTED_SUFFIXES = sorted(_METRIC_SUFFIX_TO_UNIT.keys(), key=len, reverse=True)
+
+
+def parse_unit_from_metric_name(metric_name: str) -> str | None:
+    """Infer unit from Prometheus metric name suffix.
+
+    Prometheus naming conventions use suffixes like _seconds, _bytes, _total
+    to indicate the unit of a metric.
+
+    Args:
+        metric_name: Full metric name (e.g., 'request_duration_seconds')
+
+    Returns:
+        Unit string (e.g., 'seconds') or None if no recognized suffix
+    """
+    name_lower = metric_name.lower()
+    # Check longer suffixes first to avoid partial matches
+    # e.g., "_milliseconds" should match before "_seconds"
+    for suffix in _SORTED_SUFFIXES:
+        if name_lower.endswith(suffix):
+            return _METRIC_SUFFIX_TO_UNIT[suffix]
+    return None
+
+
 def to_display_unit(result: MetricResult, registry: MetricRegistry) -> MetricResult:
     """
     Return a new MetricResult converted to its display unit (if different).
