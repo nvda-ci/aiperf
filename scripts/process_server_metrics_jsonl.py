@@ -218,22 +218,34 @@ def main():
     # Build hierarchy from JSONL records
     hierarchy = ServerMetricsHierarchy()
     record_count = 0
+    error_count = 0
 
     with open(jsonl_path, "rb") as f:
-        for line in f:
+        for line_num, line in enumerate(f, start=1):
             if not line.strip():
                 continue
 
-            data = orjson.loads(line)
-            slim_record = ServerMetricsSlimRecord.model_validate(data)
-            full_record = slim_to_full_record(slim_record, metadata_file)
-            hierarchy.add_record(full_record)
-            record_count += 1
+            try:
+                data = orjson.loads(line)
+                slim_record = ServerMetricsSlimRecord.model_validate(data)
+                full_record = slim_to_full_record(slim_record, metadata_file)
+                hierarchy.add_record(full_record)
+                record_count += 1
+            except orjson.JSONDecodeError as e:
+                print(f"  Warning: Invalid JSON at line {line_num}: {e}")
+                error_count += 1
+                continue
+            except Exception as e:
+                print(f"  Warning: Failed to process line {line_num}: {e}")
+                error_count += 1
+                continue
 
             if record_count % 100 == 0:
                 print(f"  Processed {record_count} records...")
 
     print(f"Processed {record_count} total records")
+    if error_count > 0:
+        print(f"  Skipped {error_count} records due to errors")
     print(f"Endpoints found: {list(hierarchy.endpoints.keys())}")
 
     # Compute summaries (no time filter - use all data)

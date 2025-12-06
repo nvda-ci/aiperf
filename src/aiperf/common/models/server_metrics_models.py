@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
@@ -809,7 +810,10 @@ class ServerMetricsEndpointData(AIPerfBaseModel):
                                 count=sample.summary.count,
                             )
                     case _:
-                        self.warning(f"Unsupported metric type: {metric_type}")
+                        warnings.warn(
+                            f"Unsupported metric type: {metric_type}",
+                            stacklevel=2,
+                        )
                         continue
 
         # Only add if we have any metrics
