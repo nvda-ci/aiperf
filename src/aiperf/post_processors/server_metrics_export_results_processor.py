@@ -1,10 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import asyncio
-
-import orjson
-
 from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
@@ -13,8 +9,6 @@ from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.mixins import BufferedJSONLWriterMixinWithDeduplication
 from aiperf.common.models.record_models import MetricResult
 from aiperf.common.models.server_metrics_models import (
-    ServerMetricsMetadata,
-    ServerMetricsMetadataFile,
     ServerMetricsRecord,
     ServerMetricsSlimRecord,
 )
@@ -57,105 +51,19 @@ class ServerMetricsExportResultsProcessor(
             **kwargs,
         )
 
-        self._metadata_file = user_config.output.server_metrics_metadata_json_file
-        self._metadata_file.unlink(missing_ok=True)
-
-        # Keep track of metadata for all endpoints over time. Note that the metadata fields
-        # can occasionally change, so we need to keep track of it over time.
-        self._metadata_file_model = ServerMetricsMetadataFile()
-        self._metadata_file_lock = asyncio.Lock()
-
-        self.info(f"Server metrics jsonl writer export enabled: {self.output_file}")
-        self.info(f"Server metrics metadata file: {self._metadata_file}")
+        self.info(f"Server metrics JSONL export enabled: {self.output_file}")
 
     async def process_server_metrics_record(self, record: ServerMetricsRecord) -> None:
         """Process individual server metrics record by converting to slim and writing to JSONL.
 
         Converts full record to slim format to reduce file size by excluding static metadata.
-        On first record from each endpoint, extracts metadata and writes metadata file.
 
         Args:
             record: ServerMetricsRecord containing Prometheus metrics snapshot and metadata
         """
-        url = record.endpoint_url
-        metadata = record.extract_metadata()
-
-        # Check without lock to avoid unnecessary locking
-        should_write = False
-        if (
-            url not in self._metadata_file_model.endpoints
-            or self._should_update_metadata(
-                record, self._metadata_file_model.endpoints[url]
-            )
-        ):
-            should_write = True
-
-        if should_write:
-            async with self._metadata_file_lock:
-                if url not in self._metadata_file_model.endpoints:
-                    # First time seeing this endpoint, set the metadata
-                    self._metadata_file_model.endpoints[url] = metadata
-                else:
-                    # Merge new metadata with existing metadata
-                    existing = self._metadata_file_model.endpoints[url]
-                    existing.metric_schemas.update(metadata.metric_schemas)
-                    existing.info_metrics.update(metadata.info_metrics)
-                await self._write_metadata_file()
-
         # Convert to slim format before writing to reduce file size (will be deduplicated)
         slim_record = record.to_slim()
         await self.buffered_write(slim_record)
-
-    def _should_update_metadata(
-        self, record: ServerMetricsRecord, existing_metadata: ServerMetricsMetadata
-    ) -> bool:
-        """Check if metadata should be updated based on record changes.
-
-        Detects new metric names not in existing metadata.
-
-        Args:
-            record: ServerMetricsRecord to check
-            existing_metadata: Existing metadata for the endpoint
-
-        Returns:
-            True if metadata needs updating, False otherwise
-        """
-        existing_schemas = existing_metadata.metric_schemas
-
-        # Check for new metric names
-        new_metrics = set(record.metrics.keys()) - set(existing_schemas.keys())
-        if new_metrics:
-            self.debug(
-                lambda: f"Detected new metrics for {record.endpoint_url}: {sorted(new_metrics)}"
-            )
-            return True
-
-        return False
-
-    async def _write_metadata_file(self) -> None:
-        """Write the complete metadata file for all seen endpoints atomically.
-
-        Re-writes the entire metadata file with all endpoints seen so far.
-        Uses Pydantic model serialization with orjson for efficient JSON writing.
-        Uses atomic temp-file + rename pattern to prevent corruption on crash.
-        """
-        metadata_json = orjson.dumps(
-            self._metadata_file_model.model_dump(exclude_none=True, mode="json"),
-            option=orjson.OPT_INDENT_2,
-        )
-
-        # Write to temp file and atomically rename to prevent corruption
-        temp_file = self._metadata_file.with_suffix(".tmp")
-        try:
-            temp_file.write_bytes(metadata_json)
-            temp_file.replace(self._metadata_file)  # Atomic on POSIX
-            self.debug(
-                lambda: f"Wrote metadata file with {len(self._metadata_file_model.endpoints)} endpoints"
-            )
-        except Exception as e:
-            self.error(f"Failed to write metadata file: {e}")
-            temp_file.unlink(missing_ok=True)
-            raise
 
     async def summarize(self) -> list[MetricResult]:
         """Summarize the results.

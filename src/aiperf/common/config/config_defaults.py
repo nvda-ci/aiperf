@@ -156,7 +156,6 @@ class OutputDefaults:
     SERVER_METRICS_EXPORT_JSONL_FILE = Path("server_metrics_export.jsonl")
     SERVER_METRICS_EXPORT_JSON_FILE = Path("server_metrics_export.json")
     SERVER_METRICS_EXPORT_CSV_FILE = Path("server_metrics_export.csv")
-    SERVER_METRICS_METADATA_JSON_FILE = Path("server_metrics_metadata.json")
     EXPORT_LEVEL = ExportLevel.RECORDS
     SLICE_DURATION = None
 

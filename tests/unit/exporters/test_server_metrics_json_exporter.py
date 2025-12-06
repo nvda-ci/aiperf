@@ -609,6 +609,70 @@ class TestServerMetricsJsonExporterGenerateContent:
         assert "p99" in summary_series  # Mapped from quantiles
         assert summary_series["estimated_percentiles"] is False  # Server-computed
 
+    def test_metrics_are_sorted_alphabetically(
+        self,
+        mock_user_config,
+        mock_profile_results,
+        server_metrics_results_with_summaries,
+    ):
+        """Test that metrics dict is sorted alphabetically by metric name."""
+        config = create_exporter_config(
+            profile_results=mock_profile_results,
+            user_config=mock_user_config,
+            server_metrics_results=server_metrics_results_with_summaries,
+        )
+        exporter = ServerMetricsJsonExporter(config)
+        content = exporter._generate_content()
+        data = json.loads(content)
+
+        # Get metric names in order they appear in JSON
+        metric_names = list(data["metrics"].keys())
+
+        # Verify they are sorted alphabetically
+        assert metric_names == sorted(metric_names)
+
+    def test_series_are_sorted_by_endpoint_then_labels(
+        self,
+        mock_user_config,
+        mock_profile_results,
+        server_metrics_results_with_summaries,
+    ):
+        """Test that series within each metric are sorted by endpoint, then labels."""
+        config = create_exporter_config(
+            profile_results=mock_profile_results,
+            user_config=mock_user_config,
+            server_metrics_results=server_metrics_results_with_summaries,
+        )
+        exporter = ServerMetricsJsonExporter(config)
+        content = exporter._generate_content()
+        data = json.loads(content)
+
+        # Check kv_cache metric which has series from both endpoints
+        kv_metric = data["metrics"]["vllm:kv_cache_usage_perc"]
+        endpoints = [s["endpoint"] for s in kv_metric["series"]]
+
+        # localhost:8081 should come before localhost:8082 (alphabetical)
+        assert endpoints == sorted(endpoints)
+
+    def test_endpoint_info_is_sorted(
+        self,
+        mock_user_config,
+        mock_profile_results,
+        server_metrics_results_with_summaries,
+    ):
+        """Test that endpoint_info dict is sorted by endpoint name."""
+        config = create_exporter_config(
+            profile_results=mock_profile_results,
+            user_config=mock_user_config,
+            server_metrics_results=server_metrics_results_with_summaries,
+        )
+        exporter = ServerMetricsJsonExporter(config)
+        content = exporter._generate_content()
+        data = json.loads(content)
+
+        endpoint_info_keys = list(data["summary"]["endpoint_info"].keys())
+        assert endpoint_info_keys == sorted(endpoint_info_keys)
+
     def test_counter_with_zero_delta_has_minimal_output(
         self,
         mock_user_config,

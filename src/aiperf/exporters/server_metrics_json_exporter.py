@@ -206,7 +206,21 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
                     )
                     metrics[metric_name].series.append(series_stats)
 
-        return metrics, endpoint_info if endpoint_info else None
+        # Sort metrics alphabetically by name for deterministic output and easier lookup
+        sorted_metrics = dict(sorted(metrics.items()))
+
+        # Sort series within each metric by endpoint, then by labels
+        for metric_data in sorted_metrics.values():
+            metric_data.series.sort(
+                key=lambda s: (s.endpoint, str(s.labels) if s.labels else "")
+            )
+
+        # Sort endpoint_info for consistency
+        sorted_endpoint_info = (
+            dict(sorted(endpoint_info.items())) if endpoint_info else None
+        )
+
+        return sorted_metrics, sorted_endpoint_info
 
     def _build_flat_series_stats(
         self,

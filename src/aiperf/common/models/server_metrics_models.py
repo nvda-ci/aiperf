@@ -210,19 +210,6 @@ class ServerMetricsMetadata(AIPerfBaseModel):
     )
 
 
-class ServerMetricsMetadataFile(AIPerfBaseModel):
-    """Container for all server metrics endpoint metadata.
-
-    This model represents the complete server_metrics_metadata.json file structure,
-    mapping endpoint URLs to their metadata.
-    """
-
-    endpoints: dict[str, ServerMetricsMetadata] = Field(
-        default_factory=dict,
-        description="Dict mapping endpoint_url to ServerMetricsMetadata",
-    )
-
-
 class ServerMetricsRecord(AIPerfBaseModel):
     """Single server metrics data point from Prometheus endpoint.
 
