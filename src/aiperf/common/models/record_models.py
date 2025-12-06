@@ -23,7 +23,7 @@ from aiperf.common.exceptions import InvalidInferenceResultError
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.dataset_models import Turn
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
-from aiperf.common.models.export_models import JsonMetricResult
+from aiperf.common.models.export_data import JsonMetricResult
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.usage_models import Usage
 from aiperf.common.types import JsonObject, MetricTagT, TimeSliceT

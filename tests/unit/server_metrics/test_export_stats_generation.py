@@ -6,8 +6,8 @@
 import numpy as np
 import pytest
 
-from aiperf.common.models.export_models import (
-    BucketStatistics,
+from aiperf.common.models.histogram_analysis import BucketStatistics
+from aiperf.common.models.histogram_percentiles import (
     generate_observations_with_sum_constraint,
 )
 

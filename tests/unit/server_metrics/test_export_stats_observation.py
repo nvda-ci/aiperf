@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_models import (
-    HistogramExportStats,
+from aiperf.common.models.export_stats import HistogramExportStats
+from aiperf.common.models.histogram_analysis import (
     extract_all_observations,
     extract_observations_from_scrape,
 )

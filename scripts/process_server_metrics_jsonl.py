@@ -21,7 +21,7 @@ import orjson
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from aiperf.common.models.export_models import (
+from aiperf.common.models.export_data import (
     ServerMetricLabeledStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,

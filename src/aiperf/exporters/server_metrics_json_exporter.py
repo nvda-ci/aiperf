@@ -8,14 +8,14 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import DataExporterType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
-from aiperf.common.models.export_models import (
-    InfoMetricData,
+from aiperf.common.models.export_data import (
     ServerMetricLabeledStats,
     ServerMetricsEndpointInfo,
     ServerMetricsMergedExportData,
     ServerMetricsSummary,
     ServerMetricSummary,
 )
+from aiperf.common.models.metric_info_models import InfoMetricData
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.display_units_utils import normalize_endpoint_display
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo

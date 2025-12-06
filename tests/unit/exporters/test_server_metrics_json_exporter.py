@@ -11,16 +11,18 @@ from aiperf.common.config import EndpointConfig, UserConfig
 from aiperf.common.enums import EndpointType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import ProfileResults
-from aiperf.common.models.export_models import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    InfoMetricData,
+from aiperf.common.models.export_data import (
     ServerMetricLabeledStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,
+)
+from aiperf.common.models.export_stats import (
+    CounterExportStats,
+    GaugeExportStats,
+    HistogramExportStats,
     SummaryExportStats,
 )
+from aiperf.common.models.metric_info_models import InfoMetricData
 from aiperf.common.models.server_metrics_models import ServerMetricsResults
 from aiperf.exporters.server_metrics_json_exporter import ServerMetricsJsonExporter
 

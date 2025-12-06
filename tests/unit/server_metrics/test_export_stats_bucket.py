@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_models import (
+from aiperf.common.models.histogram_analysis import (
     BucketStatistics,
     accumulate_bucket_statistics,
     estimate_bucket_sums,

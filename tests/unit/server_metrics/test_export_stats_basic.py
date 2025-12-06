@@ -6,13 +6,13 @@
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_models import (
+from aiperf.common.models.export_stats import (
     CounterExportStats,
     GaugeExportStats,
     HistogramExportStats,
     SummaryExportStats,
-    histogram_quantile,
 )
+from aiperf.common.models.histogram_analysis import histogram_quantile
 from aiperf.common.models.server_metrics_models import (
     ServerMetricsTimeSeries,
     TimeRangeFilter,

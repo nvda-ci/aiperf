@@ -58,7 +58,7 @@ from aiperf.common.models import (
     TelemetryRecord,
     TelemetryResults,
 )
-from aiperf.common.models.export_models import (
+from aiperf.common.models.export_data import (
     ServerMetricLabeledStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,

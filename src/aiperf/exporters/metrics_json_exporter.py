@@ -9,7 +9,7 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import DataExporterType
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.models import MetricResult
-from aiperf.common.models.export_models import (
+from aiperf.common.models.export_data import (
     EndpointData,
     GpuSummary,
     JsonExportData,

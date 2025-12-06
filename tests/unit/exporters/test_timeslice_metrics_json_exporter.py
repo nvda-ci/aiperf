@@ -14,7 +14,7 @@ from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.enums import EndpointType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import MetricResult
-from aiperf.common.models.export_models import TimesliceCollectionExportData
+from aiperf.common.models.export_data import TimesliceCollectionExportData
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_json_exporter import MetricsJsonExporter
 from aiperf.exporters.timeslice_metrics_json_exporter import (

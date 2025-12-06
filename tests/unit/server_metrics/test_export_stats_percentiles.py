@@ -7,16 +7,18 @@ import numpy as np
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_models import (
+from aiperf.common.models.export_stats import HistogramExportStats
+from aiperf.common.models.histogram_analysis import (
     BucketStatistics,
-    HistogramExportStats,
     accumulate_bucket_statistics,
-    compute_best_guess_percentiles,
     estimate_bucket_sums,
     extract_all_observations,
-    generate_observations_with_sum_constraint,
     get_bucket_bounds,
     histogram_quantile,
+)
+from aiperf.common.models.histogram_percentiles import (
+    compute_best_guess_percentiles,
+    generate_observations_with_sum_constraint,
 )
 from aiperf.common.models.server_metrics_models import ServerMetricsTimeSeries
 from tests.unit.server_metrics.helpers import add_histogram_snapshots, hist
@@ -305,7 +307,9 @@ class TestEdgeCasesValidation:
 
     def test_estimate_inf_bucket_handles_extreme_values(self):
         """Test +Inf bucket estimation handles extreme sum values."""
-        from aiperf.common.models.export_models import estimate_inf_bucket_observations
+        from aiperf.common.models.histogram_analysis import (
+            estimate_inf_bucket_observations,
+        )
 
         # Very large sum relative to finite observations
         observations = estimate_inf_bucket_observations(
