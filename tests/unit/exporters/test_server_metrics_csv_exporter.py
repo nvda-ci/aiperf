@@ -9,7 +9,7 @@ import io
 import pytest
 
 from aiperf.common.config import EndpointConfig, UserConfig
-from aiperf.common.enums import EndpointType
+from aiperf.common.enums import EndpointType, PrometheusMetricType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import ProfileResults
 from aiperf.common.models.export_data import (
@@ -70,7 +70,7 @@ def server_metrics_results_with_all_types():
         metrics={
             "vllm:kv_cache_usage_perc": ServerMetricSummary(
                 description="KV cache usage percentage",
-                type="gauge",
+                type=PrometheusMetricType.GAUGE,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -88,7 +88,7 @@ def server_metrics_results_with_all_types():
             ),
             "vllm:request_success_total": ServerMetricSummary(
                 description="Total successful requests",
-                type="counter",
+                type=PrometheusMetricType.COUNTER,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -103,7 +103,7 @@ def server_metrics_results_with_all_types():
             ),
             "vllm:time_to_first_token_seconds": ServerMetricSummary(
                 description="Time to first token histogram",
-                type="histogram",
+                type=PrometheusMetricType.HISTOGRAM,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -123,7 +123,7 @@ def server_metrics_results_with_all_types():
             ),
             "vllm:request_latency_seconds": ServerMetricSummary(
                 description="Request latency summary",
-                type="summary",
+                type=PrometheusMetricType.SUMMARY,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -154,7 +154,7 @@ def server_metrics_results_with_all_types():
         metrics={
             "vllm:kv_cache_usage_perc": ServerMetricSummary(
                 description="KV cache usage percentage",
-                type="gauge",
+                type=PrometheusMetricType.GAUGE,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -172,7 +172,7 @@ def server_metrics_results_with_all_types():
             ),
             "vllm:request_success_total": ServerMetricSummary(
                 description="Total successful requests",
-                type="counter",
+                type=PrometheusMetricType.COUNTER,
                 series=[
                     FlatSeriesStats(
                         labels=None,
@@ -221,7 +221,7 @@ def server_metrics_results_with_labeled_metrics():
         metrics={
             "http_requests_total": ServerMetricSummary(
                 description="Total HTTP requests",
-                type="counter",
+                type=PrometheusMetricType.COUNTER,
                 series=[
                     FlatSeriesStats(
                         labels={"method": "GET", "status": "200"},
@@ -607,7 +607,7 @@ class TestServerMetricsCsvExporterGenerateContent:
             metrics={
                 "request_duration_seconds": ServerMetricSummary(
                     description="Request duration",
-                    type="histogram",
+                    type=PrometheusMetricType.HISTOGRAM,
                     series=[
                         FlatSeriesStats(
                             labels=None,
@@ -627,7 +627,7 @@ class TestServerMetricsCsvExporterGenerateContent:
                 ),
                 "queue_time_seconds": ServerMetricSummary(
                     description="Queue time",
-                    type="histogram",
+                    type=PrometheusMetricType.HISTOGRAM,
                     series=[
                         FlatSeriesStats(
                             labels=None,
