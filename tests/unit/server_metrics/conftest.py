@@ -12,6 +12,10 @@ from aiperf.common.models.server_metrics_models import (
     SummaryData,
 )
 
+# =============================================================================
+# Fixtures
+# =============================================================================
+
 
 @pytest.fixture
 def sample_prometheus_metrics() -> str:

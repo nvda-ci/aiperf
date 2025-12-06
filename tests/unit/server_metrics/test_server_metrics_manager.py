@@ -274,7 +274,7 @@ class TestProfileStartCommand:
         )
 
 
-class TestCallbackFunctionality:
+class TestManagerCallbackFunctionality:
     """Test callback handling for records and errors."""
 
     @pytest.mark.asyncio

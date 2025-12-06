@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+# =============================================================================
+# Data Models (Prometheus metrics records and metadata)
+# =============================================================================
+
+
 class HistogramData(AIPerfBaseModel):
     """Structured histogram data with buckets, sum, and count."""
 
@@ -297,9 +302,9 @@ class ServerMetricsRecord(AIPerfBaseModel):
         )
 
 
-# ============================================================================
-# Hierarchy Models for Aggregation
-# ============================================================================
+# =============================================================================
+# Snapshot Models (Point-in-time metric data and time filtering)
+# =============================================================================
 
 
 class HistogramSnapshot(AIPerfBaseModel):
@@ -360,9 +365,9 @@ class TimeRangeFilter(AIPerfBaseModel):
         )
 
 
-# ============================================================================
-# Optimized Per-Metric Storage with NumPy Arrays
-# ============================================================================
+# =============================================================================
+# Time Series Classes (NumPy-backed storage for each metric type)
+# =============================================================================
 #
 # Design principles:
 # 1. Each metric type has storage optimized for its semantics
@@ -373,9 +378,9 @@ class TimeRangeFilter(AIPerfBaseModel):
 # Storage by type:
 # - Gauge: (timestamp, value) pairs → distribution stats over time
 # - Counter: (timestamp, cumulative) pairs → rate distribution analysis
-# - Histogram: (ts, sum, count) arrays + first/last buckets → avg value + rates
+# - Histogram: (ts, sum, count) arrays + bucket snapshots → avg value + rates
 # - Summary: (ts, sum, count) arrays + quantile history → avg value + quantile trends
-# ============================================================================
+# =============================================================================
 
 _INITIAL_CAPACITY = 256
 
@@ -646,6 +651,11 @@ class SummaryTimeSeries:
         }
 
 
+# =============================================================================
+# Aggregation (Multi-metric time series container)
+# =============================================================================
+
+
 class ServerMetricsTimeSeries:
     """Optimized per-metric storage for server metrics.
 
@@ -745,6 +755,11 @@ class ServerMetricsTimeSeries:
             for key, ts in storage.items():
                 if len(ts) > 0:
                     yield key, metric_type, stats_cls.from_time_series(ts, time_filter)
+
+
+# =============================================================================
+# Hierarchy & Results (Endpoint data, hierarchy, and processing results)
+# =============================================================================
 
 
 class ServerMetricsEndpointData(AIPerfBaseModel):

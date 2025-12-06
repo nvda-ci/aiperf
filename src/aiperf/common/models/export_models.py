@@ -39,7 +39,12 @@ if TYPE_CHECKING:
 # - **Quantiles**: Pre-computed percentiles from the server (p50, p90, p95, p99).
 #   These are exact values calculated by Prometheus, not estimated from buckets.
 #
-# ============================================================================
+# =============================================================================
+
+
+# =============================================================================
+# Histogram Quantile Functions
+# =============================================================================
 
 
 def histogram_quantile(q: float, buckets: dict[str, float]) -> float | None:
@@ -116,6 +121,11 @@ def histogram_quantile(q: float, buckets: dict[str, float]) -> float | None:
 
     # Quantile beyond all buckets (shouldn't happen with +Inf)
     return parsed[-2][0] if len(parsed) >= 2 else None
+
+
+# =============================================================================
+# Observation Extraction (Per-scrape observation recovery)
+# =============================================================================
 
 
 def extract_observations_from_scrape(
@@ -257,9 +267,9 @@ def extract_all_observations(
     )
 
 
-# ============================================================================
+# =============================================================================
 # Polynomial Histogram Statistics (Per-Bucket Mean Tracking)
-# ============================================================================
+# =============================================================================
 # Based on HistogramTools research (arXiv 2504.00001) showing 2.5x accuracy
 # improvement by storing per-bucket means instead of just counts.
 
@@ -542,9 +552,9 @@ def estimate_inf_bucket_observations(
     return observations.tolist()
 
 
-# ============================================================================
+# =============================================================================
 # Histogram Percentile Models (Nested Structure)
-# ============================================================================
+# =============================================================================
 
 
 class BucketPercentiles(AIPerfBaseModel):
@@ -967,9 +977,9 @@ class JsonMetricResult(AIPerfBaseModel):
     std: float | None = None
 
 
-# ============================================================================
-# Server Metrics Export Stats - Type-specific models for semantic correctness
-# ============================================================================
+# =============================================================================
+# Server Metrics Export Stats (Type-specific models for semantic correctness)
+# =============================================================================
 
 
 class GaugeExportStats(AIPerfBaseModel):
@@ -1384,6 +1394,11 @@ class SummaryExportStats(AIPerfBaseModel):
 ServerMetricStats: TypeAlias = (
     GaugeExportStats | CounterExportStats | HistogramExportStats | SummaryExportStats
 )
+
+
+# =============================================================================
+# Export Data Models (JSON export structures)
+# =============================================================================
 
 
 class TelemetrySummary(AIPerfBaseModel):

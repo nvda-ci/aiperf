@@ -326,7 +326,7 @@ class TestAsyncLifecycle:
         await collector.stop()
 
 
-class TestCallbackFunctionality:
+class TestCollectorCallbackFunctionality:
     """Test callback mechanisms for records and errors."""
 
     @pytest.mark.asyncio
