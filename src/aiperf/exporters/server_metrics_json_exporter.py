@@ -5,7 +5,7 @@ from datetime import datetime
 
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DataExporterType
+from aiperf.common.enums import DataExporterType, PrometheusMetricType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.factories import DataExporterFactory
 from aiperf.common.models.export_data import (
@@ -14,13 +14,6 @@ from aiperf.common.models.export_data import (
     ServerMetricsEndpointInfo,
     ServerMetricsHybridExportData,
     ServerMetricsSummary,
-)
-from aiperf.common.models.export_stats import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    ServerMetricStats,
-    SummaryExportStats,
 )
 from aiperf.common.protocols import DataExporterProtocol
 from aiperf.exporters.display_units_utils import (
@@ -69,7 +62,7 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
 
         The hybrid format provides:
         - O(1) metric lookup by name (metrics keyed by name)
-        - Flat stats within each series (no nested stats object)
+        - Flat stats within each series (FlatSeriesStats is canonical model)
         - Unit parsed from metric name suffix
         - Both normalized endpoint and full endpoint_url
 
@@ -120,10 +113,8 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
         """Build hybrid metrics dict from endpoint summaries.
 
         Merges metrics from all endpoints into a single dict keyed by metric name.
-        Each metric contains flat series stats with:
-        - Unified percentile naming (p99 instead of p99_estimate)
-        - Unit parsed from metric name suffix
-        - Both normalized endpoint and full endpoint_url
+        ServerMetricSummary.series already contains FlatSeriesStats, so we just
+        need to add endpoint info and merge across endpoints.
 
         Returns:
             Tuple of (metrics dict, endpoint info dict)
@@ -155,7 +146,7 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
                 avg_scrape_period_ms=endpoint_summary.avg_scrape_period_ms,
             )
 
-            # Process info metrics as gauges with value=1.0
+            # Process info metrics as gauges with labels only
             if endpoint_summary.info_metrics:
                 for metric_name, info_data in endpoint_summary.info_metrics.items():
                     unit = parse_unit_from_metric_name(metric_name)
@@ -163,14 +154,13 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
                     # Get or create metric entry
                     if metric_name not in metrics:
                         metrics[metric_name] = HybridMetricData(
-                            type="gauge",
+                            type=PrometheusMetricType.GAUGE,
                             description=info_data.description,
                             unit=unit,
                             series=[],
                         )
 
                     # Add series for each label set
-                    # Info metrics only contain labels - no stats needed
                     for label_set in info_data.labels:
                         metrics[metric_name].series.append(
                             FlatSeriesStats(
@@ -180,7 +170,7 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
                             )
                         )
 
-            # Process regular metrics
+            # Process regular metrics - series already contains FlatSeriesStats
             for metric_name, metric_summary in endpoint_summary.metrics.items():
                 unit = parse_unit_from_metric_name(metric_name)
 
@@ -193,18 +183,12 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
                         series=[],
                     )
 
-                # Add series for each label combination
-                for series_item in metric_summary.series:
-                    series_stats = self._build_flat_series_stats(
-                        metric_type=metric_summary.type,
-                        endpoint=normalized_endpoint,
-                        endpoint_url=endpoint_url,
-                        labels=series_item.labels,
-                        stats=series_item.stats,
-                        value=series_item.value,
-                        count_delta=series_item.count_delta,
-                    )
-                    metrics[metric_name].series.append(series_stats)
+                # Add endpoint info to each FlatSeriesStats and append to series
+                for flat_stats in metric_summary.series:
+                    # Set endpoint info on the stats
+                    flat_stats.endpoint = normalized_endpoint
+                    flat_stats.endpoint_url = endpoint_url
+                    metrics[metric_name].series.append(flat_stats)
 
         # Sort metrics alphabetically by name for deterministic output and easier lookup
         sorted_metrics = dict(sorted(metrics.items()))
@@ -212,7 +196,7 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
         # Sort series within each metric by endpoint, then by labels
         for metric_data in sorted_metrics.values():
             metric_data.series.sort(
-                key=lambda s: (s.endpoint, str(s.labels) if s.labels else "")
+                key=lambda s: (s.endpoint or "", str(s.labels) if s.labels else "")
             )
 
         # Sort endpoint_info for consistency
@@ -221,107 +205,3 @@ class ServerMetricsJsonExporter(MetricsBaseExporter):
         )
 
         return sorted_metrics, sorted_endpoint_info
-
-    def _build_flat_series_stats(
-        self,
-        metric_type: str,
-        endpoint: str,
-        endpoint_url: str,
-        labels: dict[str, str] | None,
-        stats: ServerMetricStats | None,
-        value: float | None,
-        count_delta: int | None,
-    ) -> FlatSeriesStats:
-        """Build flat series stats from series data.
-
-        Converts type-specific stats into flat fields with unified naming:
-        - Percentiles use p99 (not p99_estimate)
-        - Counter rate uses rate_per_second (not rate_overall)
-        """
-        # Base kwargs with endpoint and labels
-        kwargs: dict = {
-            "endpoint": endpoint,
-            "endpoint_url": endpoint_url,
-            "labels": labels if labels else None,
-        }
-
-        if stats is None:
-            # Handle constant gauge (value only) or empty histogram/summary
-            if value is not None and metric_type == "gauge":
-                # Constant gauge - only include avg (other stats redundant for n=1)
-                kwargs.update(
-                    {
-                        "observation_count": 1,
-                        "avg": value,
-                    }
-                )
-            elif count_delta is not None:
-                # Empty histogram/summary - just include count_delta
-                kwargs["count_delta"] = count_delta
-        elif isinstance(stats, GaugeExportStats):
-            kwargs.update(
-                {
-                    "avg": stats.avg,
-                    "min": stats.min,
-                    "max": stats.max,
-                    "std": stats.std,
-                    "p50": stats.p50,
-                    "p90": stats.p90,
-                    "p95": stats.p95,
-                    "p99": stats.p99,
-                    "estimated_percentiles": False,
-                }
-            )
-        elif isinstance(stats, CounterExportStats):
-            if stats.delta == 0:
-                # No activity - only include delta (rate fields would all be None)
-                kwargs["delta"] = 0
-            else:
-                kwargs.update(
-                    {
-                        "delta": stats.delta,
-                        "rate_per_second": stats.rate_overall,
-                        "rate_avg": stats.rate_avg,
-                        "rate_min": stats.rate_min,
-                        "rate_max": stats.rate_max,
-                        "rate_std": stats.rate_std,
-                    }
-                )
-        elif isinstance(stats, HistogramExportStats):
-            kwargs.update(
-                {
-                    "observation_count": stats.count_delta,
-                    "avg": stats.avg,
-                    "delta": stats.sum_delta,
-                    "rate_per_second": stats.sum_rate,
-                    "observations_per_second": stats.count_rate,
-                    # Unified percentile naming: p99_estimate -> p99
-                    "p50": stats.p50_estimate,
-                    "p90": stats.p90_estimate,
-                    "p95": stats.p95_estimate,
-                    "p99": stats.p99_estimate,
-                    "estimated_percentiles": True,
-                    "buckets": stats.buckets,
-                }
-            )
-        elif isinstance(stats, SummaryExportStats):
-            # Map quantiles to percentile fields
-            quantiles = stats.quantiles or {}
-            kwargs.update(
-                {
-                    "observation_count": stats.count_delta,
-                    "avg": stats.avg,
-                    "delta": stats.sum_delta,
-                    "rate_per_second": stats.sum_rate,
-                    "observations_per_second": stats.count_rate,
-                    # Map quantile keys to percentile fields
-                    "p50": quantiles.get("0.5"),
-                    "p90": quantiles.get("0.9"),
-                    "p95": quantiles.get("0.95"),
-                    "p99": quantiles.get("0.99"),
-                    "estimated_percentiles": False,  # Summary quantiles are server-computed
-                    "quantiles": quantiles,
-                }
-            )
-
-        return FlatSeriesStats(**kwargs)

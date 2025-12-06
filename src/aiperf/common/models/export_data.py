@@ -18,12 +18,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import ConfigDict, Field, SerializeAsAny
+from pydantic import ConfigDict, Field
 
 from aiperf.common.config import UserConfig
+from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetailsCount
-from aiperf.common.models.export_stats import ServerMetricStats
 from aiperf.common.models.metric_info_models import InfoMetricData
 
 # =============================================================================
@@ -133,53 +133,17 @@ class ServerMetricsSummary(AIPerfBaseModel):
     )
 
 
-class ServerMetricLabeledStats(AIPerfBaseModel):
-    """Aggregated statistics for a single time series (unique label combination).
-
-    In Prometheus, each unique label combination is a separate time series.
-    This model represents statistics for one such combination.
-
-    Simplified formats for metrics with no meaningful data:
-    - Gauges with std == 0: Use 'value' field (constant gauge value)
-    - Histograms/Summaries with count_delta == 0: Use 'count_delta' field (no observations)
-
-    Check for presence of 'stats' to determine if full statistics are available.
-    """
-
-    endpoint: str | None = Field(
-        default=None,
-        description="Endpoint URL this series came from (used in merged export format)",
-    )
-    labels: dict[str, str] | None = Field(
-        default=None,
-        description="Metric labels for this series. None if the metric has no labels.",
-    )
-    value: float | None = Field(
-        default=None,
-        description="Constant value for gauges that didn't change during collection (std == 0).",
-    )
-    count_delta: int | None = Field(
-        default=None,
-        description="Observation count for histograms/summaries with no data (count_delta == 0). "
-        "Present instead of stats when no observations were recorded.",
-    )
-    stats: SerializeAsAny[ServerMetricStats] | None = Field(
-        default=None,
-        description="Type-specific aggregated statistics (gauge, counter, histogram, or summary). "
-        "None if the metric was constant (use 'value' field) or had no observations (use 'count_delta').",
-    )
-
-
 class ServerMetricSummary(AIPerfBaseModel):
     """Summary of a server metric with type, description, and per-label statistics.
 
     Combines metadata (metric type and description) with aggregated statistics.
-    Each item in 'series' represents statistics for a unique label combination.
+    Each item in 'series' represents statistics for a unique label combination
+    using FlatSeriesStats (the canonical model for server metric statistics).
     """
 
     description: str = Field(description="Metric description from HELP text")
-    type: str = Field(description="Metric type (gauge, counter, histogram, summary)")
-    series: list[ServerMetricLabeledStats] = Field(
+    type: PrometheusMetricType = Field(description="Metric type")
+    series: list[FlatSeriesStats] = Field(
         default_factory=list,
         description="Statistics for each unique label combination",
     )
@@ -251,16 +215,22 @@ class ServerMetricsMergedExportData(AIPerfBaseModel):
 class FlatSeriesStats(AIPerfBaseModel):
     """Flat statistics for a single time series within a metric.
 
-    Contains endpoint info, labels, and flattened stats fields.
-    Used within HybridMetricData for the hybrid export format.
+    This is the canonical model for server metric statistics. Used both internally
+    during computation and for final JSON export. Contains endpoint info, labels,
+    and flattened stats fields.
+
+    Endpoint fields are optional during computation and filled in when building
+    the final export structure.
     """
 
-    # Endpoint fields
-    endpoint: str = Field(
-        description="Normalized endpoint identifier (e.g., 'localhost:8081')"
+    # Endpoint fields (optional during computation, filled in for export)
+    endpoint: str | None = Field(
+        default=None,
+        description="Normalized endpoint identifier (e.g., 'localhost:8081')",
     )
-    endpoint_url: str = Field(
-        description="Full endpoint URL (e.g., 'http://localhost:8081/metrics')"
+    endpoint_url: str | None = Field(
+        default=None,
+        description="Full endpoint URL (e.g., 'http://localhost:8081/metrics')",
     )
 
     # Labels
@@ -344,7 +314,7 @@ class HybridMetricData(AIPerfBaseModel):
     but stats within each series are flattened for easy access.
     """
 
-    type: str = Field(description="Metric type: gauge, counter, histogram, or summary")
+    type: PrometheusMetricType = Field(description="Metric type")
     description: str = Field(description="Metric description from HELP text")
     unit: str | None = Field(
         default=None,

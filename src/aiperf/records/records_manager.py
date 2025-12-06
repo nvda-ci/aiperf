@@ -17,7 +17,6 @@ from aiperf.common.enums import (
     CreditPhase,
     GPUTelemetryMode,
     MessageType,
-    PrometheusMetricType,
     ResultsProcessorType,
     ServiceType,
 )
@@ -60,7 +59,6 @@ from aiperf.common.models import (
     TelemetryResults,
 )
 from aiperf.common.models.export_data import (
-    ServerMetricLabeledStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,
 )
@@ -809,6 +807,8 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
         This performs all NumPy array processing and returns only JSON-serializable
         Pydantic models that can be safely sent over ZMQ.
+
+        Uses FlatSeriesStats directly from iter_export_stats() - no conversion needed.
         """
         from aiperf.exporters.display_units_utils import normalize_endpoint_display
 
@@ -820,36 +820,16 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             # Build unified metrics dict: base_metric_name -> ServerMetricSummary
             metrics: dict[str, ServerMetricSummary] = {}
 
-            # Each metric type knows how to export itself
+            # iter_export_stats returns (key, type, FlatSeriesStats) with labels already set
             for (
                 metric_key,
                 metric_type,
-                export_stats,
+                flat_stats,
             ) in endpoint_data.time_series.iter_export_stats(time_filter):
-                base_name, labels = self._parse_metric_key(metric_key)
-
-                # Simplify metrics with no meaningful data
-                # - Gauges with std == 0: value never changed, show constant value
-                # - Histograms/Summaries with count_delta == 0: no observations, show count_delta only
-                if metric_type == PrometheusMetricType.GAUGE and export_stats.std == 0:
-                    series_stats = ServerMetricLabeledStats(
-                        labels=labels if labels else None,
-                        value=export_stats.avg,  # All values were identical
-                    )
-                elif (
-                    metric_type
-                    in (PrometheusMetricType.HISTOGRAM, PrometheusMetricType.SUMMARY)
-                    and export_stats.count_delta == 0
-                ):
-                    series_stats = ServerMetricLabeledStats(
-                        labels=labels if labels else None,
-                        count_delta=0.0,  # No observations recorded
-                    )
-                else:
-                    series_stats = ServerMetricLabeledStats(
-                        labels=labels if labels else None,
-                        stats=export_stats,
-                    )
+                # Extract base name for grouping (labels already in flat_stats)
+                base_name = (
+                    metric_key.split("|", 1)[0] if "|" in metric_key else metric_key
+                )
 
                 if base_name not in metrics:
                     schema = endpoint_data.metadata.metric_schemas.get(base_name)
@@ -858,10 +838,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                     metrics[base_name] = ServerMetricSummary(
                         description=description,
                         type=metric_type,
-                        series=[series_stats],
+                        series=[flat_stats],
                     )
                 else:
-                    metrics[base_name].series.append(series_stats)
+                    metrics[base_name].series.append(flat_stats)
 
             # Extract info metrics from metadata
             info_metrics = None
@@ -907,21 +887,6 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             )
 
         return summaries
-
-    def _parse_metric_key(self, full_key: str) -> tuple[str, dict[str, str] | None]:
-        """Parse a metric key with label suffix into base name and labels dict."""
-        if "|" not in full_key:
-            return full_key, None
-
-        base_name, label_str = full_key.split("|", 1)
-
-        labels = {}
-        for pair in label_str.split(","):
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                labels[key] = value
-
-        return base_name, labels if labels else None
 
     async def _process_telemetry_results(self) -> ProcessTelemetryResult:
         """Process telemetry results by calling summarize on all telemetry processors.

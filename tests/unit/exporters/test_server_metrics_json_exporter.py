@@ -12,15 +12,9 @@ from aiperf.common.enums import EndpointType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import ProfileResults
 from aiperf.common.models.export_data import (
-    ServerMetricLabeledStats,
+    FlatSeriesStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,
-)
-from aiperf.common.models.export_stats import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    SummaryExportStats,
 )
 from aiperf.common.models.metric_info_models import InfoMetricData
 from aiperf.common.models.server_metrics_models import ServerMetricsResults
@@ -78,18 +72,17 @@ def server_metrics_results_with_summaries():
                 description="KV cache usage percentage",
                 type="gauge",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=GaugeExportStats(
-                            min=0.4,
-                            avg=0.55,
-                            p50=0.54,
-                            p90=0.68,
-                            p95=0.72,
-                            p99=0.78,
-                            max=0.8,
-                            std=0.1,
-                        ),
+                        min=0.4,
+                        avg=0.55,
+                        p50=0.54,
+                        p90=0.68,
+                        p95=0.72,
+                        p99=0.78,
+                        max=0.8,
+                        std=0.1,
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -97,16 +90,14 @@ def server_metrics_results_with_summaries():
                 description="Total successful requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=CounterExportStats(
-                            delta=1000.0,
-                            rate_overall=3.33,
-                            rate_avg=3.2,
-                            rate_min=2.5,
-                            rate_max=4.0,
-                            rate_std=0.5,
-                        ),
+                        delta=1000.0,
+                        rate_per_second=3.33,
+                        rate_avg=3.2,
+                        rate_min=2.5,
+                        rate_max=4.0,
+                        rate_std=0.5,
                     ),
                 ],
             ),
@@ -114,24 +105,23 @@ def server_metrics_results_with_summaries():
                 description="Time to first token histogram",
                 type="histogram",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=HistogramExportStats(
-                            count_delta=1000,
-                            sum_delta=125.5,
-                            avg=0.1255,
-                            count_rate=3.33,
-                            p50_estimate=0.05,
-                            p90_estimate=0.12,
-                            p95_estimate=0.18,
-                            p99_estimate=0.45,
-                            buckets={
-                                "0.01": 50,
-                                "0.1": 450,
-                                "1.0": 980,
-                                "+Inf": 1000,
-                            },
-                        ),
+                        observation_count=1000,
+                        delta=125.5,
+                        avg=0.1255,
+                        observations_per_second=3.33,
+                        p50=0.05,
+                        p90=0.12,
+                        p95=0.18,
+                        p99=0.45,
+                        buckets={
+                            "0.01": 50,
+                            "0.1": 450,
+                            "1.0": 980,
+                            "+Inf": 1000,
+                        },
+                        estimated_percentiles=True,
                     ),
                 ],
             ),
@@ -139,20 +129,23 @@ def server_metrics_results_with_summaries():
                 description="Request latency summary",
                 type="summary",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=SummaryExportStats(
-                            count_delta=1000,
-                            sum_delta=250.0,
-                            avg=0.25,
-                            count_rate=3.33,
-                            quantiles={
-                                "0.5": 0.2,
-                                "0.9": 0.4,
-                                "0.95": 0.5,
-                                "0.99": 0.8,
-                            },
-                        ),
+                        observation_count=1000,
+                        delta=250.0,
+                        avg=0.25,
+                        observations_per_second=3.33,
+                        p50=0.2,
+                        p90=0.4,
+                        p95=0.5,
+                        p99=0.8,
+                        quantiles={
+                            "0.5": 0.2,
+                            "0.9": 0.4,
+                            "0.95": 0.5,
+                            "0.99": 0.8,
+                        },
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -176,18 +169,17 @@ def server_metrics_results_with_summaries():
                 description="KV cache usage percentage",
                 type="gauge",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=GaugeExportStats(
-                            min=0.5,
-                            avg=0.62,
-                            p50=0.61,
-                            p90=0.75,
-                            p95=0.78,
-                            p99=0.82,
-                            max=0.85,
-                            std=0.08,
-                        ),
+                        min=0.5,
+                        avg=0.62,
+                        p50=0.61,
+                        p90=0.75,
+                        p95=0.78,
+                        p99=0.82,
+                        max=0.85,
+                        std=0.08,
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -195,16 +187,14 @@ def server_metrics_results_with_summaries():
                 description="Total successful requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=CounterExportStats(
-                            delta=800.0,
-                            rate_overall=2.67,
-                            rate_avg=2.5,
-                            rate_min=2.0,
-                            rate_max=3.5,
-                            rate_std=0.4,
-                        ),
+                        delta=800.0,
+                        rate_per_second=2.67,
+                        rate_avg=2.5,
+                        rate_min=2.0,
+                        rate_max=3.5,
+                        rate_std=0.4,
                     ),
                 ],
             ),
@@ -246,38 +236,32 @@ def server_metrics_results_with_labeled_metrics():
                 description="Total HTTP requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels={"method": "GET", "status": "200"},
-                        stats=CounterExportStats(
-                            delta=500.0,
-                            rate_overall=5.0,
-                            rate_avg=4.8,
-                            rate_min=3.0,
-                            rate_max=6.0,
-                            rate_std=0.8,
-                        ),
+                        delta=500.0,
+                        rate_per_second=5.0,
+                        rate_avg=4.8,
+                        rate_min=3.0,
+                        rate_max=6.0,
+                        rate_std=0.8,
                     ),
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels={"method": "POST", "status": "200"},
-                        stats=CounterExportStats(
-                            delta=300.0,
-                            rate_overall=3.0,
-                            rate_avg=2.9,
-                            rate_min=2.0,
-                            rate_max=4.0,
-                            rate_std=0.5,
-                        ),
+                        delta=300.0,
+                        rate_per_second=3.0,
+                        rate_avg=2.9,
+                        rate_min=2.0,
+                        rate_max=4.0,
+                        rate_std=0.5,
                     ),
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels={"method": "GET", "status": "500"},
-                        stats=CounterExportStats(
-                            delta=5.0,
-                            rate_overall=0.05,
-                            rate_avg=0.04,
-                            rate_min=0.0,
-                            rate_max=0.1,
-                            rate_std=0.02,
-                        ),
+                        delta=5.0,
+                        rate_per_second=0.05,
+                        rate_avg=0.04,
+                        rate_min=0.0,
+                        rate_max=0.1,
+                        rate_std=0.02,
                     ),
                 ],
             ),
@@ -692,16 +676,10 @@ class TestServerMetricsJsonExporterGenerateContent:
                     description="Total errors",
                     type="counter",
                     series=[
-                        ServerMetricLabeledStats(
+                        FlatSeriesStats(
                             labels=None,
-                            stats=CounterExportStats(
-                                delta=0,  # No errors!
-                                rate_overall=None,
-                                rate_avg=None,
-                                rate_min=None,
-                                rate_max=None,
-                                rate_std=None,
-                            ),
+                            delta=0,  # No errors!
+                            # All rate fields None when delta=0
                         ),
                     ],
                 ),

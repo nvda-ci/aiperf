@@ -11,12 +11,15 @@ from pydantic import Field
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.error_models import ErrorDetailsCount
-from aiperf.common.models.export_data import ServerMetricsEndpointSummary
+from aiperf.common.models.export_data import (
+    FlatSeriesStats,
+    ServerMetricsEndpointSummary,
+)
 from aiperf.common.models.export_stats import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    SummaryExportStats,
+    compute_counter_stats,
+    compute_gauge_stats,
+    compute_histogram_stats,
+    compute_summary_stats,
 )
 from aiperf.common.models.metric_info_models import InfoMetricData
 from aiperf.common.models.timeseries_storage import (
@@ -172,22 +175,34 @@ class MetricSchema(AIPerfBaseModel):
 class ServerMetricsSlimRecord(AIPerfBaseModel):
     """Slim server metrics record containing only time-varying data.
 
-    This record excludes static metadata (endpoint_url, metric types, help text)
-    to reduce JSONL file size. The metadata and schemas are stored separately in the
-    ServerMetricsMetadataFile.
+    This record excludes static metadata (metric types, help text)
+    to reduce JSONL file size. Includes HTTP trace timing fields for
+    precise correlation with client request timestamps.
     """
 
     endpoint_url: str = Field(
         description="Source Prometheus metrics endpoint URL (e.g., 'http://localhost:8081/metrics')"
     )
     timestamp_ns: int = Field(
-        description="Nanosecond wall-clock timestamp when metrics were collected (time_ns)"
+        description="Nanosecond wall-clock timestamp representing when server generated metrics"
     )
     endpoint_latency_ns: int = Field(
-        description="Nanoseconds it took to collect the metrics from the endpoint"
+        description="Nanoseconds for total HTTP round-trip (request start to completion)"
     )
     metrics: dict[str, list[SlimMetricSample]] = Field(
         description="Metrics grouped by family name, mapping directly to slim sample list"
+    )
+    request_sent_ns: int | None = Field(
+        default=None,
+        description="Wall-clock timestamp in nanoseconds when HTTP request was initiated",
+    )
+    first_byte_ns: int | None = Field(
+        default=None,
+        description="Wall-clock timestamp in nanoseconds when first response byte received from server",
+    )
+    transfer_time_ns: int | None = Field(
+        default=None,
+        description="Nanoseconds to transfer response body after first byte was received",
     )
 
 
@@ -215,19 +230,46 @@ class ServerMetricsRecord(AIPerfBaseModel):
 
     This record contains all metrics scraped from one Prometheus endpoint at one point in time.
     Used for hierarchical storage: endpoint_url -> time series data.
+
+    Timing Fields:
+        - timestamp_ns: Best approximation of when server generated metrics (uses first_byte_ns
+          if available for accuracy, otherwise falls back to wall-clock time after request)
+        - endpoint_latency_ns: Total HTTP round-trip time from request start to completion
+        - request_sent_ns: Wall-clock time when HTTP request was initiated (optional)
+        - first_byte_ns: Wall-clock time when first response byte received - best proxy for
+          when server generated the metrics snapshot (optional)
+        - transfer_time_ns: Time to transfer response body after first byte (optional)
+
+    The trace timing fields provide precise correlation between server metrics and client
+    requests by capturing when the server actually generated the metrics, not just when
+    the client received the full response.
     """
 
     endpoint_url: str = Field(
         description="Source Prometheus metrics endpoint URL (e.g., 'http://localhost:8081/metrics')"
     )
     timestamp_ns: int = Field(
-        description="Nanosecond wall-clock timestamp when metrics were collected (time_ns)"
+        description="Nanosecond wall-clock timestamp representing when server generated metrics. "
+        "Uses first_byte_ns if available (most accurate), otherwise falls back to time after request completes."
     )
     endpoint_latency_ns: int = Field(
-        description="Nanoseconds it took to collect the metrics from the endpoint"
+        description="Nanoseconds for total HTTP round-trip (request start to completion)"
     )
     metrics: dict[str, MetricFamily] = Field(
         description="Metrics grouped by family name"
+    )
+    request_sent_ns: int | None = Field(
+        default=None,
+        description="Wall-clock timestamp in nanoseconds when HTTP request was initiated (from aiohttp trace)",
+    )
+    first_byte_ns: int | None = Field(
+        default=None,
+        description="Wall-clock timestamp in nanoseconds when first response byte received from server. "
+        "Best approximation of when server generated the metrics.",
+    )
+    transfer_time_ns: int | None = Field(
+        default=None,
+        description="Nanoseconds to transfer response body after first byte was received",
     )
 
     def to_slim(self) -> ServerMetricsSlimRecord:
@@ -253,6 +295,9 @@ class ServerMetricsRecord(AIPerfBaseModel):
             endpoint_latency_ns=self.endpoint_latency_ns,
             endpoint_url=self.endpoint_url,
             metrics=slim_metrics,
+            request_sent_ns=self.request_sent_ns,
+            first_byte_ns=self.first_byte_ns,
+            transfer_time_ns=self.transfer_time_ns,
         )
 
     def extract_metadata(self) -> ServerMetricsMetadata:
@@ -372,28 +417,70 @@ class ServerMetricsTimeSeries:
 
     def iter_export_stats(
         self, time_filter: TimeRangeFilter | None = None
-    ) -> Iterator[
-        tuple[
-            str,
-            PrometheusMetricType,
-            GaugeExportStats
-            | CounterExportStats
-            | HistogramExportStats
-            | SummaryExportStats,
-        ]
-    ]:
-        """Iterate over all metrics, yielding (key, type, export_stats) tuples."""
-        metric_configs = [
-            (self.gauges, PrometheusMetricType.GAUGE, GaugeExportStats),
-            (self.counters, PrometheusMetricType.COUNTER, CounterExportStats),
-            (self.histograms, PrometheusMetricType.HISTOGRAM, HistogramExportStats),
-            (self.summaries, PrometheusMetricType.SUMMARY, SummaryExportStats),
-        ]
+    ) -> Iterator[tuple[str, PrometheusMetricType, FlatSeriesStats]]:
+        """Iterate over all metrics, yielding (key, type, flat_stats) tuples.
 
-        for storage, metric_type, stats_cls in metric_configs:
-            for key, ts in storage.items():
-                if len(ts) > 0:
-                    yield key, metric_type, stats_cls.from_time_series(ts, time_filter)
+        Each tuple contains:
+        - key: Metric key with label suffix (e.g., "metric_name|label=value")
+        - type: PrometheusMetricType (GAUGE, COUNTER, HISTOGRAM, SUMMARY)
+        - flat_stats: FlatSeriesStats with computed statistics (includes parsed labels)
+        """
+        # Gauges
+        for key, ts in self.gauges.items():
+            if len(ts) > 0:
+                labels = self._parse_labels_from_key(key)
+                yield (
+                    key,
+                    PrometheusMetricType.GAUGE,
+                    compute_gauge_stats(ts, time_filter, labels),
+                )
+
+        # Counters
+        for key, ts in self.counters.items():
+            if len(ts) > 0:
+                labels = self._parse_labels_from_key(key)
+                yield (
+                    key,
+                    PrometheusMetricType.COUNTER,
+                    compute_counter_stats(ts, time_filter, labels),
+                )
+
+        # Histograms
+        for key, ts in self.histograms.items():
+            if len(ts) > 0:
+                labels = self._parse_labels_from_key(key)
+                yield (
+                    key,
+                    PrometheusMetricType.HISTOGRAM,
+                    compute_histogram_stats(ts, time_filter, labels),
+                )
+
+        # Summaries
+        for key, ts in self.summaries.items():
+            if len(ts) > 0:
+                labels = self._parse_labels_from_key(key)
+                yield (
+                    key,
+                    PrometheusMetricType.SUMMARY,
+                    compute_summary_stats(ts, time_filter, labels),
+                )
+
+    @staticmethod
+    def _parse_labels_from_key(key: str) -> dict[str, str] | None:
+        """Parse labels from a metric key with label suffix.
+
+        Keys are in format "metric_name|label1=value1,label2=value2".
+        Returns None if no labels present.
+        """
+        if "|" not in key:
+            return None
+        label_str = key.split("|", 1)[1]
+        labels = {}
+        for pair in label_str.split(","):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                labels[k] = v
+        return labels if labels else None
 
 
 # =============================================================================
@@ -497,34 +584,6 @@ class ServerMetricsEndpointData(AIPerfBaseModel):
             return ""
         sorted_items = sorted(labels.items())
         return "|" + ",".join(f"{k}={v}" for k, v in sorted_items)
-
-    # ========================================================================
-    # Export Stats Methods - Use optimized columnar storage
-    # ========================================================================
-
-    def get_gauge_export_stats(
-        self, metric_key: str, time_filter: TimeRangeFilter | None = None
-    ) -> GaugeExportStats:
-        """Get GaugeExportStats for a specific gauge metric."""
-        return self.time_series.to_gauge_export_stats(metric_key, time_filter)
-
-    def get_counter_export_stats(
-        self, metric_key: str, time_filter: TimeRangeFilter | None = None
-    ) -> CounterExportStats:
-        """Get CounterExportStats for a specific counter metric."""
-        return self.time_series.to_counter_export_stats(metric_key, time_filter)
-
-    def get_histogram_export_stats(
-        self, metric_key: str, time_filter: TimeRangeFilter | None = None
-    ) -> HistogramExportStats:
-        """Get HistogramExportStats for a specific histogram metric."""
-        return self.time_series.to_histogram_export_stats(metric_key, time_filter)
-
-    def get_summary_export_stats(
-        self, metric_key: str, time_filter: TimeRangeFilter | None = None
-    ) -> SummaryExportStats:
-        """Get SummaryExportStats for a specific summary metric."""
-        return self.time_series.to_summary_export_stats(metric_key, time_filter)
 
     # ========================================================================
     # Available Metrics

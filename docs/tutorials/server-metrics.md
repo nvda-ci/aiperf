@@ -309,9 +309,9 @@ AIPerf uses a polynomial histogram algorithm to estimate percentiles from Promet
 
 **Note:** All histogram percentile estimates are approximations. For the most accurate data, use the `avg` field (sum/count) which is exact. Tail percentiles (p99) should be treated with appropriate skepticism, especially when many observations fall in the +Inf bucket.
 
-For histograms with no observations during collection (count_delta == 0), a simplified format is used:
+For histograms with no observations during collection, a simplified format is used:
 ```json
-{"count_delta": 0}
+{"observation_count": 0}
 ```
 
 This allows checking `if "stats" in series` to determine if the histogram had any observations.
@@ -333,9 +333,9 @@ This allows checking `if "stats" in series` to determine if the histogram had an
 - `sum_rate`: Sum per second (sum_delta/duration)
 - `quantiles`: Cumulative values computed by the server over all observations since server start (not period-specific)
 
-For summaries with no observations during collection (count_delta == 0), a simplified format is used:
+For summaries with no observations during collection, a simplified format is used:
 ```json
-{"count_delta": 0}
+{"observation_count": 0}
 ```
 
 This allows checking `if "stats" in series` to determine if the summary had any observations.

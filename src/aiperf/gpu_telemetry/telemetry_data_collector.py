@@ -72,8 +72,8 @@ class TelemetryDataCollector(BaseMetricsCollectorMixin[TelemetryRecord]):
         Raises:
             Exception: Any exception from fetch or parse is logged and re-raised
         """
-        metrics_data = await self._fetch_metrics_text()
-        records = self._parse_metrics_to_records(metrics_data)
+        fetch_result = await self._fetch_metrics_text()
+        records = self._parse_metrics_to_records(fetch_result.text)
         await self._send_records_via_callback(records)
 
     def _parse_metrics_to_records(self, metrics_data: str) -> list[TelemetryRecord]:

@@ -186,7 +186,7 @@ class TestServerMetricsResultsProcessor:
             "http://test:8081/metrics": mock_endpoint_data,
         }
 
-        with patch.object(processor, "debug") as mock_debug:
+        with patch.object(processor, "debug"):
             results = await processor.summarize()
 
             # Should return empty list when no data available

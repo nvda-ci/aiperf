@@ -7,10 +7,10 @@ import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models.export_stats import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    SummaryExportStats,
+    compute_counter_stats,
+    compute_gauge_stats,
+    compute_histogram_stats,
+    compute_summary_stats,
 )
 from aiperf.common.models.histogram_analysis import histogram_quantile
 from aiperf.common.models.server_metrics_models import (
@@ -39,7 +39,7 @@ class TestGaugeExportStats:
         ts = ServerMetricsTimeSeries()
         add_gauge_samples(ts, "queue_depth", [10.0, 20.0, 30.0, 40.0, 50.0])
 
-        stats = GaugeExportStats.from_time_series(ts.gauges["queue_depth"])
+        stats = compute_gauge_stats(ts.gauges["queue_depth"])
 
         assert stats.avg == 30.0  # (10+20+30+40+50)/5
         assert stats.min == 10.0
@@ -52,7 +52,7 @@ class TestGaugeExportStats:
         ts = ServerMetricsTimeSeries()
         add_gauge_samples(ts, "kv_cache", [float(i) for i in range(100)])
 
-        stats = GaugeExportStats.from_time_series(ts.gauges["kv_cache"])
+        stats = compute_gauge_stats(ts.gauges["kv_cache"])
 
         assert stats.p50 == pytest.approx(49.5, rel=0.01)
         assert stats.p90 == pytest.approx(89.5, rel=0.01)
@@ -67,7 +67,7 @@ class TestGaugeExportStats:
 
         # Filter excludes warmup (first 10 seconds)
         time_filter = TimeRangeFilter(start_ns=10 * NANOS_PER_SECOND, end_ns=None)
-        stats = GaugeExportStats.from_time_series(ts.gauges["queue"], time_filter)
+        stats = compute_gauge_stats(ts.gauges["queue"], time_filter)
 
         # Should only include values 10-19
         assert stats.avg == 14.5  # (10+11+...+19)/10
@@ -88,10 +88,10 @@ class TestCounterExportStats:
         ts = ServerMetricsTimeSeries()
         add_counter_samples(ts, "requests", [0.0, 100.0, 250.0, 450.0, 700.0])
 
-        stats = CounterExportStats.from_time_series(ts.counters["requests"])
+        stats = compute_counter_stats(ts.counters["requests"])
 
         assert stats.delta == 700.0
-        assert stats.rate_overall == 175.0  # 700 / 4s (overall throughput)
+        assert stats.rate_per_second == 175.0  # 700 / 4s (overall throughput)
         # Point-to-point rates: [100, 150, 200, 250]
         assert stats.rate_avg == 175.0  # time-weighted: (100+150+200+250) / 4
         assert stats.rate_min == 100.0
@@ -107,13 +107,11 @@ class TestCounterExportStats:
 
         # Exclude warmup (first 5 seconds)
         time_filter = TimeRangeFilter(start_ns=5 * NANOS_PER_SECOND, end_ns=None)
-        stats = CounterExportStats.from_time_series(
-            ts.counters["requests"], time_filter
-        )
+        stats = compute_counter_stats(ts.counters["requests"], time_filter)
 
         # ref_idx = 4 (value = 800 at 4s), final = 1800 at 9s
         assert stats.delta == 1000.0  # 1800 - 800
-        assert stats.rate_overall == 200.0
+        assert stats.rate_per_second == 200.0
 
     def test_counter_change_point_rates(self):
         """Test counter rates are computed between change points, not every sample.
@@ -140,11 +138,11 @@ class TestCounterExportStats:
         # At t=2.0s, value becomes 250
         ts.append_snapshot(20 * interval_ns, counter_metrics={"requests": 250.0})
 
-        stats = CounterExportStats.from_time_series(ts.counters["requests"])
+        stats = compute_counter_stats(ts.counters["requests"])
 
         # Total: 250 over 2.0s
         assert stats.delta == 250.0
-        assert stats.rate_overall == 125.0  # 250 / 2.0s
+        assert stats.rate_per_second == 125.0  # 250 / 2.0s
 
         # Change points: t=0 (0), t=1.0 (100), t=2.0 (250)
         # Rates: 100/1.0s = 100/s, 150/1.0s = 150/s
@@ -162,10 +160,10 @@ class TestCounterExportStats:
                 i * NANOS_PER_SECOND, counter_metrics={"requests": 100.0}
             )
 
-        stats = CounterExportStats.from_time_series(ts.counters["requests"])
+        stats = compute_counter_stats(ts.counters["requests"])
 
         assert stats.delta == 0.0
-        assert stats.rate_overall == 0.0
+        assert stats.rate_per_second == 0.0
         # No change points means no rate statistics
         assert stats.rate_avg is None
         assert stats.rate_min is None
@@ -186,7 +184,7 @@ class TestCounterExportStats:
         ts.append_snapshot(1 * NANOS_PER_SECOND, counter_metrics={"requests": 100.0})
         ts.append_snapshot(5 * NANOS_PER_SECOND, counter_metrics={"requests": 500.0})
 
-        _stats = CounterExportStats.from_time_series(ts.counters["requests"])
+        _stats = compute_counter_stats(ts.counters["requests"])
 
         # Rates: 100/s (1s interval), 100/s (4s interval)
         # Simple mean would be: (100 + 100) / 2 = 100
@@ -200,7 +198,7 @@ class TestCounterExportStats:
         ts2.append_snapshot(1 * NANOS_PER_SECOND, counter_metrics={"requests": 200.0})
         ts2.append_snapshot(5 * NANOS_PER_SECOND, counter_metrics={"requests": 600.0})
 
-        stats2 = CounterExportStats.from_time_series(ts2.counters["requests"])
+        stats2 = compute_counter_stats(ts2.counters["requests"])
 
         # Rates: 200/s (1s interval), 100/s (4s interval)
         # Simple mean: (200 + 100) / 2 = 150
@@ -219,7 +217,7 @@ class TestHistogramExportStats:
     """Test histogram export statistics computation."""
 
     def test_histogram_basic_stats(self):
-        """Test histogram computes count_delta, sum_delta, avg, rate."""
+        """Test histogram computes observation_count, delta, avg, rate."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
             ts,
@@ -233,13 +231,13 @@ class TestHistogramExportStats:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
         # Delta: count 250-100=150, sum 65-25=40
-        assert stats.count_delta == 150.0
-        assert stats.sum_delta == 40.0
+        assert stats.observation_count == 150
+        assert stats.delta == 40.0
         assert stats.avg == pytest.approx(40.0 / 150, rel=0.01)
-        assert stats.count_rate == 150.0  # 150 obs / 1s
+        assert stats.observations_per_second == 150.0  # 150 obs / 1s
 
     def test_histogram_bucket_delta_uses_correct_reference(self):
         """CRITICAL: Test histogram bucket deltas use ref_idx, not first snapshot."""
@@ -265,14 +263,12 @@ class TestHistogramExportStats:
 
         # Filter: exclude warmup (first 5 seconds)
         time_filter = TimeRangeFilter(start_ns=6 * NANOS_PER_SECOND, end_ns=None)
-        stats = HistogramExportStats.from_time_series(
-            ts.histograms["ttft"], time_filter
-        )
+        stats = compute_histogram_stats(ts.histograms["ttft"], time_filter)
 
         # Bucket deltas: final - ref_idx (NOT final - first!)
-        assert stats.buckets == {"0.1": 100.0, "1.0": 400.0, "+Inf": 500.0}
-        assert stats.count_delta == 500.0  # 2000 - 1500
-        assert stats.sum_delta == 200.0  # 600 - 400
+        assert stats.buckets == {"0.1": 100, "1.0": 400, "+Inf": 500}
+        assert stats.observation_count == 500  # 2000 - 1500
+        assert stats.delta == 200.0  # 600 - 400
 
     def test_histogram_rate(self):
         """Test histogram rate calculation."""
@@ -289,10 +285,10 @@ class TestHistogramExportStats:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
-        assert isinstance(stats.count_rate, float)
-        assert stats.count_rate == 40.0  # 200 obs / 5s
+        assert isinstance(stats.observations_per_second, float)
+        assert stats.observations_per_second == 40.0  # 200 obs / 5s
 
     def test_histogram_no_data_raises_key_error(self):
         """Test histogram raises KeyError when metric doesn't exist."""
@@ -327,7 +323,7 @@ class TestHistogramExportStats:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
         # Negative deltas indicate reset - return None for invalid data
         assert stats.buckets is None
@@ -352,19 +348,19 @@ class TestHistogramExportStats:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
         # p50 should be around 0.3-0.5 (in the 0.1-0.5 bucket range)
-        assert stats.p50_estimate is not None
-        assert 0.1 <= stats.p50_estimate <= 0.6
+        assert stats.p50 is not None
+        assert 0.1 <= stats.p50 <= 0.6
 
         # p90 should be around 0.75-1.0 (in the 0.5-1.0 bucket range)
-        assert stats.p90_estimate is not None
-        assert 0.5 <= stats.p90_estimate <= 1.1
+        assert stats.p90 is not None
+        assert 0.5 <= stats.p90 <= 1.1
 
         # p95 and p99 - with +Inf bucket, these should be estimated above 1.0
-        assert stats.p95_estimate is not None
-        assert stats.p99_estimate is not None
+        assert stats.p95 is not None
+        assert stats.p99 is not None
 
     def test_histogram_percentile_estimates_none_on_counter_reset(self):
         """Test histogram percentile estimates are None when counter reset detected."""
@@ -379,12 +375,12 @@ class TestHistogramExportStats:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
         assert stats.buckets is None
         # When counter reset detected, percentile estimates should be None
-        assert stats.p50_estimate is None
-        assert stats.p99_estimate is None
+        assert stats.p50 is None
+        assert stats.p99 is None
 
 
 # =============================================================================
@@ -528,12 +524,12 @@ class TestSummaryExportStats:
             ],
         )
 
-        stats = SummaryExportStats.from_time_series(ts.summaries["latency"])
+        stats = compute_summary_stats(ts.summaries["latency"])
 
-        assert stats.count_delta == 200.0  # 300 - 100
-        assert stats.sum_delta == 100.0  # 150 - 50
+        assert stats.observation_count == 200  # 300 - 100
+        assert stats.delta == 100.0  # 150 - 50
         assert stats.avg == 0.5  # 100 / 200
-        assert stats.count_rate == 100.0  # 200 obs / 2s
+        assert stats.observations_per_second == 100.0  # 200 obs / 2s
         assert stats.quantiles["0.5"] == 0.12
         assert stats.quantiles["0.9"] == 0.55
         assert stats.quantiles["0.95"] == 0.85
@@ -554,10 +550,10 @@ class TestSummaryExportStats:
             ],
         )
 
-        stats = SummaryExportStats.from_time_series(ts.summaries["latency"])
+        stats = compute_summary_stats(ts.summaries["latency"])
 
-        assert isinstance(stats.count_rate, float)
-        assert stats.count_rate == 50.0  # 500 obs / 10s
+        assert isinstance(stats.observations_per_second, float)
+        assert stats.observations_per_second == 50.0  # 500 obs / 10s
 
 
 # =============================================================================
@@ -569,29 +565,27 @@ class TestEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_single_sample_gauge(self):
-        """Test gauge with single sample."""
+        """Test gauge with single sample returns simplified stats."""
         ts = ServerMetricsTimeSeries()
         add_gauge_samples(ts, "queue", [42.0])
 
-        stats = GaugeExportStats.from_time_series(ts.gauges["queue"])
+        stats = compute_gauge_stats(ts.gauges["queue"])
 
+        # Single sample results in simplified output (only avg and observation_count)
         assert stats.avg == 42.0
-        assert stats.min == 42.0
-        assert stats.max == 42.0
-        assert stats.std == 0.0
-        assert stats.p50 == 42.0
-        assert stats.p90 == 42.0
+        assert stats.observation_count == 1
 
     def test_empty_time_range(self):
-        """Test time filter that excludes all data raises an error."""
+        """Test time filter that excludes all data returns None."""
         ts = ServerMetricsTimeSeries()
         add_gauge_samples(ts, "queue", [10.0], start_ns=NANOS_PER_SECOND)  # Data at 1s
 
         # Time filter starts after all data (2s), excludes the 1s data point
         time_filter = TimeRangeFilter(start_ns=2 * NANOS_PER_SECOND, end_ns=None)
 
-        with pytest.raises((ValueError, IndexError)):
-            GaugeExportStats.from_time_series(ts.gauges["queue"], time_filter)
+        # When time filter excludes all data, returns None gracefully
+        stats = compute_gauge_stats(ts.gauges["queue"], time_filter)
+        assert stats is None
 
     def test_histogram_with_missing_buckets(self):
         """Test histogram handles missing buckets gracefully."""
@@ -606,5 +600,5 @@ class TestEdgeCases:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
-        assert stats.count_delta == 50.0  # 150 - 100
+        stats = compute_histogram_stats(ts.histograms["ttft"])
+        assert stats.observation_count == 50  # 150 - 100

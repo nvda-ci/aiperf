@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.models.export_stats import HistogramExportStats
+from aiperf.common.models.export_stats import compute_histogram_stats
 from aiperf.common.models.histogram_analysis import (
     BucketStatistics,
     accumulate_bucket_statistics,
@@ -89,10 +89,10 @@ class TestComputeEstimatedPercentiles:
 
 
 class TestEstimatedPercentilesIntegration:
-    """Integration tests for estimated percentiles in HistogramExportStats."""
+    """Integration tests for estimated percentiles in compute_histogram_stats."""
 
-    def test_percentile_estimates_computed_in_from_time_series(self):
-        """Test that percentile estimates are computed in from_time_series."""
+    def test_percentile_estimates_computed_in_compute_histogram_stats(self):
+        """Test that percentile estimates are computed in compute_histogram_stats."""
         ts = ServerMetricsTimeSeries()
         add_histogram_snapshots(
             ts,
@@ -106,10 +106,10 @@ class TestEstimatedPercentilesIntegration:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["ttft"])
+        stats = compute_histogram_stats(ts.histograms["ttft"])
 
-        assert stats.p50_estimate is not None
-        assert stats.p99_estimate is not None
+        assert stats.p50 is not None
+        assert stats.p99 is not None
 
     def test_percentile_estimates_handle_inf_bucket(self):
         """Test percentile estimates include +Inf bucket in tail percentiles."""
@@ -128,12 +128,12 @@ class TestEstimatedPercentilesIntegration:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
+        stats = compute_histogram_stats(ts.histograms["latency"])
 
         # 50 of 100 observations are in +Inf, so p99 (99th percentile) should include +Inf
-        assert stats.p99_estimate is not None
+        assert stats.p99 is not None
         # With 50% in +Inf, the p99 should be in the +Inf region (above 1.0)
-        assert stats.p99_estimate > 1.0
+        assert stats.p99 > 1.0
 
     def test_percentile_estimates_none_on_counter_reset(self):
         """Test percentile estimates are None when counter reset detected."""
@@ -148,10 +148,10 @@ class TestEstimatedPercentilesIntegration:
             ],
         )
 
-        stats = HistogramExportStats.from_time_series(ts.histograms["latency"])
+        stats = compute_histogram_stats(ts.histograms["latency"])
 
-        assert stats.p50_estimate is None
-        assert stats.p99_estimate is None
+        assert stats.p50 is None
+        assert stats.p99 is None
 
 
 # =============================================================================

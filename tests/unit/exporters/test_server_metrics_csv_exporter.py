@@ -13,15 +13,9 @@ from aiperf.common.enums import EndpointType
 from aiperf.common.exceptions import DataExporterDisabled
 from aiperf.common.models import ProfileResults
 from aiperf.common.models.export_data import (
-    ServerMetricLabeledStats,
+    FlatSeriesStats,
     ServerMetricsEndpointSummary,
     ServerMetricSummary,
-)
-from aiperf.common.models.export_stats import (
-    CounterExportStats,
-    GaugeExportStats,
-    HistogramExportStats,
-    SummaryExportStats,
 )
 from aiperf.common.models.metric_info_models import InfoMetricData
 from aiperf.common.models.server_metrics_models import ServerMetricsResults
@@ -78,18 +72,17 @@ def server_metrics_results_with_all_types():
                 description="KV cache usage percentage",
                 type="gauge",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=GaugeExportStats(
-                            min=0.4,
-                            avg=0.55,
-                            p50=0.54,
-                            p90=0.68,
-                            p95=0.72,
-                            p99=0.78,
-                            max=0.8,
-                            std=0.1,
-                        ),
+                        min=0.4,
+                        avg=0.55,
+                        p50=0.54,
+                        p90=0.68,
+                        p95=0.72,
+                        p99=0.78,
+                        max=0.8,
+                        std=0.1,
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -97,16 +90,14 @@ def server_metrics_results_with_all_types():
                 description="Total successful requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=CounterExportStats(
-                            delta=1000.0,
-                            rate_overall=3.33,
-                            rate_avg=3.2,
-                            rate_min=2.5,
-                            rate_max=4.0,
-                            rate_std=0.5,
-                        ),
+                        delta=1000.0,
+                        rate_per_second=3.33,
+                        rate_avg=3.2,
+                        rate_min=2.5,
+                        rate_max=4.0,
+                        rate_std=0.5,
                     ),
                 ],
             ),
@@ -114,20 +105,19 @@ def server_metrics_results_with_all_types():
                 description="Time to first token histogram",
                 type="histogram",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=HistogramExportStats(
-                            count_delta=1000.0,
-                            sum_delta=125.5,
-                            avg=0.1255,
-                            count_rate=3.33,
-                            buckets={
-                                "0.01": 50.0,
-                                "0.1": 450.0,
-                                "1.0": 980.0,
-                                "+Inf": 1000.0,
-                            },
-                        ),
+                        observation_count=1000,
+                        delta=125.5,
+                        avg=0.1255,
+                        observations_per_second=3.33,
+                        buckets={
+                            "0.01": 50,
+                            "0.1": 450,
+                            "1.0": 980,
+                            "+Inf": 1000,
+                        },
+                        estimated_percentiles=True,
                     ),
                 ],
             ),
@@ -135,20 +125,19 @@ def server_metrics_results_with_all_types():
                 description="Request latency summary",
                 type="summary",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=SummaryExportStats(
-                            count_delta=1000.0,
-                            sum_delta=250.0,
-                            avg=0.25,
-                            count_rate=3.33,
-                            quantiles={
-                                "0.5": 0.2,
-                                "0.9": 0.4,
-                                "0.95": 0.5,
-                                "0.99": 0.8,
-                            },
-                        ),
+                        observation_count=1000,
+                        delta=250.0,
+                        avg=0.25,
+                        observations_per_second=3.33,
+                        quantiles={
+                            "0.5": 0.2,
+                            "0.9": 0.4,
+                            "0.95": 0.5,
+                            "0.99": 0.8,
+                        },
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -167,18 +156,17 @@ def server_metrics_results_with_all_types():
                 description="KV cache usage percentage",
                 type="gauge",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=GaugeExportStats(
-                            min=0.5,
-                            avg=0.62,
-                            p50=0.61,
-                            p90=0.75,
-                            p95=0.78,
-                            p99=0.82,
-                            max=0.85,
-                            std=0.08,
-                        ),
+                        min=0.5,
+                        avg=0.62,
+                        p50=0.61,
+                        p90=0.75,
+                        p95=0.78,
+                        p99=0.82,
+                        max=0.85,
+                        std=0.08,
+                        estimated_percentiles=False,
                     ),
                 ],
             ),
@@ -186,16 +174,14 @@ def server_metrics_results_with_all_types():
                 description="Total successful requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels=None,
-                        stats=CounterExportStats(
-                            delta=800.0,
-                            rate_overall=2.67,
-                            rate_avg=2.5,
-                            rate_min=2.0,
-                            rate_max=3.5,
-                            rate_std=0.4,
-                        ),
+                        delta=800.0,
+                        rate_per_second=2.67,
+                        rate_avg=2.5,
+                        rate_min=2.0,
+                        rate_max=3.5,
+                        rate_std=0.4,
                     ),
                 ],
             ),
@@ -237,27 +223,23 @@ def server_metrics_results_with_labeled_metrics():
                 description="Total HTTP requests",
                 type="counter",
                 series=[
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels={"method": "GET", "status": "200"},
-                        stats=CounterExportStats(
-                            delta=500.0,
-                            rate_overall=5.0,
-                            rate_avg=4.8,
-                            rate_min=3.0,
-                            rate_max=6.0,
-                            rate_std=0.8,
-                        ),
+                        delta=500.0,
+                        rate_per_second=5.0,
+                        rate_avg=4.8,
+                        rate_min=3.0,
+                        rate_max=6.0,
+                        rate_std=0.8,
                     ),
-                    ServerMetricLabeledStats(
+                    FlatSeriesStats(
                         labels={"method": "POST", "status": "200"},
-                        stats=CounterExportStats(
-                            delta=300.0,
-                            rate_overall=3.0,
-                            rate_avg=2.9,
-                            rate_min=2.0,
-                            rate_max=4.0,
-                            rate_std=0.5,
-                        ),
+                        delta=300.0,
+                        rate_per_second=3.0,
+                        rate_avg=2.9,
+                        rate_min=2.0,
+                        rate_max=4.0,
+                        rate_std=0.5,
                     ),
                 ],
             ),
@@ -371,9 +353,9 @@ class TestServerMetricsCsvExporterGenerateContent:
 
         # Check for column headers for each metric type (all include Type column)
         assert "Endpoint,Type,Metric,Labels,avg,min,max" in content  # gauge
-        assert "Endpoint,Type,Metric,Labels,delta,rate_overall" in content  # counter
+        assert "Endpoint,Type,Metric,Labels,delta,rate_per_second" in content  # counter
         assert (
-            "Endpoint,Type,Metric,Labels,count_delta,sum_delta" in content
+            "Endpoint,Type,Metric,Labels,observation_count,delta" in content
         )  # histogram/summary
         # Check that metric type values appear in the data
         assert ",gauge," in content
@@ -437,23 +419,23 @@ class TestServerMetricsCsvExporterGenerateContent:
                 row
                 and row[0] == "Endpoint"
                 and "delta" in row
-                and "rate_overall" in row
+                and "rate_per_second" in row
             ):
                 counter_header = row
                 break
 
         assert counter_header is not None
         assert "delta" in counter_header
-        assert "rate_overall" in counter_header
+        assert "rate_per_second" in counter_header
         assert "rate_avg" in counter_header
 
-    def test_generate_content_histogram_section_has_bucket_columns(
+    def test_generate_content_histogram_section_has_buckets_column(
         self,
         mock_user_config,
         mock_profile_results,
         server_metrics_results_with_all_types,
     ):
-        """Test that histogram section has bucket values as column headers."""
+        """Test that histogram section has a buckets column with key=value pairs."""
         config = create_exporter_config(
             profile_results=mock_profile_results,
             user_config=mock_user_config,
@@ -463,27 +445,29 @@ class TestServerMetricsCsvExporterGenerateContent:
         content = exporter._generate_content()
         rows = _parse_csv_content(content)
 
-        # Find histogram header row (has count_delta and bucket columns)
+        # Find histogram header row (has observation_count and buckets column)
         hist_header = None
         for row in rows:
-            if row and row[0] == "Endpoint" and "count_delta" in row and "0.01" in row:
+            if (
+                row
+                and row[0] == "Endpoint"
+                and "observation_count" in row
+                and "buckets" in row
+            ):
                 hist_header = row
                 break
 
         assert hist_header is not None
-        # Bucket boundaries should be in header as columns
-        assert "0.01" in hist_header
-        assert "0.1" in hist_header
-        assert "1.0" in hist_header
-        assert "+Inf" in hist_header
+        # Buckets should be a single column at the end
+        assert "buckets" in hist_header
 
-    def test_generate_content_summary_section_has_quantile_columns(
+    def test_generate_content_summary_section_has_quantiles_column(
         self,
         mock_user_config,
         mock_profile_results,
         server_metrics_results_with_all_types,
     ):
-        """Test that summary section has quantile values as column headers."""
+        """Test that summary section has a quantiles column with key=value pairs."""
         config = create_exporter_config(
             profile_results=mock_profile_results,
             user_config=mock_user_config,
@@ -493,19 +477,21 @@ class TestServerMetricsCsvExporterGenerateContent:
         content = exporter._generate_content()
         rows = _parse_csv_content(content)
 
-        # Find summary header row (has count_delta and quantile columns)
+        # Find summary header row (has observation_count and quantiles column)
         summary_header = None
         for row in rows:
-            if row and row[0] == "Endpoint" and "count_delta" in row and "0.5" in row:
+            if (
+                row
+                and row[0] == "Endpoint"
+                and "observation_count" in row
+                and "quantiles" in row
+            ):
                 summary_header = row
                 break
 
         assert summary_header is not None
-        # Quantile keys should be in header as columns
-        assert "0.5" in summary_header
-        assert "0.9" in summary_header
-        assert "0.95" in summary_header
-        assert "0.99" in summary_header
+        # Quantiles should be a single column at the end
+        assert "quantiles" in summary_header
 
     def test_generate_content_has_normalized_endpoints(
         self,
@@ -565,13 +551,13 @@ class TestServerMetricsCsvExporterGenerateContent:
         kv_cache_rows = [r for r in rows if r and "vllm:kv_cache_usage_perc" in r]
         assert len(kv_cache_rows) == 2
 
-    def test_generate_content_histogram_bucket_values_in_columns(
+    def test_generate_content_histogram_bucket_values_in_column(
         self,
         mock_user_config,
         mock_profile_results,
         server_metrics_results_with_all_types,
     ):
-        """Test that histogram bucket values are in separate columns."""
+        """Test that histogram bucket values are in a single column as key=value pairs."""
         config = create_exporter_config(
             profile_results=mock_profile_results,
             user_config=mock_user_config,
@@ -579,29 +565,20 @@ class TestServerMetricsCsvExporterGenerateContent:
         )
         exporter = ServerMetricsCsvExporter(config)
         content = exporter._generate_content()
-        rows = _parse_csv_content(content)
 
-        # Find histogram data row
-        hist_data_row = None
-        for row in rows:
-            if row and "vllm:time_to_first_token_seconds" in row:
-                hist_data_row = row
-                break
+        # Bucket values should be in key=value;key2=value2 format
+        assert "0.01=50" in content
+        assert "0.1=450" in content
+        assert "1.0=980" in content
+        assert "+Inf=1000" in content
 
-        assert hist_data_row is not None
-        # Bucket values should be in separate columns (50, 450, 980, 1000)
-        assert "50" in hist_data_row or "50.0000" in hist_data_row
-        assert "450" in hist_data_row or "450.0000" in hist_data_row
-        assert "980" in hist_data_row or "980.0000" in hist_data_row
-        assert "1000" in hist_data_row or "1000.0000" in hist_data_row
-
-    def test_generate_content_summary_quantile_values_in_columns(
+    def test_generate_content_summary_quantile_values_in_column(
         self,
         mock_user_config,
         mock_profile_results,
         server_metrics_results_with_all_types,
     ):
-        """Test that summary quantile values are in separate columns."""
+        """Test that summary quantile values are in a single column as key=value pairs."""
         config = create_exporter_config(
             profile_results=mock_profile_results,
             user_config=mock_user_config,
@@ -609,26 +586,17 @@ class TestServerMetricsCsvExporterGenerateContent:
         )
         exporter = ServerMetricsCsvExporter(config)
         content = exporter._generate_content()
-        rows = _parse_csv_content(content)
 
-        # Find summary data row
-        summary_data_row = None
-        for row in rows:
-            if row and "vllm:request_latency_seconds" in row:
-                summary_data_row = row
-                break
+        # Quantile values should be in key=value;key2=value2 format
+        assert "0.5=0.2000" in content
+        assert "0.9=0.4000" in content
+        assert "0.95=0.5000" in content
+        assert "0.99=0.8000" in content
 
-        assert summary_data_row is not None
-        # Quantile values should be in separate columns (0.2, 0.4, 0.5, 0.8)
-        assert "0.2000" in summary_data_row
-        assert "0.4000" in summary_data_row
-        assert "0.5000" in summary_data_row
-        assert "0.8000" in summary_data_row
-
-    def test_generate_content_groups_histograms_by_bucket_boundaries(
+    def test_generate_content_histograms_with_different_buckets_in_same_section(
         self, mock_user_config, mock_profile_results
     ):
-        """Test that histograms with different bucket boundaries get separate sections."""
+        """Test that histograms with different bucket boundaries are in the same section."""
         endpoint_summary = ServerMetricsEndpointSummary(
             endpoint_url="http://localhost:8081/metrics",
             duration_seconds=100.0,
@@ -641,20 +609,19 @@ class TestServerMetricsCsvExporterGenerateContent:
                     description="Request duration",
                     type="histogram",
                     series=[
-                        ServerMetricLabeledStats(
+                        FlatSeriesStats(
                             labels=None,
-                            stats=HistogramExportStats(
-                                count_delta=100.0,
-                                sum_delta=50.0,
-                                avg=0.5,
-                                count_rate=1.0,
-                                buckets={
-                                    "0.1": 10.0,
-                                    "0.5": 50.0,
-                                    "1.0": 90.0,
-                                    "+Inf": 100.0,
-                                },
-                            ),
+                            observation_count=100,
+                            delta=50.0,
+                            avg=0.5,
+                            observations_per_second=1.0,
+                            buckets={
+                                "0.1": 10,
+                                "0.5": 50,
+                                "1.0": 90,
+                                "+Inf": 100,
+                            },
+                            estimated_percentiles=True,
                         ),
                     ],
                 ),
@@ -662,20 +629,19 @@ class TestServerMetricsCsvExporterGenerateContent:
                     description="Queue time",
                     type="histogram",
                     series=[
-                        ServerMetricLabeledStats(
+                        FlatSeriesStats(
                             labels=None,
-                            stats=HistogramExportStats(
-                                count_delta=200.0,
-                                sum_delta=10.0,
-                                avg=0.05,
-                                count_rate=2.0,
-                                buckets={
-                                    "0.01": 50.0,
-                                    "0.05": 150.0,
-                                    "0.1": 190.0,
-                                    "+Inf": 200.0,
-                                },
-                            ),
+                            observation_count=200,
+                            delta=10.0,
+                            avg=0.05,
+                            observations_per_second=2.0,
+                            buckets={
+                                "0.01": 50,
+                                "0.05": 150,
+                                "0.1": 190,
+                                "+Inf": 200,
+                            },
+                            estimated_percentiles=True,
                         ),
                     ],
                 ),
@@ -701,20 +667,26 @@ class TestServerMetricsCsvExporterGenerateContent:
         content = exporter._generate_content()
         rows = _parse_csv_content(content)
 
-        # Find histogram header rows (have count_delta and bucket columns)
+        # Find histogram header rows (have observation_count and buckets column)
         hist_headers = []
         for row in rows:
             if (
                 row
                 and row[0] == "Endpoint"
-                and "count_delta" in row
-                and len(row) > 7  # has bucket columns beyond base stats
+                and "observation_count" in row
+                and "buckets" in row
             ):
                 hist_headers.append(row)
 
-        # Should have two different histogram headers with different bucket columns
-        assert len(hist_headers) == 2
-        assert hist_headers[0] != hist_headers[1]
+        # All histograms should be under a single header (buckets in single column)
+        assert len(hist_headers) == 1
+
+        # Both histogram metrics should be in the data
+        assert "request_duration_seconds" in content
+        assert "queue_time_seconds" in content
+        # Buckets from both should be present as key=value pairs
+        assert "0.1=10" in content  # request_duration
+        assert "0.01=50" in content  # queue_time
 
 
 class TestServerMetricsCsvExporterIntegration:
@@ -746,4 +718,4 @@ class TestServerMetricsCsvExporterIntegration:
 
         # Verify column headers for different metric types exist
         assert "avg,min,max,std,p50,p90,p95,p99" in content  # gauge
-        assert "delta,rate_overall,rate_avg" in content  # counter
+        assert "delta,rate_per_second,rate_avg" in content  # counter

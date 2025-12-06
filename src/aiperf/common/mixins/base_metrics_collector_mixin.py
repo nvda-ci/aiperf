@@ -8,8 +8,10 @@ used by both GPU telemetry and server metrics systems.
 """
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 import aiohttp
@@ -17,6 +19,35 @@ import aiohttp
 from aiperf.common.hooks import background_task, on_init, on_stop
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models import ErrorDetails
+
+
+@dataclass
+class HttpTraceTiming:
+    """Timing data captured from aiohttp TraceConfig.
+
+    Provides precise timestamps for HTTP request lifecycle events,
+    enabling accurate correlation between client requests and server metrics.
+    """
+
+    request_start_ns: int | None = None
+    first_byte_ns: int | None = None
+    request_end_ns: int | None = None
+
+    @property
+    def transfer_time_ns(self) -> int | None:
+        """Time to transfer response body after first byte received."""
+        if self.first_byte_ns is not None and self.request_end_ns is not None:
+            return self.request_end_ns - self.first_byte_ns
+        return None
+
+
+@dataclass
+class FetchResult:
+    """Result of fetching metrics from an HTTP endpoint."""
+
+    text: str
+    trace_timing: HttpTraceTiming
+
 
 # Type variables for records returned by collectors
 TRecord = TypeVar("TRecord")
@@ -70,6 +101,8 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
         self._record_callback = record_callback
         self._error_callback = error_callback
         self._session: aiohttp.ClientSession | None = None
+        # Storage for trace timing data (keyed by trace_request_ctx)
+        self._trace_timing: dict[object, HttpTraceTiming] = {}
         super().__init__(**kwargs)
 
     @property
@@ -84,17 +117,74 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
 
     @on_init
     async def _initialize_http_client(self) -> None:
-        """Initialize the aiohttp client session.
+        """Initialize the aiohttp client session with trace config.
 
         Called automatically during initialization phase.
         Creates an aiohttp ClientSession with appropriate timeout settings.
         Uses connect timeout only (no total timeout) to allow long-running scrapes.
+        Configures TraceConfig to capture HTTP timing events for precise correlation.
         """
         timeout = aiohttp.ClientTimeout(
             total=None,  # No total timeout for ongoing scrapes
             connect=self._reachability_timeout,  # Fast connection timeout only
         )
-        self._session = aiohttp.ClientSession(timeout=timeout)
+        trace_config = self._create_trace_config()
+        self._session = aiohttp.ClientSession(
+            timeout=timeout, trace_configs=[trace_config]
+        )
+
+    def _create_trace_config(self) -> aiohttp.TraceConfig:
+        """Create TraceConfig for HTTP timing capture.
+
+        Captures:
+        - request_start: When HTTP request headers are sent
+        - response_chunk_received: First byte of response (TTFB proxy)
+        - request_end: When response is fully received
+
+        Returns:
+            Configured TraceConfig instance
+        """
+        trace_config = aiohttp.TraceConfig()
+        trace_config.on_request_start.append(self._on_request_start)
+        trace_config.on_response_chunk_received.append(self._on_response_chunk_received)
+        trace_config.on_request_end.append(self._on_request_end)
+        return trace_config
+
+    async def _on_request_start(
+        self,
+        session: aiohttp.ClientSession,
+        trace_config_ctx: aiohttp.tracing.SimpleNamespace,
+        params: aiohttp.TraceRequestStartParams,
+    ) -> None:
+        """Capture timestamp when HTTP request starts."""
+        ctx = trace_config_ctx.trace_request_ctx
+        if ctx is not None:
+            self._trace_timing[ctx] = HttpTraceTiming(request_start_ns=time.time_ns())
+
+    async def _on_response_chunk_received(
+        self,
+        session: aiohttp.ClientSession,
+        trace_config_ctx: aiohttp.tracing.SimpleNamespace,
+        params: aiohttp.TraceResponseChunkReceivedParams,
+    ) -> None:
+        """Capture timestamp when first response byte is received (TTFB)."""
+        ctx = trace_config_ctx.trace_request_ctx
+        if ctx is not None and ctx in self._trace_timing:
+            timing = self._trace_timing[ctx]
+            # Only capture first byte (first chunk)
+            if timing.first_byte_ns is None:
+                timing.first_byte_ns = time.time_ns()
+
+    async def _on_request_end(
+        self,
+        session: aiohttp.ClientSession,
+        trace_config_ctx: aiohttp.tracing.SimpleNamespace,
+        params: aiohttp.TraceRequestEndParams,
+    ) -> None:
+        """Capture timestamp when response is fully received."""
+        ctx = trace_config_ctx.trace_request_ctx
+        if ctx is not None and ctx in self._trace_timing:
+            self._trace_timing[ctx].request_end_ns = time.time_ns()
 
     @on_stop
     async def _cleanup_http_client(self) -> None:
@@ -187,16 +277,21 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
         """
         pass
 
-    async def _fetch_metrics_text(self) -> str:
-        """Fetch raw metrics text from the HTTP endpoint.
+    async def _fetch_metrics_text(self) -> FetchResult:
+        """Fetch raw metrics text from the HTTP endpoint with trace timing.
 
         Performs safety checks before making HTTP request:
         - Verifies stop_requested flag to allow graceful shutdown
         - Checks session is initialized and not closed
         - Handles concurrent session closure gracefully
 
+        Uses aiohttp TraceConfig to capture precise HTTP timing:
+        - request_start_ns: When request headers were sent
+        - first_byte_ns: Time-to-first-byte (TTFB) - best proxy for server snapshot time
+        - transfer_time_ns: Time to transfer response body
+
         Returns:
-            Raw metrics text from the endpoint
+            FetchResult containing raw metrics text and trace timing data
 
         Raises:
             RuntimeError: If HTTP session is not initialized
@@ -211,14 +306,25 @@ class BaseMetricsCollectorMixin(AIPerfLifecycleMixin, ABC, Generic[TRecord]):
         if not session:
             raise RuntimeError("HTTP session not initialized")
 
+        # Create unique context for this request's trace timing
+        trace_ctx = object()
+
         try:
             if session.closed:
                 raise asyncio.CancelledError
 
-            async with session.get(self._endpoint_url) as response:
+            async with session.get(
+                self._endpoint_url, trace_request_ctx=trace_ctx
+            ) as response:
                 response.raise_for_status()
-                return await response.text()
+                text = await response.text()
+
+            # Retrieve and clean up trace timing data
+            timing = self._trace_timing.pop(trace_ctx, HttpTraceTiming())
+            return FetchResult(text=text, trace_timing=timing)
         except (aiohttp.ClientConnectionError, RuntimeError) as e:
+            # Clean up trace timing on error
+            self._trace_timing.pop(trace_ctx, None)
             # Convert connection errors during shutdown to CancelledError
             if self.stop_requested or session.closed:
                 raise asyncio.CancelledError from e

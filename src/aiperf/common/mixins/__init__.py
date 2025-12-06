@@ -16,6 +16,8 @@ from aiperf.common.mixins.aiperf_logger_mixin import (
 )
 from aiperf.common.mixins.base_metrics_collector_mixin import (
     BaseMetricsCollectorMixin,
+    FetchResult,
+    HttpTraceTiming,
     TErrorCallback,
     TRecord,
     TRecordCallback,
@@ -73,7 +75,9 @@ __all__ = [
     "BufferedJSONLWriterMixinWithDeduplication",
     "CommandHandlerMixin",
     "CommunicationMixin",
+    "FetchResult",
     "HooksMixin",
+    "HttpTraceTiming",
     "MessageBusClientMixin",
     "ProcessHealthMixin",
     "ProgressTrackerMixin",

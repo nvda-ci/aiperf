@@ -275,7 +275,8 @@ class TestHttpCommunication:
             await collector.initialize()
 
             result = await collector._fetch_metrics_text()
-            assert result == sample_dcgm_data
+            # _fetch_metrics_text returns FetchResult with text and trace_timing
+            assert result.text == sample_dcgm_data
 
             await collector.stop()
 

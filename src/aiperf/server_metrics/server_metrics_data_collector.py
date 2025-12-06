@@ -11,6 +11,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.environment import Environment
 from aiperf.common.mixins import BaseMetricsCollectorMixin
+from aiperf.common.mixins.base_metrics_collector_mixin import HttpTraceTiming
 from aiperf.common.models import ErrorDetails
 from aiperf.common.models.server_metrics_models import (
     HistogramData,
@@ -74,17 +75,25 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
         2. Parses Prometheus-format data into ServerMetricsRecord objects
         3. Sends records via callback (via mixin's _send_records_via_callback)
 
+        Uses HTTP trace timing to capture precise request lifecycle timestamps for
+        accurate correlation with client request timestamps.
+
         Raises:
             Exception: Any exception from fetch or parse is logged and re-raised
         """
         start_perf_ns = time.perf_counter_ns()
-        metrics_data = await self._fetch_metrics_text()
+        fetch_result = await self._fetch_metrics_text()
         latency_ns = time.perf_counter_ns() - start_perf_ns
-        records = self._parse_metrics_to_records(metrics_data, latency_ns)
+        records = self._parse_metrics_to_records(
+            fetch_result.text, latency_ns, fetch_result.trace_timing
+        )
         await self._send_records_via_callback(records)
 
     def _parse_metrics_to_records(
-        self, metrics_data: str, latency_ns: int
+        self,
+        metrics_data: str,
+        latency_ns: int,
+        trace_timing: HttpTraceTiming | None = None,
     ) -> list[ServerMetricsRecord]:
         """Parse Prometheus metrics text into ServerMetricsRecord objects.
 
@@ -97,6 +106,7 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
         Args:
             metrics_data: Raw metrics text from Prometheus endpoint in Prometheus format
             latency_ns: Nanoseconds it took to collect the metrics from the endpoint
+            trace_timing: HTTP trace timing data for precise timestamp correlation
 
         Returns:
             list[ServerMetricsRecord]: List with single ServerMetricsRecord containing complete snapshot.
@@ -105,7 +115,13 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
         if not metrics_data.strip():
             return []
 
-        current_timestamp_ns = time.time_ns()
+        # Use first_byte_ns as timestamp if available (best approximation of server snapshot time)
+        # Otherwise fall back to current time
+        if trace_timing and trace_timing.first_byte_ns is not None:
+            timestamp_ns = trace_timing.first_byte_ns
+        else:
+            timestamp_ns = time.time_ns()
+
         metrics_dict: dict[str, MetricFamily] = {}
 
         try:
@@ -147,10 +163,13 @@ class ServerMetricsDataCollector(BaseMetricsCollectorMixin[ServerMetricsRecord])
             return []
 
         record = ServerMetricsRecord(
-            timestamp_ns=current_timestamp_ns,
+            timestamp_ns=timestamp_ns,
             endpoint_latency_ns=latency_ns,
             endpoint_url=self._endpoint_url,
             metrics=metrics_dict,
+            request_sent_ns=trace_timing.request_start_ns if trace_timing else None,
+            first_byte_ns=trace_timing.first_byte_ns if trace_timing else None,
+            transfer_time_ns=trace_timing.transfer_time_ns if trace_timing else None,
         )
 
         return [record]
