@@ -6,6 +6,7 @@ from typing import Any
 from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
+from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.models import MetricResult
 from aiperf.common.models.server_metrics_models import (
@@ -38,6 +39,11 @@ class ServerMetricsResultsProcessor(BaseMetricsProcessor):
     """
 
     def __init__(self, user_config: UserConfig, **kwargs: Any):
+        if user_config.server_metrics_disabled:
+            raise PostProcessorDisabled(
+                "Server metrics results processor is disabled via --no-server-metrics"
+            )
+
         super().__init__(user_config=user_config, **kwargs)
 
         self._server_metrics_hierarchy = ServerMetricsHierarchy()

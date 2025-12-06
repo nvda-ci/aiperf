@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Annotated, Any
 
+from cyclopts import Parameter
 from orjson import JSONDecodeError
 from pydantic import BeforeValidator, Field, model_validator
 from typing_extensions import Self
@@ -294,7 +295,7 @@ class UserConfig(BaseConfig):
                 "Automatically collects from inference endpoint base_url + `/metrics`. "
                 "Optionally specify additional custom Prometheus-compatible endpoint URLs "
                 "(e.g., http://node1:8081/metrics, http://node2:9090/metrics). "
-                "Use AIPERF_SERVER_METRICS_ENABLED=false to disable. "
+                "Use --no-server-metrics to disable collection. "
                 "Example: `--server-metrics node1:8081 node2:9090/metrics` for additional endpoints"
             ),
         ),
@@ -306,17 +307,33 @@ class UserConfig(BaseConfig):
         ),
     ] = None
 
+    no_server_metrics: Annotated[
+        bool,
+        Field(
+            description="Disable server metrics collection entirely.",
+        ),
+        Parameter(
+            name=("--no-server-metrics",),
+            negative=(),  # Disable auto-generated --no-no-server-metrics
+            group=Groups.SERVER_METRICS,
+        ),
+    ] = False
+
     _server_metrics_urls: list[str] = []
+    _server_metrics_disabled: bool = False
 
     @model_validator(mode="after")
     def _parse_server_metrics_config(self) -> Self:
         """Parse server_metrics list into URLs.
 
-        Check Environment.SERVER_METRICS.ENABLED to see if collection is enabled.
         Empty list [] means enabled with automatic discovery only.
         Non-empty list means enabled with custom URLs.
+        Use --no-server-metrics to disable collection.
         """
         from aiperf.common.metric_utils import normalize_metrics_endpoint_url
+
+        # Check if disabled via CLI flag
+        self._server_metrics_disabled = self.no_server_metrics
 
         urls: list[str] = []
 
@@ -329,6 +346,11 @@ class UserConfig(BaseConfig):
 
         self._server_metrics_urls = urls
         return self
+
+    @property
+    def server_metrics_disabled(self) -> bool:
+        """Check if server metrics collection is disabled."""
+        return self._server_metrics_disabled
 
     @property
     def server_metrics_urls(self) -> list[str]:

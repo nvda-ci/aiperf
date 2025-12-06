@@ -636,3 +636,45 @@ class TestServerMetrics:
             # Validate first record
             first_record = ServerMetricsSlimRecord.model_validate_json(lines[0])
             assert first_record.timestamp_ns > 0
+
+    # ========================================================================
+    # Server Metrics Disabled Tests
+    # ========================================================================
+
+    async def test_server_metrics_disabled(
+        self, cli: AIPerfCLI, aiperf_mock_server: AIPerfMockServer
+    ):
+        """Server metrics collection is disabled with --no-server-metrics flag.
+
+        When --no-server-metrics is provided, no server metrics files should be
+        created and no metrics should be collected.
+        """
+        result = await cli.run(
+            f"""
+            aiperf profile \
+                --model nvidia/llama-3.1-nemotron-70b-instruct \
+                --url {aiperf_mock_server.url} \
+                --tokenizer gpt2 \
+                --endpoint-type chat \
+                --streaming \
+                --request-count 25 \
+                --concurrency 1 \
+                --workers-max 1 \
+                --no-server-metrics
+            """
+        )
+        assert result.request_count == 25
+
+        # Server metrics should NOT be collected when disabled
+        assert not result.has_server_metrics, "JSON export should not exist"
+        assert not result.has_server_metrics_jsonl, "JSONL export should not exist"
+        assert not result.has_server_metrics_csv, "CSV export should not exist"
+
+        # Verify no server metrics files were created
+        json_files = list(result.artifacts_dir.glob("*server_metrics*.json"))
+        jsonl_files = list(result.artifacts_dir.glob("*server_metrics*.jsonl"))
+        csv_files = list(result.artifacts_dir.glob("*server_metrics*.csv"))
+
+        assert len(json_files) == 0, f"Unexpected JSON files: {json_files}"
+        assert len(jsonl_files) == 0, f"Unexpected JSONL files: {jsonl_files}"
+        assert len(csv_files) == 0, f"Unexpected CSV files: {csv_files}"

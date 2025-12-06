@@ -79,6 +79,7 @@ class ServerMetricsManager(BaseComponentService):
         )
 
         self._collectors: dict[str, ServerMetricsDataCollector] = {}
+        self._server_metrics_disabled = user_config.server_metrics_disabled
         self._server_metrics_endpoints = build_hostname_aware_prometheus_endpoints(
             inference_endpoint_url=user_config.endpoint.url,
             default_ports=Environment.SERVER_METRICS.DEFAULT_BACKEND_PORTS,
@@ -112,11 +113,11 @@ class ServerMetricsManager(BaseComponentService):
         Args:
             message: Profile configuration command from SystemController
         """
-        # Check if server metrics are disabled via environment variable
-        if not Environment.SERVER_METRICS.ENABLED:
+        # Check if server metrics are disabled via CLI flag
+        if self._server_metrics_disabled:
             await self._send_server_metrics_status(
                 enabled=False,
-                reason="disabled via AIPERF_SERVER_METRICS_ENABLED=false",
+                reason="disabled via --no-server-metrics",
                 endpoints_configured=[],
                 endpoints_reachable=[],
             )

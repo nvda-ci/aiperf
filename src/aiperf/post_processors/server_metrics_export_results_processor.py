@@ -5,6 +5,7 @@ from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.environment import Environment
+from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.mixins import BufferedJSONLWriterMixinWithDeduplication
 from aiperf.common.models.record_models import MetricResult
@@ -40,6 +41,11 @@ class ServerMetricsExportResultsProcessor(
         user_config: UserConfig,
         **kwargs,
     ) -> None:
+        if user_config.server_metrics_disabled:
+            raise PostProcessorDisabled(
+                "Server metrics JSONL export is disabled via --no-server-metrics"
+            )
+
         output_file = user_config.output.server_metrics_export_jsonl_file
 
         super().__init__(

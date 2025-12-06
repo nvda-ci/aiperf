@@ -92,11 +92,10 @@ Record processing and export configuration. Controls batch sizes, processor scal
 
 ## SERVERMETRICS
 
-Server metrics collection configuration. Controls server metrics collection frequency, endpoint detection, and shutdown behavior. Metrics are collected from Prometheus-compatible endpoints at the specified interval.
+Server metrics collection configuration. Controls server metrics collection frequency, endpoint detection, and shutdown behavior. Metrics are collected from Prometheus-compatible endpoints at the specified interval. Use --no-server-metrics CLI flag to disable collection.
 
 | Environment Variable | Default | Constraints | Description |
 |----------------------|---------|-------------|-------------|
-| `AIPERF_SERVER_METRICS_ENABLED` | `True` | — | Enable server metrics collection (set to false to disable entirely) |
 | `AIPERF_SERVER_METRICS_COLLECTION_FLUSH_PERIOD` | `2.0` | ≥ 0.0, ≤ 30.0 | Time in seconds to continue collecting metrics after profiling completes, allowing server-side metrics to flush/finalize before shutting down (default: 2.0s) |
 | `AIPERF_SERVER_METRICS_COLLECTION_INTERVAL` | `0.333` | ≥ 0.001, ≤ 300.0 | Server metrics collection interval in seconds (default: 333ms, ~3Hz) |
 | `AIPERF_SERVER_METRICS_DEFAULT_BACKEND_PORTS` | `[]` | — | Default backend ports to check on inference endpoint hostname (comma-separated string or JSON array) |
