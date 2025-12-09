@@ -23,8 +23,18 @@ class TestCreateTcpConnector:
     """Test suite for create_tcp_connector function."""
 
     def test_create_default_connector(self) -> None:
-        """Test creating connector with default parameters."""
-        with patch("aiohttp.TCPConnector") as mock_connector_class:
+        """Test creating connector with default parameters when socket_factory is supported."""
+        with (
+            patch("aiohttp.TCPConnector") as mock_connector_class,
+            patch(
+                "aiperf.transports.aiohttp_client.AioHttpDefaults.supports_tcp_connector_param",
+                return_value=True,
+            ),
+            patch(
+                "aiperf.transports.http_defaults.AioHttpDefaults._filter_supported_tcp_connector_kwargs",
+                side_effect=lambda kwargs: kwargs,  # Return all kwargs unfiltered
+            ),
+        ):
             mock_connector = Mock()
             mock_connector_class.return_value = mock_connector
 
@@ -55,7 +65,17 @@ class TestCreateTcpConnector:
             "keepalive_timeout": 120,
         }
 
-        with patch("aiohttp.TCPConnector") as mock_connector_class:
+        with (
+            patch("aiohttp.TCPConnector") as mock_connector_class,
+            patch(
+                "aiperf.transports.aiohttp_client.AioHttpDefaults.supports_tcp_connector_param",
+                return_value=True,
+            ),
+            patch(
+                "aiperf.transports.http_defaults.AioHttpDefaults._filter_supported_tcp_connector_kwargs",
+                side_effect=lambda kwargs: kwargs,  # Return all kwargs unfiltered
+            ),
+        ):
             mock_connector = Mock()
             mock_connector_class.return_value = mock_connector
 
@@ -153,7 +173,13 @@ class TestCreateTcpConnector:
             expected_value: int | None,
         ) -> None:
             """Test socket factory handles Linux-specific TCP options."""
-            with patch("aiohttp.TCPConnector") as mock_connector_class:
+            with (
+                patch("aiohttp.TCPConnector") as mock_connector_class,
+                patch(
+                    "aiperf.transports.aiohttp_client.AioHttpDefaults.supports_tcp_connector_param",
+                    return_value=True,
+                ),
+            ):
                 create_tcp_connector()
 
                 socket_factory = mock_connector_class.call_args[1]["socket_factory"]
@@ -191,7 +217,13 @@ class TestCreateTcpConnector:
         self, family: int, sock_type: int, proto: int
     ) -> None:
         """Test socket factory with different address families."""
-        with patch("aiohttp.TCPConnector") as mock_connector_class:
+        with (
+            patch("aiohttp.TCPConnector") as mock_connector_class,
+            patch(
+                "aiperf.transports.aiohttp_client.AioHttpDefaults.supports_tcp_connector_param",
+                return_value=True,
+            ),
+        ):
             create_tcp_connector()
 
             socket_factory = mock_connector_class.call_args[1]["socket_factory"]

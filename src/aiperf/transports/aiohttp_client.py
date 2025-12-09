@@ -6,6 +6,7 @@ from typing import Any
 
 import aiohttp
 
+from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.exceptions import SSEResponseError
 from aiperf.common.mixins import AIPerfLoggerMixin
@@ -16,6 +17,8 @@ from aiperf.common.models import (
 )
 from aiperf.transports.http_defaults import AioHttpDefaults, SocketDefaults
 from aiperf.transports.sse_utils import AsyncSSEStreamReader
+
+_logger = AIPerfLogger(__name__)
 
 
 class AioHttpClient(AIPerfLoggerMixin):
@@ -156,19 +159,44 @@ class AioHttpClient(AIPerfLoggerMixin):
 
 
 def create_tcp_connector(**kwargs) -> aiohttp.TCPConnector:
-    """Create a new connector with the given configuration."""
+    """Create a new connector with the given configuration.
 
-    def socket_factory(addr_info):
-        """Custom socket factory optimized for SSE streaming performance."""
-        family, sock_type, proto, _, _ = addr_info
-        sock = socket.socket(family=family, type=sock_type, proto=proto)
-        SocketDefaults.apply_to_socket(sock)
-        return sock
-
+    For aiohttp 3.9+, uses socket_factory to configure sockets at creation time.
+    For aiohttp 3.8.x, temporarily patches socket.socket to apply optimizations.
+    """
     default_kwargs: dict[str, Any] = AioHttpDefaults.get_default_kwargs()
-    default_kwargs["socket_factory"] = socket_factory
     default_kwargs.update(kwargs)
 
-    return aiohttp.TCPConnector(
-        **default_kwargs,
-    )
+    # socket_factory was added in aiohttp 3.9.0
+    if AioHttpDefaults.supports_tcp_connector_param("socket_factory"):
+        _logger.debug("Using socket_factory for aiohttp 3.9.0+")
+
+        def socket_factory(addr_info):
+            """Custom socket factory optimized for SSE streaming performance."""
+            family, sock_type, proto, _, _ = addr_info
+            sock = socket.socket(family=family, type=sock_type, proto=proto)
+            SocketDefaults.apply_to_socket(sock)
+            return sock
+
+        default_kwargs["socket_factory"] = socket_factory
+        return aiohttp.TCPConnector(**default_kwargs)
+
+    # Fallback for aiohttp 3.8.x: temporarily patch socket.socket
+    original_socket = socket.socket
+
+    def patched_socket(*args, **sock_kwargs):
+        sock = original_socket(*args, **sock_kwargs)
+        if sock.type == socket.SOCK_STREAM:  # Only configure TCP sockets
+            SocketDefaults.apply_to_socket(sock)
+        return sock
+
+    try:
+        _logger.debug(
+            "Patching socket.socket for legacy aiohttp versions to apply optimizations"
+        )
+        socket.socket = patched_socket
+        return aiohttp.TCPConnector(**default_kwargs)
+    finally:
+        # Always restore the original socket.socket
+        _logger.debug("Restoring original socket.socket")
+        socket.socket = original_socket

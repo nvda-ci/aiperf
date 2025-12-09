@@ -152,10 +152,19 @@ def mock_sse_response() -> Mock:
 
 @pytest.fixture
 def socket_factory_setup():
-    """Fixture providing common socket factory test setup."""
+    """Fixture providing common socket factory test setup.
+
+    Mocks supports_tcp_connector_param to return True so socket_factory path is used.
+    """
 
     def _setup():
-        with patch("aiohttp.TCPConnector") as mock_connector_class:
+        with (
+            patch("aiohttp.TCPConnector") as mock_connector_class,
+            patch(
+                "aiperf.transports.aiohttp_client.AioHttpDefaults.supports_tcp_connector_param",
+                return_value=True,
+            ),
+        ):
             create_tcp_connector()
             socket_factory = mock_connector_class.call_args[1]["socket_factory"]
             return mock_connector_class, socket_factory
