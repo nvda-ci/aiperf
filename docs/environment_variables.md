@@ -68,6 +68,9 @@ Logging system configuration. Controls multiprocessing log queue size and other 
 | Environment Variable | Default | Constraints | Description |
 |----------------------|---------|-------------|-------------|
 | `AIPERF_LOGGING_QUEUE_MAXSIZE` | `1000` | ≥ 1, ≤ 1000000 | Maximum size of the multiprocessing logging queue |
+| `AIPERF_LOGGING_MAX_CONSOLE_MESSAGE_LENGTH` | `500` | ≥ 100, ≤ 1000000 | Maximum length of a single log message in the rich console. This is to prevent log messages from being super long in the console, which can make it difficult to read. This does not affect file logging. |
+| `AIPERF_LOGGING_MIN_CONSOLE_INDENT_WRAP_WIDTH` | `90` | ≥ 0, ≤ 1000 | Minimum width of the rich console to indent wrapped log messages similar to how rich does it by default. If the console width is less than this value, no indentation will be applied, and lines will be wrapped all the way to the left edge of the console. This is to prevent wasted space on screens with narrow widths. |
+| `AIPERF_LOGGING_DEFAULT_CONSOLE_WIDTH` | `120` | ≥ 40, ≤ 1000 | Default width of the rich console for log messages if rich is unable to determine the width. This is useful for cases where AIPerf is running in a container or other environment where the console width is not available. Using this option will allow the log messages to be displayed in a more readable format. |
 
 ## METRICS
 

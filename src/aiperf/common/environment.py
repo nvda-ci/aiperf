@@ -255,6 +255,30 @@ class _LoggingSettings(BaseSettings):
         default=1000,
         description="Maximum size of the multiprocessing logging queue",
     )
+    MAX_CONSOLE_MESSAGE_LENGTH: int = Field(
+        ge=100,
+        le=1_000_000,
+        default=500,
+        description="Maximum length of a single log message in the rich console. "
+        "This is to prevent log messages from being super long in the console, which can make it difficult to read. "
+        "This does not affect file logging.",
+    )
+    MIN_CONSOLE_INDENT_WRAP_WIDTH: int = Field(
+        ge=0,
+        le=1000,
+        default=90,
+        description="Minimum width of the rich console to indent wrapped log messages similar to how rich does it by default. "
+        "If the console width is less than this value, no indentation will be applied, and lines will be wrapped all the way to "
+        "the left edge of the console. This is to prevent wasted space on screens with narrow widths.",
+    )
+    DEFAULT_CONSOLE_WIDTH: int = Field(
+        ge=40,
+        le=1000,
+        default=120,
+        description="Default width of the rich console for log messages if rich is unable to determine the width. "
+        "This is useful for cases where AIPerf is running in a container or other environment where the console width is not available. "
+        "Using this option will allow the log messages to be displayed in a more readable format.",
+    )
 
 
 class _MetricsSettings(BaseSettings):
