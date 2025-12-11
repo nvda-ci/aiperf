@@ -216,3 +216,191 @@ class TestVideoGenerator:
         ):
             result = generator._create_video_with_ffmpeg(frames)
             assert result == mock_result
+
+
+class TestCreateVideoWithFFmpeg:
+    """Test suite specifically for _create_video_with_ffmpeg method."""
+
+    @pytest.fixture
+    def frames(self):
+        """Create sample frames for testing."""
+        return [
+            Image.new("RGB", (64, 64), (255, 0, 0)),
+            Image.new("RGB", (64, 64), (0, 255, 0)),
+        ]
+
+    @pytest.fixture
+    def mp4_config(self):
+        """Create MP4 video configuration for testing."""
+        return VideoConfig(
+            width=64,
+            height=64,
+            duration=0.5,
+            fps=2,
+            format=VideoFormat.MP4,
+            codec="libx264",
+            synth_type=VideoSynthType.MOVING_SHAPES,
+        )
+
+    @pytest.fixture
+    def webm_config(self):
+        """Create WebM video configuration for testing."""
+        return VideoConfig(
+            width=64,
+            height=64,
+            duration=0.5,
+            fps=2,
+            format=VideoFormat.WEBM,
+            codec="libvpx-vp9",
+            synth_type=VideoSynthType.MOVING_SHAPES,
+        )
+
+    def test_mp4_uses_temp_files(self, frames, mp4_config):
+        """Test that MP4 format always uses temp file method."""
+        generator = VideoGenerator(mp4_config)
+        mock_result = "data:video/mp4;base64,FAKE_MP4_DATA"
+
+        with (
+            patch.object(
+                generator, "_create_video_with_temp_files", return_value=mock_result
+            ) as mock_temp,
+            patch.object(generator, "_create_video_with_pipes") as mock_pipes,
+        ):
+            result = generator._create_video_with_ffmpeg(frames)
+
+            mock_temp.assert_called_once_with(frames)
+            mock_pipes.assert_not_called()
+            assert result == mock_result
+
+    def test_webm_tries_pipes_first(self, frames, webm_config):
+        """Test that WebM format attempts pipe method first."""
+        generator = VideoGenerator(webm_config)
+        mock_result = "data:video/webm;base64,FAKE_WEBM_DATA"
+
+        with (
+            patch.object(
+                generator, "_create_video_with_pipes", return_value=mock_result
+            ) as mock_pipes,
+            patch.object(generator, "_create_video_with_temp_files") as mock_temp,
+        ):
+            result = generator._create_video_with_ffmpeg(frames)
+
+            mock_pipes.assert_called_once_with(frames)
+            mock_temp.assert_not_called()
+            assert result == mock_result
+
+    @pytest.mark.parametrize(
+        "exception_type",
+        [BrokenPipeError, OSError, RuntimeError],
+    )
+    def test_webm_fallback_on_pipe_errors(self, frames, webm_config, exception_type):
+        """Test that WebM falls back to temp files on pipe errors."""
+        generator = VideoGenerator(webm_config)
+        mock_result = "data:video/webm;base64,FAKE_WEBM_DATA"
+        error_msg = f"Test {exception_type.__name__}"
+
+        with (
+            patch.object(
+                generator,
+                "_create_video_with_pipes",
+                side_effect=exception_type(error_msg),
+            ) as mock_pipes,
+            patch.object(
+                generator, "_create_video_with_temp_files", return_value=mock_result
+            ) as mock_temp,
+        ):
+            result = generator._create_video_with_ffmpeg(frames)
+
+            mock_pipes.assert_called_once_with(frames)
+            mock_temp.assert_called_once_with(frames)
+            assert result == mock_result
+
+    def test_empty_frames_raises_error(self, webm_config):
+        """Test that empty frame list raises ValueError."""
+        generator = VideoGenerator(webm_config)
+
+        with pytest.raises(
+            ValueError, match="Cannot create video from empty frame list"
+        ):
+            generator._create_video_with_ffmpeg([])
+
+    def test_mp4_propagates_temp_file_errors(self, frames, mp4_config):
+        """Test that MP4 encoding errors are propagated."""
+        generator = VideoGenerator(mp4_config)
+        error_msg = "FFmpeg temp file error"
+
+        with (
+            patch.object(
+                generator,
+                "_create_video_with_temp_files",
+                side_effect=RuntimeError(error_msg),
+            ),
+            pytest.raises(RuntimeError, match=error_msg),
+        ):
+            generator._create_video_with_ffmpeg(frames)
+
+    def test_webm_propagates_both_method_failures(self, frames, webm_config):
+        """Test that errors are propagated when both methods fail."""
+        generator = VideoGenerator(webm_config)
+        pipe_error = "Pipe encoding failed"
+        temp_error = "Temp file encoding failed"
+
+        with (
+            patch.object(
+                generator,
+                "_create_video_with_pipes",
+                side_effect=RuntimeError(pipe_error),
+            ),
+            patch.object(
+                generator,
+                "_create_video_with_temp_files",
+                side_effect=RuntimeError(temp_error),
+            ),
+            pytest.raises(RuntimeError, match=temp_error),
+        ):
+            generator._create_video_with_ffmpeg(frames)
+
+    def test_logging_messages_mp4(self, frames, mp4_config, caplog):
+        """Test that appropriate log messages are generated for MP4."""
+        generator = VideoGenerator(mp4_config)
+        mock_result = "data:video/mp4;base64,FAKE_DATA"
+
+        with patch.object(
+            generator, "_create_video_with_temp_files", return_value=mock_result
+        ):
+            generator._create_video_with_ffmpeg(frames)
+
+            assert "file-based encoding for MP4" in caplog.text
+
+    def test_logging_messages_webm_pipe_success(self, frames, webm_config, caplog):
+        """Test log messages for successful pipe-based WebM encoding."""
+        generator = VideoGenerator(webm_config)
+        mock_result = "data:video/webm;base64,FAKE_DATA"
+
+        with patch.object(
+            generator, "_create_video_with_pipes", return_value=mock_result
+        ):
+            generator._create_video_with_ffmpeg(frames)
+
+            assert "pipe-based encoding for webm" in caplog.text.lower()
+
+    def test_logging_messages_webm_fallback(self, frames, webm_config, caplog):
+        """Test log messages when falling back from pipes to temp files."""
+        generator = VideoGenerator(webm_config)
+        mock_result = "data:video/webm;base64,FAKE_DATA"
+
+        with (
+            patch.object(
+                generator,
+                "_create_video_with_pipes",
+                side_effect=BrokenPipeError("Test error"),
+            ),
+            patch.object(
+                generator, "_create_video_with_temp_files", return_value=mock_result
+            ),
+        ):
+            generator._create_video_with_ffmpeg(frames)
+
+            assert "pipe-based encoding" in caplog.text.lower()
+            assert "falling back to file-based" in caplog.text.lower()
+            assert "BrokenPipeError" in caplog.text

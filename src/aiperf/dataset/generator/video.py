@@ -293,16 +293,46 @@ class VideoGenerator(BaseGenerator):
                 ) from e
 
     def _create_video_with_ffmpeg(self, frames: list[Image.Image]) -> str:
-        """Create video data using ffmpeg-python with improved error handling."""
+        """Create video data using ffmpeg-python with format-specific handling.
 
+        This method routes to the appropriate encoding strategy based on video format:
+
+        - MP4: Always uses temporary files because standard MP4 requires seekable
+          output for proper moov atom placement. While fragmented MP4 (fMP4) can
+          work with pipes, it's not supported by some decoders (e.g., NVIDIA NIM).
+
+        - WebM and other formats: Attempts pipe-based encoding first for efficiency
+          (no disk I/O), with automatic fallback to temporary files if pipe method
+          encounters errors.
+
+        Args:
+            frames: List of PIL Image objects to encode into video
+
+        Returns:
+            Base64-encoded video data with appropriate data URI prefix
+
+        Raises:
+            RuntimeError: If video encoding fails with both methods
+        """
+        if not frames:
+            raise ValueError("Cannot create video from empty frame list")
+
+        # MP4 format requires file-based approach due to moov atom positioning
+        if self.config.format == VideoFormat.MP4:
+            self.logger.debug("Using file-based encoding for MP4 format")
+            return self._create_video_with_temp_files(frames)
+
+        # For other formats (WebM, etc.), try efficient pipe-based method first
         try:
-            # First try the in-memory approach
+            self.logger.debug(
+                f"Attempting pipe-based encoding for {self.config.format} format"
+            )
             return self._create_video_with_pipes(frames)
         except (BrokenPipeError, OSError, RuntimeError) as e:
             self.logger.warning(
-                f"Pipe method failed ({e}), falling back to temporary file method"
+                f"Pipe-based encoding failed ({type(e).__name__}: {e}), "
+                f"falling back to file-based method"
             )
-            # Fall back to temporary file approach if pipes fail
             return self._create_video_with_temp_files(frames)
 
     def _prepare_frame_for_encoding(self, frame: Image.Image) -> bytes:
@@ -326,13 +356,6 @@ class VideoGenerator(BaseGenerator):
                 "vcodec": self.config.codec,
                 "pix_fmt": "yuv420p",
             }
-
-            # Add format-specific options for streaming/pipe output
-            if self.config.format == VideoFormat.MP4:
-                # For pipes, we need frag_keyframe and empty_moov for non-seekable output
-                output_options["movflags"] = (
-                    "frag_keyframe+empty_moov+default_base_moof"
-                )
 
             stdout, _ = (
                 ffmpeg.input(
