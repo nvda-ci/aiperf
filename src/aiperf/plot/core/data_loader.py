@@ -10,6 +10,7 @@ formats suitable for visualization and analysis.
 """
 
 import json
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -17,16 +18,20 @@ import numpy as np
 import pandas as pd
 from pydantic import Field
 
+from aiperf.common.constants import STAT_KEYS
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import AIPerfBaseModel
 from aiperf.common.models.record_models import MetricRecordInfo, MetricResult
 from aiperf.plot.constants import (
+    NON_METRIC_KEYS,
     PROFILE_EXPORT_AIPERF_JSON,
     PROFILE_EXPORT_GPU_TELEMETRY_JSONL,
     PROFILE_EXPORT_JSONL,
     PROFILE_EXPORT_TIMESLICES_CSV,
 )
+from aiperf.plot.core.plot_specs import ExperimentClassificationConfig
 from aiperf.plot.exceptions import DataLoadError
+from aiperf.plot.metric_names import get_metric_display_name
 
 
 class RunMetadata(AIPerfBaseModel):
@@ -53,6 +58,14 @@ class RunMetadata(AIPerfBaseModel):
     )
     was_cancelled: bool = Field(
         default=False, description="Whether the profiling run was cancelled early"
+    )
+    experiment_type: str = Field(
+        default="treatment",
+        description="Classification of run as 'baseline' or 'treatment' for visualization",
+    )
+    experiment_group: str = Field(
+        default="",
+        description="Experiment group identifier extracted from run name or path for grouping variants",
     )
 
 
@@ -117,20 +130,32 @@ class DerivedMetricCalculator:
         Returns:
             Dictionary with per-GPU throughput stats and unit, or None if base metric not found
         """
-        if "output_token_throughput" not in aggregated:
-            return None
+        throughput_data = None
 
-        throughput_data = aggregated["output_token_throughput"]
-        if not isinstance(throughput_data, dict):
+        if (
+            "metrics" in aggregated
+            and "output_token_throughput" in aggregated["metrics"]
+        ):
+            throughput_data = aggregated["metrics"]["output_token_throughput"]
+        elif "output_token_throughput" in aggregated:
+            throughput_data = aggregated["output_token_throughput"]
+
+        if throughput_data is None:
             return None
 
         per_gpu_data = {"unit": "tokens/sec/gpu"}
 
-        for key, value in throughput_data.items():
-            if key == "unit":
-                continue
-            if isinstance(value, int | float):
-                per_gpu_data[key] = value / gpu_count
+        if isinstance(throughput_data, dict):
+            for key, value in throughput_data.items():
+                if key == "unit":
+                    continue
+                if isinstance(value, int | float):
+                    per_gpu_data[key] = value / gpu_count
+        else:
+            for stat_name in STAT_KEYS:
+                stat_value = getattr(throughput_data, stat_name, None)
+                if stat_value is not None and isinstance(stat_value, int | float):
+                    per_gpu_data[stat_name] = stat_value / gpu_count
 
         return per_gpu_data
 
@@ -148,8 +173,18 @@ class DataLoader(AIPerfLoggerMixin):
     and parse them into structured formats for visualization.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        classification_config: ExperimentClassificationConfig | None = None,
+    ):
+        """
+        Initialize DataLoader.
+
+        Args:
+            classification_config: Configuration for baseline/treatment classification
+        """
         super().__init__()
+        self.classification_config = classification_config
 
     def load_run(self, run_path: Path, load_per_request_data: bool = True) -> RunData:
         """
@@ -427,9 +462,6 @@ class DataLoader(AIPerfLoggerMixin):
                 - "display_names": dict mapping metric tag to display name
                 - "units": dict mapping metric tag to unit string
         """
-        from aiperf.plot.constants import NON_METRIC_KEYS
-        from aiperf.plot.metric_names import get_metric_display_name
-
         if not run_data.aggregated:
             self.warning("No aggregated data available")
             return {"display_names": {}, "units": {}}
@@ -762,6 +794,76 @@ class DataLoader(AIPerfLoggerMixin):
         )
         return df
 
+    def _classify_experiment_type(self, run_path: Path, run_name: str) -> str:
+        """
+        Classify run as baseline or treatment.
+
+        Priority (highest to lowest):
+        1. Pattern matching from plot_config.yaml
+        2. Default from plot_config.yaml (or "treatment" if no config)
+
+        Args:
+            run_path: Path to the run directory
+            run_name: Name of the run (typically directory name)
+
+        Returns:
+            "baseline" or "treatment"
+        """
+        if self.classification_config:
+            for pattern in self.classification_config.baselines:
+                if fnmatch(run_name, pattern) or fnmatch(str(run_path), pattern):
+                    return "baseline"
+
+            for pattern in self.classification_config.treatments:
+                if fnmatch(run_name, pattern) or fnmatch(str(run_path), pattern):
+                    return "treatment"
+
+            return self.classification_config.default
+
+        return "treatment"
+
+    def _extract_experiment_group(self, run_path: Path, run_name: str) -> str:
+        """
+        Extract experiment group identifier from run path.
+
+        If experiment classification is configured and the parent directory matches
+        any baseline or treatment pattern, uses parent directory name.
+        Otherwise uses run directory name.
+
+        Args:
+            run_path: Path to the run directory
+            run_name: Name of the run (typically directory name)
+
+        Returns:
+            Experiment group identifier for grouping runs
+        """
+        # Try parent-based grouping if classification config exists
+        if self.classification_config:
+            parent = run_path.parent
+            if parent and parent.name:
+                parent_name = parent.name
+
+                # Check if parent matches any baseline pattern
+                for pattern in self.classification_config.baselines:
+                    if fnmatch(parent_name, pattern):
+                        return parent_name
+
+                # Check if parent matches any treatment pattern
+                for pattern in self.classification_config.treatments:
+                    if fnmatch(parent_name, pattern):
+                        return parent_name
+
+        # Fallback: use run_name
+        result = run_name if run_name else str(run_path.name)
+
+        if not result:
+            self.warning(
+                f"Could not extract experiment_group from {run_path}, using full path"
+            )
+            result = str(run_path)
+
+        return result
+
     def _extract_metadata(
         self,
         run_path: Path,
@@ -826,6 +928,10 @@ class DataLoader(AIPerfLoggerMixin):
                 else:
                     duration_seconds = duration / 1e9
 
+        experiment_type = self._classify_experiment_type(run_path, run_name)
+
+        experiment_group = self._extract_experiment_group(run_path, run_name)
+
         return RunMetadata(
             run_name=run_name,
             run_path=run_path,
@@ -837,4 +943,6 @@ class DataLoader(AIPerfLoggerMixin):
             start_time=start_time,
             end_time=end_time,
             was_cancelled=was_cancelled,
+            experiment_type=experiment_type,
+            experiment_group=experiment_group,
         )

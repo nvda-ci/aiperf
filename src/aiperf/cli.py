@@ -40,20 +40,45 @@ def plot(
     paths: list[str] | None = None,
     output: str | None = None,
     theme: str = "light",
+    config: str | None = None,
+    verbose: bool = False,
+    dashboard: bool = False,
+    port: int = 8050,
 ) -> None:
-    """Generate PNG visualizations from AIPerf profiling data.
+    """Generate visualizations from AIPerf profiling data.
 
-    TODO [AIP-546 and AIP-549]: Update for HTML and hosted options.
-    Currently creates static PNG plot images from profiling results. Automatically detects
-    whether to generate multi-run comparison plots or single-run time series plots
-    based on the directory structure.
+    On first run, automatically creates ~/.aiperf/plot_config.yaml which you can edit to
+    customize plots, including experiment classification (baseline vs treatment runs).
+    Use --config to specify a different config file.
+
+    Examples:
+        # Generate plots (auto-creates ~/.aiperf/plot_config.yaml on first run)
+        aiperf plot
+
+        # Use custom config
+        aiperf plot --config my_plots.yaml
+
+        # Show detailed error tracebacks
+        aiperf plot --verbose
 
     Args:
         paths: Paths to profiling run directories. Defaults to ./artifacts if not specified.
         output: Directory to save generated plots. Defaults to <first_path>/plots if not specified.
         theme: Plot theme to use: 'light' (white background) or 'dark' (dark background). Defaults to 'light'.
+        config: Path to custom plot configuration YAML file. If not specified, auto-creates and uses ~/.aiperf/plot_config.yaml.
+        verbose: Show detailed error tracebacks in console (errors are always logged to ~/.aiperf/plot.log).
+        dashboard: Launch interactive dashboard server instead of generating static PNGs.
+        port: Port for dashboard server (only used with --dashboard). Defaults to 8050.
     """
-    with exit_on_error(title="Error Running Plot Command"):
+    with exit_on_error(title="Error Running Plot Command", show_traceback=verbose):
         from aiperf.plot.cli_runner import run_plot_controller
 
-        run_plot_controller(paths, output, theme=theme)
+        run_plot_controller(
+            paths,
+            output,
+            theme=theme,
+            config=config,
+            verbose=verbose,
+            dashboard=dashboard,
+            port=port,
+        )

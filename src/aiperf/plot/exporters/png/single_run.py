@@ -14,9 +14,6 @@ import plotly.graph_objects as go
 import aiperf.plot.handlers.single_run_handlers  # noqa: F401
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.plot_specs import (
-    GPU_PLOT_SPECS,
-    SINGLE_RUN_PLOT_SPECS,
-    TIMESLICE_PLOT_SPECS,
     DataSource,
     PlotSpec,
 )
@@ -39,26 +36,25 @@ class SingleRunPNGExporter(BasePNGExporter):
        - Latency across time slices
     """
 
-    def export(self, run: RunData, available_metrics: dict) -> list[Path]:
+    def export(
+        self, run: RunData, available_metrics: dict, plot_specs: list[PlotSpec]
+    ) -> list[Path]:
         """
         Export single-run time series plots as PNG files.
 
         Args:
             run: RunData object with per-request data
             available_metrics: Dictionary with display_names and units for metrics
+            plot_specs: List of plot specifications defining which plots to generate
 
         Returns:
             List of Path objects for generated PNG files
         """
-        self.info("Generating single-run analysis plots")
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         generated_files = []
 
-        all_specs = SINGLE_RUN_PLOT_SPECS + TIMESLICE_PLOT_SPECS + GPU_PLOT_SPECS
-
-        for spec in all_specs:
+        for spec in plot_specs:
             try:
                 if not self._can_generate_plot(spec, run):
                     self.debug(f"Skipping {spec.name} - required data not available")
@@ -68,7 +64,7 @@ class SingleRunPNGExporter(BasePNGExporter):
 
                 path = self.output_dir / spec.filename
                 self._export_figure(fig, path)
-                self.info(f"✓ Generated {spec.filename}")
+                self.debug(f"Generated {spec.filename}")
                 generated_files.append(path)
 
             except Exception as e:

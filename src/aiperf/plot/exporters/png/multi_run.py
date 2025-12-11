@@ -17,7 +17,7 @@ from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.data_preparation import flatten_config
-from aiperf.plot.core.plot_specs import MULTI_RUN_PLOT_SPECS, PlotSpec
+from aiperf.plot.core.plot_specs import ExperimentClassificationConfig, PlotSpec
 from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
@@ -34,26 +34,31 @@ class MultiRunPNGExporter(BasePNGExporter):
     5. Token Throughput per GPU vs Interactivity (conditional on telemetry)
     """
 
-    def export(self, runs: list[RunData], available_metrics: dict) -> list[Path]:
+    def export(
+        self,
+        runs: list[RunData],
+        available_metrics: dict,
+        plot_specs: list[PlotSpec],
+        classification_config: ExperimentClassificationConfig | None = None,
+    ) -> list[Path]:
         """
         Export multi-run comparison plots as PNG files.
 
         Args:
             runs: List of RunData objects with aggregated metrics
             available_metrics: Dictionary with display_names and units for metrics
+            plot_specs: List of plot specifications defining which plots to generate
 
         Returns:
             List of Path objects for generated PNG files
         """
-        self.info(f"Generating multi-run comparison plots for {len(runs)} runs")
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        df = self._runs_to_dataframe(runs, available_metrics)
+        df = self._runs_to_dataframe(runs, available_metrics, classification_config)
 
         generated_files = []
 
-        for spec in MULTI_RUN_PLOT_SPECS:
+        for spec in plot_specs:
             try:
                 if not self._can_generate_plot(spec, df):
                     self.debug(f"Skipping {spec.name} - required columns not available")
@@ -63,7 +68,7 @@ class MultiRunPNGExporter(BasePNGExporter):
 
                 path = self.output_dir / spec.filename
                 self._export_figure(fig, path)
-                self.info(f"✓ Generated {spec.filename}")
+                self.debug(f"Generated {spec.filename}")
                 generated_files.append(path)
 
             except Exception as e:
@@ -111,7 +116,10 @@ class MultiRunPNGExporter(BasePNGExporter):
         return handler.create_plot(spec, df, available_metrics)
 
     def _runs_to_dataframe(
-        self, runs: list[RunData], available_metrics: dict
+        self,
+        runs: list[RunData],
+        available_metrics: dict,
+        classification_config: ExperimentClassificationConfig | None = None,
     ) -> pd.DataFrame:
         """
         Convert list of run data into a DataFrame for plotting.
@@ -129,10 +137,13 @@ class MultiRunPNGExporter(BasePNGExporter):
         for run in runs:
             row = {}
 
+            row["run_name"] = run.metadata.run_name
             row["model"] = run.metadata.model or "Unknown"
             row["concurrency"] = run.metadata.concurrency or 1
             row["request_count"] = run.metadata.request_count
             row["duration_seconds"] = run.metadata.duration_seconds
+            row["experiment_type"] = run.metadata.experiment_type
+            row["experiment_group"] = run.metadata.experiment_group
             if run.metadata.endpoint_type:
                 row["endpoint_type"] = run.metadata.endpoint_type
 
@@ -163,4 +174,28 @@ class MultiRunPNGExporter(BasePNGExporter):
 
             rows.append(row)
 
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
+
+        if "experiment_group" in df.columns:
+            if classification_config and classification_config.group_display_names:
+                df["group_display_name"] = (
+                    df["experiment_group"]
+                    .map(classification_config.group_display_names)
+                    .fillna(df["experiment_group"])
+                )
+            else:
+                df["group_display_name"] = df["experiment_group"]
+
+        if "experiment_group" in df.columns:
+            unique_groups = df["experiment_group"].unique()
+            self.info(
+                f"DataFrame has {len(unique_groups)} unique experiment_groups: {sorted(unique_groups)}"
+            )
+
+        if "experiment_type" in df.columns:
+            unique_types = df["experiment_type"].unique()
+            self.info(
+                f"DataFrame has {len(unique_types)} unique experiment_types: {sorted(unique_types)}"
+            )
+
+        return df

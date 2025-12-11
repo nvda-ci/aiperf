@@ -54,6 +54,19 @@ def calculate_throughput_events(requests_df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate throughput using event-based approach with evenly dispersed tokens.
 
+    This method provides a more accurate representation of token throughput over time
+    compared to traditional "spiky" plots that count tokens at request completion.
+
+    How it works:
+    1. For each request, tokens are assumed to be generated evenly from TTFT to request_end
+    2. Creates two events: generation_start (adds token rate) and request_end (subtracts rate)
+    3. Cumulative sum of all events shows total throughput at any point in time
+
+    This is particularly useful for:
+    - Identifying bottlenecks where throughput drops
+    - Comparing performance across different time periods
+    - Validating steady-state behavior
+
     Tokens are evenly distributed across the generation phase (from TTFT to request_end)
     rather than being counted at a single event. This creates smooth throughput curves
     that accurately represent the token generation rate over time.
@@ -290,9 +303,7 @@ def prepare_timeslice_metrics(
         plot_dfs.append(stat_df)
 
     if not plot_dfs:
-        raise DataLoadError(
-            f"No timeslice data for {metric_name} ({', '.join(stats)})"
-        )
+        raise DataLoadError(f"No timeslice data for {metric_name} ({', '.join(stats)})")
 
     plot_df = plot_dfs[0]
     for df in plot_dfs[1:]:
