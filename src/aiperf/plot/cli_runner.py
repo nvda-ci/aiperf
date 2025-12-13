@@ -16,6 +16,7 @@ def run_plot_controller(
     config: str | None = None,
     verbose: bool = False,
     dashboard: bool = False,
+    html: bool = False,
     port: int = 8050,
 ) -> None:
     """Generate plots from AIPerf profiling data.
@@ -28,6 +29,7 @@ def run_plot_controller(
         config: Path to custom plot configuration YAML file. If not specified, uses default config.
         verbose: Show detailed error tracebacks in console.
         dashboard: Launch interactive dashboard server instead of generating static PNGs.
+        html: Generate interactive HTML files instead of static PNGs.
         port: Port for dashboard server (only used with dashboard=True). Defaults to 8050.
     """
     input_paths = paths or ["./artifacts"]
@@ -35,9 +37,11 @@ def run_plot_controller(
 
     output_dir = Path(output) if output else input_paths[0] / "plots"
 
-    # Override mode if dashboard flag is set
+    # Override mode if dashboard or html flag is set
     if dashboard:
         mode = PlotMode.DASHBOARD
+    elif html:
+        mode = PlotMode.HTML
 
     if isinstance(mode, str):
         mode = PlotMode(mode.lower())

@@ -43,6 +43,7 @@ def plot(
     config: str | None = None,
     verbose: bool = False,
     dashboard: bool = False,
+    html: bool = False,
     port: int = 8050,
 ) -> None:
     """Generate visualizations from AIPerf profiling data.
@@ -68,6 +69,7 @@ def plot(
         config: Path to custom plot configuration YAML file. If not specified, auto-creates and uses ~/.aiperf/plot_config.yaml.
         verbose: Show detailed error tracebacks in console (errors are always logged to ~/.aiperf/plot.log).
         dashboard: Launch interactive dashboard server instead of generating static PNGs.
+        html: Generate interactive HTML files instead of static PNGs.
         port: Port for dashboard server (only used with --dashboard). Defaults to 8050.
     """
     with exit_on_error(title="Error Running Plot Command", show_traceback=verbose):
@@ -80,5 +82,6 @@ def plot(
             config=config,
             verbose=verbose,
             dashboard=dashboard,
+            html=html,
             port=port,
         )

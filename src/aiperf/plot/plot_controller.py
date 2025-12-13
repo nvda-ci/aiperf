@@ -10,7 +10,12 @@ from aiperf.plot.constants import PlotMode, PlotTheme
 from aiperf.plot.core.data_loader import DataLoader
 from aiperf.plot.core.mode_detector import ModeDetector, VisualizationMode
 from aiperf.plot.dashboard.server import DashboardServer
-from aiperf.plot.exporters import MultiRunPNGExporter, SingleRunPNGExporter
+from aiperf.plot.exporters import (
+    MultiRunHTMLExporter,
+    MultiRunPNGExporter,
+    SingleRunHTMLExporter,
+    SingleRunPNGExporter,
+)
 from aiperf.plot.logging import setup_console_only_logging, setup_plot_logging
 
 logger = logging.getLogger(__name__)
@@ -76,16 +81,18 @@ class PlotController:
         """Execute plot generation pipeline.
 
         Returns:
-            List of paths to generated plot files (PNG mode) or None (dashboard mode)
+            List of paths to generated plot files (PNG/HTML mode) or None (dashboard mode)
         """
         if self.mode == PlotMode.PNG:
             return self._generate_png_plots()
+        elif self.mode == PlotMode.HTML:
+            return self._generate_html_export()
         elif self.mode == PlotMode.DASHBOARD:
             self._launch_dashboard_server()
             return None
         else:
             raise ValueError(
-                f"Unsupported mode: {self.mode}. Currently only '{PlotMode.PNG}' and '{PlotMode.DASHBOARD}' are supported."
+                f"Unsupported mode: {self.mode}. Supported modes: {PlotMode.PNG}, {PlotMode.HTML}, {PlotMode.DASHBOARD}"
             )
 
     def _validate_paths(self) -> None:
@@ -219,3 +226,68 @@ class PlotController:
         )
 
         server.run()
+
+    def _generate_html_export(self) -> list[Path]:
+        """Generate interactive HTML export.
+
+        Returns:
+            List of paths to generated HTML files
+        """
+        self._validate_paths()
+        viz_mode, run_dirs = self._detect_visualization_mode()
+
+        mode_name = viz_mode.value.replace("_", "-")
+        run_count = len(run_dirs)
+        run_word = "run" if run_count == 1 else "runs"
+        logger.info(f"Generating {mode_name} HTML export ({run_count} {run_word})")
+
+        if viz_mode == VisualizationMode.MULTI_RUN:
+            return self._export_multi_run_html(run_dirs)
+        else:
+            return self._export_single_run_html(run_dirs[0])
+
+    def _export_multi_run_html(self, run_dirs: list[Path]) -> list[Path]:
+        """Export multi-run comparison as interactive HTML.
+
+        Args:
+            run_dirs: List of run directories to compare
+
+        Returns:
+            List of paths to generated HTML files
+        """
+        runs = []
+        for run_dir in run_dirs:
+            try:
+                run_data = self.loader.load_run(run_dir, load_per_request_data=False)
+                runs.append(run_data)
+            except Exception as e:
+                logger.warning(f"Failed to load run from {run_dir}: {e}")
+
+        if not runs:
+            raise ValueError("Failed to load any valid profiling runs")
+
+        available = self.loader.get_available_metrics(runs[0])
+        plot_specs = self.plot_config.get_multi_run_plot_specs()
+        classification_config = self.plot_config.get_experiment_classification_config()
+        exporter = MultiRunHTMLExporter(self.output_dir, theme=self.theme)
+        return exporter.export(
+            runs,
+            available,
+            plot_specs=plot_specs,
+            classification_config=classification_config,
+        )
+
+    def _export_single_run_html(self, run_dir: Path) -> list[Path]:
+        """Export single-run time series as interactive HTML.
+
+        Args:
+            run_dir: Run directory to generate HTML from
+
+        Returns:
+            List of paths to generated HTML files
+        """
+        run_data = self.loader.load_run(run_dir, load_per_request_data=True)
+        available = self.loader.get_available_metrics(run_data)
+        plot_specs = self.plot_config.get_single_run_plot_specs()
+        exporter = SingleRunHTMLExporter(self.output_dir, theme=self.theme)
+        return exporter.export(run_data, available, plot_specs=plot_specs)

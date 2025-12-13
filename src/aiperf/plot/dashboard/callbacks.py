@@ -34,6 +34,7 @@ from aiperf.plot.constants import (
     NVIDIA_DARK,
     NVIDIA_GRAY,
     NVIDIA_GREEN,
+    NVIDIA_TEXT_LIGHT,
     NVIDIA_WHITE,
     PLOT_FONT_FAMILY,
     STAT_LABELS,
@@ -2045,7 +2046,9 @@ def register_sidebar_widgets_theme_callback(app: dash.Dash):
         dropdown_classes = [dropdown_class] * num_dropdowns
 
         # Run selector label style
-        label_color = NVIDIA_GRAY if current_theme == PlotTheme.LIGHT else "#E0E0E0"
+        label_color = (
+            NVIDIA_GRAY if current_theme == PlotTheme.LIGHT else NVIDIA_TEXT_LIGHT
+        )
         label_style = {
             "display": "block",
             "margin": "4px 0",

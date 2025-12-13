@@ -15,6 +15,7 @@ from aiperf.plot.constants import (
     ALL_STAT_KEYS,
     NVIDIA_GRAY,
     NVIDIA_GREEN,
+    NVIDIA_TEXT_LIGHT,
     PLOT_FONT_FAMILY,
     PlotTheme,
 )
@@ -368,7 +369,7 @@ def create_run_selector_checklist(
     Returns:
         Dash HTML Div containing nested checklist
     """
-    colors = {"text": NVIDIA_GRAY if theme == PlotTheme.LIGHT else "#E0E0E0"}
+    colors = {"text": NVIDIA_GRAY if theme == PlotTheme.LIGHT else NVIDIA_TEXT_LIGHT}
 
     # If grouping is enabled and runs are provided, create nested structure
     if runs and group_by:

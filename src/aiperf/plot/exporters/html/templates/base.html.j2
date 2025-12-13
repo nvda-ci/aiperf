@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIPerf - {{ title }}</title>
+
+    <!-- Plotly.js -->
+    {{ plotly_js | safe }}
+
+    <!-- Embedded CSS -->
+    <style>
+        {{ css_bundle }}
+    </style>
+</head>
+<body class="theme-{{ theme }}">
+    <!-- Header -->
+    <header class="header">
+        <h1 class="header-title">AIPerf Dashboard</h1>
+        <div class="header-right">
+            <label class="theme-switch">
+                <input type="checkbox" id="theme-toggle" {% if theme == 'dark' %}checked{% endif %}>
+                <span class="theme-switch-label">Dark</span>
+            </label>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Plot Grid -->
+        <main class="plot-grid-container">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Add Plot Modal -->
+    <div id="add-plot-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Custom Plot</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="add-plot-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-x-metric">X-Axis Metric</label>
+                        <select id="new-x-metric" class="dropdown" required>
+                            <option value="">Select metric</option>
+                            {% for metric_name, metric_info in available_metrics.items() %}
+                            <option value="{{ metric_name }}">{{ metric_info.displayName }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-x-stat">X-Axis Statistic</label>
+                        <select id="new-x-stat" class="dropdown">
+                            <option value="">Select statistic</option>
+                            {% for stat_key in stat_keys %}
+                            <option value="{{ stat_key }}">{{ stat_labels.get(stat_key, stat_key) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-y-metric">Y-Axis Metric</label>
+                        <select id="new-y-metric" class="dropdown" required>
+                            <option value="">Select metric</option>
+                            {% for metric_name, metric_info in available_metrics.items() %}
+                            <option value="{{ metric_name }}">{{ metric_info.displayName }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-y-stat">Y-Axis Statistic</label>
+                        <select id="new-y-stat" class="dropdown">
+                            <option value="">Select statistic</option>
+                            {% for stat_key in stat_keys %}
+                            <option value="{{ stat_key }}">{{ stat_labels.get(stat_key, stat_key) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-plot-type">Plot Type</label>
+                        <select id="new-plot-type" class="dropdown">
+                            <option value="">Select plot type</option>
+                            <option value="scatter_line">Scatter + Line</option>
+                            <option value="scatter">Scatter</option>
+                            <option value="line">Line</option>
+                            <option value="bar">Bar</option>
+                            <option value="pareto">Pareto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-label-by">Label Points By</label>
+                        <select id="new-label-by" class="dropdown">
+                            <option value="">Select option</option>
+                            <option value="concurrency">Concurrency</option>
+                            <option value="model">Model</option>
+                            <option value="run_name">Run Name</option>
+                            {% for param in swept_parameters %}
+                            <option value="{{ param }}">{{ param | replace('_', ' ') | title }}</option>
+                            {% endfor %}
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-group-by">Group/Color By</label>
+                        <select id="new-group-by" class="dropdown">
+                            <option value="">Select option</option>
+                            {% if classification %}
+                            <option value="experiment_group" selected>Experiment Group</option>
+                            {% endif %}
+                            <option value="model"{% if not classification %} selected{% endif %}>Model</option>
+                            <option value="concurrency">Concurrency</option>
+                            {% for param in swept_parameters %}
+                            <option value="{{ param }}">{{ param | replace('_', ' ') | title }}</option>
+                            {% endfor %}
+                            <option value="none">None (Single Series)</option>
+                        </select>
+                    </div>
+                    <details class="more-options">
+                        <summary>More Options</summary>
+                        <div class="more-options-content">
+                            <div class="form-group">
+                                <label for="new-plot-title">Title</label>
+                                <input type="text" id="new-plot-title" class="dropdown" placeholder="Custom title (leave blank for auto)">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-x-label">X-Axis Label</label>
+                                <input type="text" id="new-x-label" class="dropdown" placeholder="X-axis label">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-x-log">X-Axis Log Scale</label>
+                                <select id="new-x-log" class="dropdown">
+                                    <option value="false" selected>Off</option>
+                                    <option value="true">On</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-x-autoscale">X-Axis Autoscale</label>
+                                <select id="new-x-autoscale" class="dropdown">
+                                    <option value="false" selected>Off</option>
+                                    <option value="true">On</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-y-label">Y-Axis Label</label>
+                                <input type="text" id="new-y-label" class="dropdown" placeholder="Y-axis label">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-y-log">Y-Axis Log Scale</label>
+                                <select id="new-y-log" class="dropdown">
+                                    <option value="false" selected>Off</option>
+                                    <option value="true">On</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-y-autoscale">Y-Axis Autoscale</label>
+                                <select id="new-y-autoscale" class="dropdown">
+                                    <option value="false" selected>Off</option>
+                                    <option value="true">On</option>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Custom Plot</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Plot Settings</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="settings-x-metric">X-Axis Metric</label>
+                    <select id="settings-x-metric" class="dropdown">
+                        {% for metric_name, metric_info in available_metrics.items() %}
+                        <option value="{{ metric_name }}">{{ metric_info.displayName }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="settings-x-stat">X-Axis Statistic</label>
+                    <select id="settings-x-stat" class="dropdown">
+                        {% for stat_key in stat_keys %}
+                        <option value="{{ stat_key }}">{{ stat_labels.get(stat_key, stat_key) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="settings-y-metric">Y-Axis Metric</label>
+                    <select id="settings-y-metric" class="dropdown">
+                        {% for metric_name, metric_info in available_metrics.items() %}
+                        <option value="{{ metric_name }}">{{ metric_info.displayName }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="settings-y-stat">Y-Axis Statistic</label>
+                    <select id="settings-y-stat" class="dropdown">
+                        {% for stat_key in stat_keys %}
+                        <option value="{{ stat_key }}">{{ stat_labels.get(stat_key, stat_key) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="settings-plot-type">Plot Type</label>
+                    <select id="settings-plot-type" class="dropdown">
+                        <option value="scatter_line">Scatter + Line</option>
+                        <option value="scatter">Scatter</option>
+                        <option value="line">Line</option>
+                        <option value="bar">Bar</option>
+                        <option value="pareto">Pareto</option>
+                    </select>
+                </div>
+                <details class="more-options">
+                    <summary>More Options</summary>
+                    <div class="more-options-content">
+                        <div class="form-group">
+                            <label for="settings-title">Title</label>
+                            <input type="text" id="settings-title" class="dropdown" placeholder="Custom title (leave blank for auto)">
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-x-label">X-Axis Label</label>
+                            <input type="text" id="settings-x-label" class="dropdown" placeholder="X-axis label">
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-x-log">X-Axis Log Scale</label>
+                            <select id="settings-x-log" class="dropdown">
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-x-autoscale">X-Axis Autoscale</label>
+                            <select id="settings-x-autoscale" class="dropdown">
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-y-label">Y-Axis Label</label>
+                            <input type="text" id="settings-y-label" class="dropdown" placeholder="Y-axis label">
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-y-log">Y-Axis Log Scale</label>
+                            <select id="settings-y-log" class="dropdown">
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-y-autoscale">Y-Axis Autoscale</label>
+                            <select id="settings-y-autoscale" class="dropdown">
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="settings-hide-btn">Hide Plot</button>
+                <div style="flex: 1"></div>
+                <button type="button" class="btn btn-primary" id="settings-apply-btn">Update</button>
+                <button type="button" class="btn btn-secondary" id="settings-save-as-new-btn">Save As New</button>
+                <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embedded Data -->
+    <script>
+        window.__AIPERF_DATA__ = {{ data_json | safe }};
+        window.__AIPERF_INITIAL_PLOTS__ = {{ initial_plots_json | safe }};
+        window.__AIPERF_CONFIG__ = {{ config_json | safe }};
+    </script>
+
+    <!-- Application JavaScript -->
+    <script>
+        {{ js_bundle }}
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved. #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{% extends "base.html.j2" %}
+
+{% block content %}
+<div id="plot-grid" class="plot-grid">
+    {% for plot in initial_plots %}
+    <div id="plot-container-{{ plot.id }}" class="plot-container size-{{ plot.sizeClass | default('half') }}">
+        <div class="plot-toolbar">
+            <button class="settings-btn" data-plot-id="{{ plot.id }}" title="Settings">⚙</button>
+            <button class="export-btn" data-plot-id="{{ plot.id }}" title="Export">📥</button>
+            <button class="hide-btn" data-plot-id="{{ plot.id }}" title="Hide">👁</button>
+        </div>
+        {% if figures_html and plot.id in figures_html %}
+        {{ figures_html[plot.id] | safe }}
+        {% else %}
+        <div id="plot-{{ plot.id }}" class="plot-area"></div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- Add Plot Slot -->
+    <div id="add-plot-slot" class="plot-add-slot">
+        <span class="add-icon">+</span>
+        <span class="add-text">Create Custom Plot</span>
+    </div>
+</div>
+{% endblock %}

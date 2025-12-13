@@ -37,6 +37,7 @@ class PlotMode(CaseInsensitiveStrEnum):
 
     PNG = "png"
     DASHBOARD = "dashboard"
+    HTML = "html"
 
 
 class PlotTheme(CaseInsensitiveStrEnum):
@@ -60,7 +61,7 @@ NVIDIA_DARK_BG = "#1a1a1a"
 NVIDIA_GRAY = "#999999"
 NVIDIA_BORDER_DARK = "#333333"
 NVIDIA_BORDER_LIGHT = "#CCCCCC"
-NVIDIA_TEXT_LIGHT = "#E0E0E0"
+NVIDIA_TEXT_LIGHT = "#E8E8E8"
 NVIDIA_CARD_BG = "#252525"
 OUTLIER_RED = "#E74C3C"
 
