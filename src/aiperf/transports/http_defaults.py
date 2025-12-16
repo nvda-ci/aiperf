@@ -70,7 +70,7 @@ class AioHttpDefaults:
     )
     TTL_DNS_CACHE = Environment.HTTP.TTL_DNS_CACHE  # Time to live for DNS cache
     USE_DNS_CACHE = True  # Enable DNS cache
-    ENABLE_CLEANUP_CLOSED = False  # Disable cleanup of closed connections
+    ENABLE_CLEANUP_CLOSED = True  # Enable cleanup of closed connections to prevent from re-using dead connections
     FORCE_CLOSE = False  # Disable force close connections
     KEEPALIVE_TIMEOUT = Environment.HTTP.KEEPALIVE_TIMEOUT  # Keepalive timeout
     HAPPY_EYEBALLS_DELAY = None  # Happy eyeballs delay (None = disabled)
