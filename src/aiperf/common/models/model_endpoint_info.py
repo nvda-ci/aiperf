@@ -12,7 +12,12 @@ from typing import Any
 from pydantic import Field
 
 from aiperf.common.config import EndpointDefaults, UserConfig
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
+from aiperf.common.enums import (
+    ConnectionReuseStrategy,
+    EndpointType,
+    ModelSelectionStrategy,
+    TransportType,
+)
 from aiperf.common.models import AIPerfBaseModel
 
 
@@ -99,9 +104,14 @@ class EndpointInfo(AIPerfBaseModel):
         "Alternatively, a string representing a json formatted dict can be provided.",
     )
 
+    connection_reuse_strategy: ConnectionReuseStrategy = Field(
+        default=EndpointDefaults.CONNECTION_REUSE_STRATEGY,
+        description="Transport connection reuse strategy.",
+    )
+
     @classmethod
     def from_user_config(cls, user_config: UserConfig) -> "EndpointInfo":
-        """Create an HttpEndpointInfo from a UserConfig."""
+        """Create an EndpointInfo from a UserConfig."""
         return cls(
             type=user_config.endpoint.type,
             custom_endpoint=user_config.endpoint.custom_endpoint,
@@ -111,6 +121,7 @@ class EndpointInfo(AIPerfBaseModel):
             extra=user_config.input.extra,
             timeout=user_config.endpoint.timeout_seconds,
             api_key=user_config.endpoint.api_key,
+            connection_reuse_strategy=user_config.endpoint.connection_reuse_strategy,
         )
 
 

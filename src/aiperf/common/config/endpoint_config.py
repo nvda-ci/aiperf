@@ -13,6 +13,7 @@ from aiperf.common.config.config_defaults import EndpointDefaults
 from aiperf.common.config.config_validators import parse_str_or_list
 from aiperf.common.config.groups import Groups
 from aiperf.common.enums import EndpointType, ModelSelectionStrategy, TransportType
+from aiperf.common.enums.plugin_enums import ConnectionReuseStrategy
 
 _logger = AIPerfLogger(__name__)
 
@@ -166,3 +167,20 @@ class EndpointConfig(BaseConfig):
             group=_CLI_GROUP,
         ),
     ] = None
+
+    connection_reuse_strategy: Annotated[
+        ConnectionReuseStrategy,
+        Field(
+            description=(
+                "Transport connection reuse strategy. "
+                "'pooled' (default): connections are pooled and reused across all requests. "
+                "'never': new connection for each request, closed after response. "
+                "'sticky-user-sessions': connection persists across turns of a multi-turn "
+                "conversation, closed on final turn (enables sticky load balancing)."
+            ),
+        ),
+        CLIParameter(
+            name=("--connection-reuse-strategy",),
+            group=_CLI_GROUP,
+        ),
+    ] = EndpointDefaults.CONNECTION_REUSE_STRATEGY

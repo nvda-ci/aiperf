@@ -36,6 +36,7 @@ from aiperf.dataset.loader.protocol import (
     CustomDatasetLoaderProtocol,
 )
 from aiperf.dataset.loader.random_pool import (
+    Filename,
     RandomPoolDatasetLoader,
 )
 from aiperf.dataset.loader.sharegpt import (
@@ -52,6 +53,7 @@ __all__ = [
     "BasePublicDatasetLoader",
     "CustomDatasetLoaderProtocol",
     "CustomDatasetT",
+    "Filename",
     "MediaConversionMixin",
     "MooncakeTrace",
     "MooncakeTraceDatasetLoader",

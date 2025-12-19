@@ -9,6 +9,8 @@ from aiperf.common.enums import (
     AIPerfUIType,
     AudioFormat,
     CommunicationBackend,
+    ConnectionReuseStrategy,
+    DatasetSamplingStrategy,
     EndpointType,
     ExportLevel,
     ImageFormat,
@@ -19,7 +21,6 @@ from aiperf.common.enums import (
     VideoFormat,
     VideoSynthType,
 )
-from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
 
 
 #
@@ -38,6 +39,7 @@ class EndpointDefaults:
     URL = "localhost:8000"
     TIMEOUT = 600.0
     API_KEY = None
+    CONNECTION_REUSE_STRATEGY = ConnectionReuseStrategy.POOLED
 
 
 @dataclass(frozen=True)
