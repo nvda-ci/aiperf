@@ -246,6 +246,7 @@ class GpuMetricTimeSeries:
             std=float(np.std(arr)),
             count=len(arr),
             current=float(arr[-1]),
+            sum=float(np.sum(arr)),
             p1=p1,
             p5=p5,
             p10=p10,

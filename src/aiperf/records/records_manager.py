@@ -22,7 +22,12 @@ from aiperf.common.enums import (
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import FactoryCreationError, PostProcessorDisabled
 from aiperf.common.factories import ResultsProcessorFactory, ServiceFactory
-from aiperf.common.hooks import background_task, on_command, on_message, on_pull_message
+from aiperf.common.hooks import (
+    background_task,
+    on_command,
+    on_message,
+    on_pull_message,
+)
 from aiperf.common.messages import (
     AllRecordsReceivedMessage,
     CreditPhaseCompleteMessage,
@@ -63,6 +68,7 @@ from aiperf.common.protocols import (
     ServerMetricsProcessorProtocol,
     ServiceProtocol,
 )
+from aiperf.records.live_metrics_server import LiveMetricsServer
 from aiperf.records.phase_completion import PhaseCompletionChecker
 
 
@@ -133,6 +139,21 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._server_metrics_processors: list[ServerMetricsProcessorProtocol] = []  # fmt: skip
         self._gpu_telemetry_accumulator: GPUTelemetryAccumulatorProtocol | None = None  # fmt: skip
         self._server_metrics_accumulator: ServerMetricsAccumulatorProtocol | None = None  # fmt: skip
+
+        # Frozen metrics for Prometheus after benchmark completion
+        self._realtime_metrics_frozen: bool = False
+        self._previous_realtime_metrics: list[MetricResult] | None = None
+
+        # Initialize live metrics server if enabled
+        if self.user_config.live_metrics_port is not None:
+            live_metrics_server = LiveMetricsServer(
+                user_config=self.user_config,
+                metrics_callback=self._generate_realtime_metrics_if_needed,
+            )
+            self.attach_child_lifecycle(live_metrics_server)
+            self.info(
+                f"Live metrics endpoint configured on {self.user_config.live_metrics_host}:{self.user_config.live_metrics_port}"
+            )
 
         for results_processor_type in ResultsProcessorFactory.get_all_class_types():
             try:
@@ -564,7 +585,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
     async def _report_realtime_metrics(self) -> None:
         """Report inference metrics (used by command handler)."""
-        metrics = await self._generate_realtime_metrics()
+        metrics = await self._generate_realtime_metrics_if_needed()
         if metrics:
             await self.publish(
                 RealtimeMetricsMessage(
@@ -574,7 +595,11 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             )
 
     async def _generate_realtime_metrics(self) -> list[MetricResult]:
-        """Generate the real-time metrics for the profile run."""
+        """Generate the real-time metrics for the profile run.
+
+        If the benchmark has completed, returns frozen metrics to ensure
+        consistent values (e.g., benchmark duration doesn't keep increasing).
+        """
         results = await asyncio.gather(
             *[
                 results_processor.summarize()
@@ -594,6 +619,14 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         ]
 
         return metric_results
+
+    async def _generate_realtime_metrics_if_needed(self) -> list[MetricResult]:
+        """Generate the real-time metrics if needed."""
+        if self._realtime_metrics_frozen:
+            return self._previous_realtime_metrics
+        metrics = await self._generate_realtime_metrics()
+        self._previous_realtime_metrics = metrics
+        return metrics
 
     async def _process_results(self, cancelled: bool) -> ProcessRecordsResult:
         """Process the results."""
@@ -619,6 +652,16 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 error_results.append(result)
             elif isinstance(result, BaseException):
                 error_results.append(ErrorDetails.from_exception(result))
+
+        # Freeze metrics for Prometheus endpoint after benchmark completion
+        # This ensures values like benchmark duration don't keep increasing
+        self._realtime_metrics_frozen = True
+        self._previous_realtime_metrics = [
+            r for r in records_results if isinstance(r, MetricResult)
+        ]
+        self.debug(
+            lambda: f"Frozen {len(self._previous_realtime_metrics)} metrics for Prometheus"
+        )
 
         error_summary = [
             ErrorDetailsCount(error_details=error_details, count=count)

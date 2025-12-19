@@ -449,6 +449,20 @@ Enable GPU telemetry console display and optionally specify: (1) 'dashboard' for
 
 Disable GPU telemetry collection entirely.
 
+#### `--live-metrics-port` `<int>`
+
+Enable live metrics HTTP endpoint on the specified port. Exposes a /metrics endpoint in Prometheus Exposition Format for real-time metrics scraping by PodMonitors. Example: --live-metrics-port 9090.
+
+#### `--live-metrics-host` `<str>`
+
+Host address to bind the live metrics endpoint. Use 127.0.0.1 for localhost only (default), or 0.0.0.0 to listen on all interfaces. Only used when --live-metrics-port is specified.
+<br>_Default: `127.0.0.1`_
+
+#### `--live-metrics-shutdown-delay` `<int>`
+
+Seconds to delay shutdown after benchmark completes, allowing final metrics to be scraped. Only used when --live-metrics-port is specified. Default: 0 (no delay).
+<br>_Default: `0`_
+
 ## Server Metrics Options
 
 #### `--server-metrics` `<list>`

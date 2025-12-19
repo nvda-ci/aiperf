@@ -49,7 +49,9 @@ class BaseMetricUnit(BasePydanticBackedStrEnum):
 
     def display_name(self) -> str:
         """Get the display name of the metric unit."""
-        return self.name.lower().replace("_per_second", "/s")
+        return (
+            self.name.lower().replace("_per_second", "/s").replace("_per_user", "/user")
+        )
 
     @cached_property
     def info(self) -> BaseMetricUnitInfo:

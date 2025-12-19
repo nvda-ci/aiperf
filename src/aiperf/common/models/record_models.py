@@ -32,7 +32,7 @@ from aiperf.common.utils import load_json_str
 _logger = AIPerfLogger(__name__)
 
 
-class MetricResult(JsonMetricResult):
+class MetricResult(AIPerfBaseModel):
     """The result values of a single metric."""
 
     tag: MetricTagT = Field(description="The unique identifier of the metric")
@@ -41,9 +41,27 @@ class MetricResult(JsonMetricResult):
     header: str = Field(
         description="The user friendly name of the metric (e.g. 'Inter Token Latency')"
     )
+    unit: str = Field(description="The unit of the metric, e.g. 'ms' or 'requests/sec'")
+    avg: float | None = None
+    min: int | float | None = None
+    max: int | float | None = None
+    std: float | None = None
+    p1: float | None = None
+    p5: float | None = None
+    p10: float | None = None
+    p25: float | None = None
+    p50: float | None = None
+    p75: float | None = None
+    p90: float | None = None
+    p95: float | None = None
+    p99: float | None = None
     count: int | None = Field(
         default=None,
         description="The total number of records used to calculate the metric",
+    )
+    sum: float | None = Field(
+        default=None,
+        description="The sum of the metric values",
     )
     current: float | None = Field(
         default=None,

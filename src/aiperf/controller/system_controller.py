@@ -594,12 +594,23 @@ class SystemController(SignalHandlerMixin, BaseService):
             if telemetry_ready_for_shutdown and server_metrics_ready_for_shutdown:
                 self._shutdown_triggered = True
                 self.debug("All results received, initiating shutdown")
-                await asyncio.shield(self.stop())
             else:
                 if not telemetry_ready_for_shutdown:
                     self.debug("Waiting for telemetry results...")
                 if not server_metrics_ready_for_shutdown:
                     self.debug("Waiting for server metrics results...")
+                return
+
+        # Outside lock: wait for metrics scraping if enabled and delay configured
+        if (
+            self.user_config.live_metrics_port is not None
+            and self.user_config.live_metrics_shutdown_delay > 0
+        ):
+            delay = self.user_config.live_metrics_shutdown_delay
+            self.info(f"Waiting {delay}s for final metrics to be scraped...")
+            await asyncio.sleep(delay)
+
+        await asyncio.shield(self.stop())
 
     async def _handle_signal(self, sig: int) -> None:
         """Handle received signals by triggering graceful shutdown.

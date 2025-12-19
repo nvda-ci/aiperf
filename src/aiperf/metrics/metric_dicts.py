@@ -210,4 +210,5 @@ class MetricArray(Generic[MetricValueTypeVarT]):
             p95=p95,
             p99=p99,
             count=len(self._array),
+            sum=self._array.sum,
         )

@@ -22,5 +22,7 @@ STAT_KEYS = [
     "std",
 ]
 
+EXTENDED_STAT_KEYS = STAT_KEYS + ["sum", "current"]
+
 GOOD_REQUEST_COUNT_TAG = "good_request_count"
 """GoodRequestCount metric tag"""

@@ -426,6 +426,72 @@ class UserConfig(BaseConfig):
         """Get the parsed server metrics Prometheus endpoint URLs."""
         return self._server_metrics_urls
 
+    live_metrics_port: Annotated[
+        int | None,
+        Field(
+            ge=1024,
+            le=65535,
+            description=(
+                "Enable live metrics HTTP endpoint on the specified port. "
+                "Exposes a /metrics endpoint in Prometheus Exposition Format "
+                "for real-time metrics scraping by PodMonitors. "
+                "Example: --live-metrics-port 9090"
+            ),
+        ),
+        CLIParameter(
+            name=("--live-metrics-port",),
+            group=Groups.TELEMETRY,
+        ),
+    ] = None
+
+    live_metrics_host: Annotated[
+        str,
+        Field(
+            description=(
+                "Host address to bind the live metrics endpoint. "
+                "Use 127.0.0.1 for localhost only (default), "
+                "or 0.0.0.0 to listen on all interfaces. "
+                "Only used when --live-metrics-port is specified."
+            ),
+        ),
+        CLIParameter(
+            name=("--live-metrics-host",),
+            group=Groups.TELEMETRY,
+        ),
+    ] = "127.0.0.1"
+
+    live_metrics_shutdown_delay: Annotated[
+        int,
+        Field(
+            ge=0,
+            le=300,
+            description=(
+                "Seconds to delay shutdown after benchmark completes, "
+                "allowing final metrics to be scraped. "
+                "Only used when --live-metrics-port is specified. Default: 0 (no delay)."
+            ),
+        ),
+        CLIParameter(
+            name=("--live-metrics-shutdown-delay",),
+            group=Groups.TELEMETRY,
+        ),
+    ] = 0
+
+    @model_validator(mode="after")
+    def _validate_live_metrics_options(self) -> Self:
+        """Warn if live metrics options are specified without enabling the endpoint."""
+        if self.live_metrics_port is None:
+            ignored_options = []
+            if "live_metrics_host" in self.model_fields_set:
+                ignored_options.append("--live-metrics-host")
+            if "live_metrics_shutdown_delay" in self.model_fields_set:
+                ignored_options.append("--live-metrics-shutdown-delay")
+            if ignored_options:
+                _logger.warning(
+                    f"{', '.join(ignored_options)} ignored because --live-metrics-port is not specified"
+                )
+        return self
+
     @model_validator(mode="after")
     def _compute_config(self) -> Self:
         """Compute additional configuration.

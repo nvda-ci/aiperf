@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from urllib.parse import urlparse
 
 from aiperf.common.aiperf_logger import AIPerfLogger
-from aiperf.common.constants import STAT_KEYS
+from aiperf.common.constants import EXTENDED_STAT_KEYS
 from aiperf.common.exceptions import MetricUnitError
 from aiperf.common.models import MetricResult
 from aiperf.common.types import MetricTagT
@@ -55,7 +55,7 @@ def to_display_unit(result: MetricResult, registry: MetricRegistry) -> MetricRes
     record = result.model_copy(deep=True)
     record.unit = display_unit.value
 
-    for stat in STAT_KEYS:
+    for stat in EXTENDED_STAT_KEYS:
         val = getattr(record, stat, None)
         if val is None:
             continue
