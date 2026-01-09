@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import contextlib
@@ -26,9 +26,15 @@ class Tokenizer:
         Initialize the tokenizer with default values for call, encode, and decode.
         """
         self._tokenizer = None
+        self._model_name: str | None = None
         self._call_args = {"add_special_tokens": False}
         self._encode_args = {"add_special_tokens": False}
         self._decode_args = {"skip_special_tokens": True}
+
+    @property
+    def model_name(self) -> str | None:
+        """Get the model name used to initialize this tokenizer."""
+        return self._model_name
 
     @classmethod
     def from_pretrained(
@@ -54,6 +60,7 @@ class Tokenizer:
                 from transformers import AutoTokenizer
 
                 tokenizer_cls = cls()
+                tokenizer_cls._model_name = name
 
                 tokenizer_cls._tokenizer = AutoTokenizer.from_pretrained(
                     name, trust_remote_code=trust_remote_code, revision=revision

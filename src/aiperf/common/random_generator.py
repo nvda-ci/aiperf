@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Unified random number generation for AIPerf.
@@ -56,6 +56,7 @@ from aiperf.common.exceptions import InvalidStateError
 __all__ = [
     "RandomGenerator",
     "derive",
+    "get_seed",
     "init",
     "reset",
 ]
@@ -474,3 +475,25 @@ def reset() -> None:
     """
     global _manager
     _manager = None
+
+
+def get_seed() -> int | None:
+    """Get the root seed used to initialize the global RNG manager.
+
+    Returns:
+        The root seed if initialized with a deterministic seed, or None
+        if initialized in non-deterministic mode.
+
+    Raises:
+        InvalidStateError: If global RNG manager has not been initialized.
+
+    Example:
+        >>> rng.init(42)
+        >>> rng.get_seed()
+        42
+    """
+    if _manager is None:
+        raise InvalidStateError(
+            "Global RNG manager has not been initialized. Call rng.init() first."
+        )
+    return _manager._root_seed

@@ -22,6 +22,7 @@ from aiperf.dataset.generator.image import (
 from aiperf.dataset.generator.prompt import (
     DEFAULT_CORPUS_FILE,
     PromptGenerator,
+    sample_tokens_from_corpus,
 )
 from aiperf.dataset.generator.video import (
     VideoGenerator,
@@ -36,4 +37,5 @@ __all__ = [
     "PromptGenerator",
     "SUPPORTED_BIT_DEPTHS",
     "VideoGenerator",
+    "sample_tokens_from_corpus",
 ]

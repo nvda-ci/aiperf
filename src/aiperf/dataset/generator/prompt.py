@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -17,6 +17,50 @@ from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.generator.base import BaseGenerator
 
 DEFAULT_CORPUS_FILE = "assets/shakespeare.txt"
+
+
+def sample_tokens_from_corpus(
+    corpus,
+    num_tokens: int,
+    rng_to_use,
+    sep_token: int | None = None,
+) -> list[int]:
+    """Sample tokens from a corpus with optional separator token.
+
+    Core sampling logic shared between PromptGenerator and parallel workers.
+
+    Args:
+        corpus: Token corpus (list or numpy array)
+        num_tokens: Number of tokens to sample
+        rng_to_use: RandomGenerator for sampling start position
+        sep_token: Optional separator token to prepend (BOS/EOS)
+
+    Returns:
+        List of sampled token IDs
+    """
+    import numpy as np
+
+    corpus_len = len(corpus)
+    tokens: list[int] = []
+
+    if sep_token is not None:
+        tokens.append(sep_token)
+        num_tokens -= 1
+
+    start = rng_to_use.randrange(corpus_len)
+    end = start + num_tokens
+
+    if end <= corpus_len:
+        chunk = corpus[start:end]
+    else:
+        chunk = list(corpus[start:]) + list(corpus[: end - corpus_len])
+
+    if isinstance(chunk, np.ndarray):
+        tokens.extend(chunk.tolist())
+    else:
+        tokens.extend(chunk)
+
+    return tokens
 
 
 class PromptGenerator(BaseGenerator):
@@ -217,26 +261,13 @@ class PromptGenerator(BaseGenerator):
                 current_block_size = final_block_size
 
             if hash_id not in self._cache:
-                # Re-seed the hash_id RNG for deterministic, reproducible generation
-                # This ensures the same hash_id always produces the same tokens
-                # regardless of worker or processing order
                 self._hash_id_corpus_rng.reseed_for_hash_id(hash_id)
-
-                # To ensure that the prompt doesn't merge chunks, we insert a BOS or EOS token
-                # at the beginning. Length is maintained and the prompt generates the expected
-                # number of tokens. If no BOS or EOS token is available, we don't insert one.
-                prompt_tokens: list[int] = []
-                if self.tokenizer.block_separation_token_id is not None:
-                    prompt_tokens += [self.tokenizer.block_separation_token_id]
-                    prompt_tokens += self._sample_tokens(
-                        current_block_size - 1, rng_to_use=self._hash_id_corpus_rng
-                    )
-                else:
-                    prompt_tokens += self._sample_tokens(
-                        current_block_size, rng_to_use=self._hash_id_corpus_rng
-                    )
-
-                self._cache[hash_id] = prompt_tokens  # store to cache
+                self._cache[hash_id] = sample_tokens_from_corpus(
+                    self._tokenized_corpus,
+                    current_block_size,
+                    self._hash_id_corpus_rng,
+                    self.tokenizer.block_separation_token_id,
+                )
 
             final_prompt.extend(self._cache[hash_id])
 
@@ -267,16 +298,13 @@ class PromptGenerator(BaseGenerator):
                 f"Returning a prompt of length {self._corpus_size}."
             )
 
-        rng_to_use = rng_to_use or self._corpus_rng
-        start_idx = rng_to_use.randrange(self._corpus_size)
-
-        end_idx = start_idx + num_tokens
-        prompt_tokens = self._tokenized_corpus[start_idx:end_idx]
-        if end_idx > self._corpus_size:
-            prompt_tokens += self._tokenized_corpus[: end_idx - self._corpus_size]
-
-        self.trace(lambda: f"Sampled {len(prompt_tokens)} tokens from corpus")
-        return prompt_tokens
+        tokens = sample_tokens_from_corpus(
+            self._tokenized_corpus,
+            num_tokens,
+            rng_to_use or self._corpus_rng,
+        )
+        self.trace(lambda: f"Sampled {len(tokens)} tokens from corpus")
+        return tokens
 
     def get_random_prefix_prompt(self) -> str:
         """

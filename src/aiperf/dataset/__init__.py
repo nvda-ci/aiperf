@@ -25,6 +25,7 @@ from aiperf.dataset.generator import (
     ImageGenerator,
     PromptGenerator,
     VideoGenerator,
+    sample_tokens_from_corpus,
 )
 from aiperf.dataset.loader import (
     AIPERF_DATASET_CACHE_DIR,
@@ -83,4 +84,5 @@ __all__ = [
     "encode_image",
     "main",
     "open_image",
+    "sample_tokens_from_corpus",
 ]
