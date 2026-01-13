@@ -1,10 +1,8 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import tempfile
 from pathlib import Path
-
-import pytest
 
 from aiperf.common.config import (
     EndpointConfig,
@@ -13,31 +11,31 @@ from aiperf.common.config import (
     UserConfig,
 )
 from aiperf.common.enums import CustomDatasetType, TimingMode
-from aiperf.timing.config import TimingManagerConfig
+from aiperf.timing.config import TimingConfig
 
 
 class TestTimingConfigurationIntegration:
     """Test timing configuration integration with effective request count."""
 
     def test_effective_request_count_in_timing_config(self, create_mooncake_trace_file):
-        """Test that TimingManagerConfig uses effective request count from dataset."""
+        """Test that TimingConfig honors explicit user request_count over dataset size."""
         filename = create_mooncake_trace_file(3)  # 3 entries
 
         try:
             user_config = UserConfig(
                 endpoint=EndpointConfig(model_names=["test-model"]),
-                load_generator=LoadGeneratorConfig(
+                loadgen=LoadGeneratorConfig(
                     request_count=100
-                ),  # Should be overridden
+                ),  # User's explicit value should be honored
                 input=InputConfig(
                     file=filename, custom_dataset_type=CustomDatasetType.MOONCAKE_TRACE
                 ),
             )
 
-            timing_config = TimingManagerConfig.from_user_config(user_config)
+            timing_config = TimingConfig.from_user_config(user_config)
 
-            # Should use dataset size (3), not original request_count (100) for mooncake_trace
-            assert timing_config.request_count == 3
+            # Should use user's explicit request_count (100), not dataset size (3)
+            assert timing_config.phase_configs[0].total_expected_requests == 100
 
         finally:
             Path(filename).unlink(missing_ok=True)
@@ -54,11 +52,13 @@ class TestTimingConfigurationIntegration:
                 ),
             )
 
-            timing_config = TimingManagerConfig.from_user_config(user_config)
+            timing_config = TimingConfig.from_user_config(user_config)
 
             # Should auto-detect fixed schedule due to timestamps
-            assert timing_config.timing_mode == TimingMode.FIXED_SCHEDULE
-            assert timing_config.request_count == 3
+            assert (
+                timing_config.phase_configs[0].timing_mode == TimingMode.FIXED_SCHEDULE
+            )
+            assert timing_config.phase_configs[0].total_expected_requests == 3
 
         finally:
             Path(filename).unlink(missing_ok=True)
@@ -75,11 +75,12 @@ class TestTimingConfigurationIntegration:
                 ),
             )
 
-            timing_config = TimingManagerConfig.from_user_config(user_config)
+            timing_config = TimingConfig.from_user_config(user_config)
 
             # Should use request rate (default) since no timestamps
-            assert timing_config.timing_mode == TimingMode.REQUEST_RATE
-            assert timing_config.request_count == 3
+            assert timing_config.phase_configs[0].timing_mode == TimingMode.REQUEST_RATE
+            # When no explicit request_count is provided and no timestamps, defaults to 10
+            assert timing_config.phase_configs[0].total_expected_requests == 10
 
         finally:
             Path(filename).unlink(missing_ok=True)
@@ -92,10 +93,10 @@ class TestTimingConfigurationIntegration:
             # No custom dataset configuration
         )
 
-        timing_config = TimingManagerConfig.from_user_config(user_config)
+        timing_config = TimingConfig.from_user_config(user_config)
 
         # Should use original request_count since no custom dataset
-        assert timing_config.request_count == 42
+        assert timing_config.phase_configs[0].total_expected_requests == 42
 
     def test_empty_dataset_file_behavior(self, create_mooncake_trace_file):
         """Test behavior with empty dataset file."""
@@ -111,9 +112,12 @@ class TestTimingConfigurationIntegration:
                 ),
             )
 
-            # Should raise an error when trying to get effective request count
-            with pytest.raises(ValueError, match="Empty mooncake_trace dataset file"):
-                TimingManagerConfig.from_user_config(user_config)
+            timing_config = TimingConfig.from_user_config(user_config)
+
+            # When dataset file is empty and no request_count provided, defaults to 10
+            assert timing_config.phase_configs[0].total_expected_requests == 10
+            # Timing mode should still be REQUEST_RATE (no timestamps means no fixed schedule)
+            assert timing_config.phase_configs[0].timing_mode == TimingMode.REQUEST_RATE
 
         finally:
             Path(filename).unlink(missing_ok=True)
@@ -125,7 +129,7 @@ class TestTimingConfigurationIntegration:
         try:
             user_config = UserConfig(
                 endpoint=EndpointConfig(model_names=["test-model"]),
-                load_generator=LoadGeneratorConfig(
+                loadgen=LoadGeneratorConfig(
                     request_rate=10  # Should be ignored due to fixed schedule
                 ),
                 input=InputConfig(
@@ -134,16 +138,18 @@ class TestTimingConfigurationIntegration:
             )
 
             # Test that all the pieces work together
-            effective_count = user_config.get_effective_request_count()
+            effective_count = user_config._count_dataset_entries()
             should_use_fixed = (
                 user_config._should_use_fixed_schedule_for_mooncake_trace()
             )
-            timing_config = TimingManagerConfig.from_user_config(user_config)
+            timing_config = TimingConfig.from_user_config(user_config)
 
             assert effective_count == 2
             assert should_use_fixed is True
-            assert timing_config.request_count == 2
-            assert timing_config.timing_mode == TimingMode.FIXED_SCHEDULE
+            assert timing_config.phase_configs[0].total_expected_requests == 2
+            assert (
+                timing_config.phase_configs[0].timing_mode == TimingMode.FIXED_SCHEDULE
+            )
 
         finally:
             Path(filename).unlink(missing_ok=True)

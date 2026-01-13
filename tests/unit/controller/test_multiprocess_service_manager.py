@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
@@ -13,7 +13,6 @@ from aiperf.controller.multiprocess_service_manager import (
     MultiProcessRunInfo,
     MultiProcessServiceManager,
 )
-from tests.unit.conftest import real_sleep
 
 
 class TestMultiProcessServiceManager:
@@ -62,7 +61,6 @@ class TestMultiProcessServiceManager:
 
         This prevents the system from hanging indefinitely waiting for a dead process to register.
         """
-        asyncio.sleep = real_sleep
         # Create a process info with a dead process
         dead_process_info = MultiProcessRunInfo.model_construct(
             process=mock_dead_process,
@@ -89,7 +87,6 @@ class TestMultiProcessServiceManager:
         mock_dead_process: MagicMock,
     ):
         """Test that the manager raises error for dead process even when other processes are alive."""
-        asyncio.sleep = real_sleep
         # Create mix of alive and dead processes
         alive_process_info = MultiProcessRunInfo.model_construct(
             process=mock_alive_process,
@@ -117,7 +114,6 @@ class TestMultiProcessServiceManager:
         self, service_manager: MultiProcessServiceManager
     ):
         """Test that a None process (failed to start) is treated as dead."""
-        asyncio.sleep = real_sleep
         # Create a process info with None process (failed to start)
         none_process_info = MultiProcessRunInfo.model_construct(
             process=None,
@@ -141,7 +137,6 @@ class TestMultiProcessServiceManager:
     ):
         """Test that setting the stop event cancels the registration wait gracefully."""
         # Sleep for a fraction of the time for faster test execution
-        asyncio.sleep = lambda x: real_sleep(0.01 * x)
         # Create an alive process that won't register (to test cancellation)
         alive_process_info = MultiProcessRunInfo.model_construct(
             process=mock_alive_process,

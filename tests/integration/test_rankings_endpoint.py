@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-License-Identifier: Apache-2.0
 
 
@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.conftest import AIPerfCLI
+from tests.harness.utils import AIPerfCLI, AIPerfMockServer
 from tests.integration.conftest import IntegrationTestDefaults as defaults
-from tests.integration.models import AIPerfMockServer
 from tests.integration.utils import create_rankings_dataset
 
 

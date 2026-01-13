@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Integration tests for AIPerf plot functionality.
@@ -14,9 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.conftest import AIPerfCLI
+from tests.harness.utils import AIPerfCLI, AIPerfMockServer
 from tests.integration.conftest import IntegrationTestDefaults as defaults
-from tests.integration.models import AIPerfMockServer
 
 
 def is_valid_png(file_path: Path) -> bool:

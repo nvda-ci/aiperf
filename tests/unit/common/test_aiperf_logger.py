@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import time
@@ -22,7 +22,7 @@ from aiperf.common.aiperf_logger import (
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.enums import CreditPhase
 from aiperf.common.models import RequestRecord, TextResponse
-from tests.unit.utils.time_traveler import TimeTraveler
+from tests.harness.time_traveler import TimeTraveler
 
 
 @pytest.fixture

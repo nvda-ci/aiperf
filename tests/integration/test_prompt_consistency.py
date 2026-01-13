@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Integration test for random prompt generation consistency.
@@ -10,9 +10,8 @@ that the random text generation is decoupled from other configuration parameters
 
 import pytest
 
-from tests.integration.conftest import AIPerfCLI
+from tests.harness.utils import AIPerfCLI, AIPerfMockServer
 from tests.integration.conftest import IntegrationTestDefaults as defaults
-from tests.integration.models import AIPerfMockServer
 
 
 def extract_prompt_texts(result) -> list[str]:

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
 Tests for router_reply_client.py - ZMQRouterReplyClient class.
@@ -211,7 +211,10 @@ class TestZMQRouterReplyClientBackgroundTask:
             message_type=MessageType.HEARTBEAT, request_id=sample_message.request_id
         )
 
+        handler_called = asyncio.Event()
+
         async def handler(msg: Message) -> Message:
+            handler_called.set()
             return response
 
         mock_socket = router_test_helper.setup_mock_socket(
@@ -225,8 +228,11 @@ class TestZMQRouterReplyClientBackgroundTask:
                 handler=handler,
             )
 
-            # Wait for background task to process messages (mocked to instant)
-            await asyncio.sleep(0.2)
+            # Wait for handler to be called
+            await asyncio.wait_for(handler_called.wait(), timeout=1.0)
+
+            # Give a moment for send to complete
+            await asyncio.sleep(0)
 
             mock_socket.send_multipart.assert_called()
 

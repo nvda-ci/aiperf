@@ -5,9 +5,8 @@
 import pytest
 from pytest import approx
 
-from tests.integration.conftest import AIPerfCLI
+from tests.harness.utils import AIPerfCLI, AIPerfMockServer
 from tests.integration.conftest import IntegrationTestDefaults as defaults
-from tests.integration.models import AIPerfMockServer
 from tests.integration.utils import extract_base64_video_details
 
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """Integration tests for custom GPU metrics CSV loading functionality."""
 
@@ -15,8 +15,7 @@ from aiperf.common.enums.metric_enums import (
 from aiperf.gpu_telemetry.constants import (
     GPU_TELEMETRY_METRICS_CONFIG,
 )
-from tests.integration.conftest import AIPerfCLI
-from tests.integration.models import AIPerfMockServer
+from tests.harness.utils import AIPerfCLI, AIPerfMockServer
 
 
 @pytest.mark.skipif(
