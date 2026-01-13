@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
 Environment Configuration Module
@@ -16,6 +16,7 @@ Structure:
     Environment.RECORD.*         - Record processing
     Environment.SERVER_METRICS.* - Server metrics collection
     Environment.SERVICE.*        - Service lifecycle and communication
+    Environment.TIMING.*         - Timing manager settings
     Environment.UI.*             - User interface settings
     Environment.WORKER.*         - Worker management and scaling
     Environment.ZMQ.*            - ZMQ communication settings
@@ -31,6 +32,7 @@ Examples:
 """
 
 import platform
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import BeforeValidator, Field, model_validator
@@ -52,7 +54,8 @@ __all__ = ["Environment"]
 class _DatasetSettings(BaseSettings):
     """Dataset loading and configuration.
 
-    Controls timeouts and behavior for dataset loading operations.
+    Controls timeouts and behavior for dataset loading operations,
+    as well as memory-mapped dataset storage settings.
     """
 
     model_config = SettingsConfigDict(
@@ -64,6 +67,13 @@ class _DatasetSettings(BaseSettings):
         le=100000.0,
         default=300.0,
         description="Timeout in seconds for dataset configuration operations",
+    )
+    MMAP_BASE_PATH: Path | None = Field(
+        default=None,
+        description="Base path for memory-mapped dataset files. If None, uses system temp directory. "
+        "Set to a shared filesystem path for Kubernetes mounted volumes. "
+        "Example: AIPERF_DATASET_MMAP_BASE_PATH=/mnt/shared-pvc "
+        "creates files at /mnt/shared-pvc/aiperf_mmap_{benchmark_id}/",
     )
     PUBLIC_DATASET_TIMEOUT: float = Field(
         ge=1.0,
@@ -335,6 +345,12 @@ class _RecordSettings(BaseSettings):
         default=2.0,
         description="Interval in seconds between records progress report messages",
     )
+    PROCESS_RECORDS_TIMEOUT: float = Field(
+        ge=1.0,
+        le=100000.0,
+        default=300.0,
+        description="Timeout in seconds for processing record results",
+    )
 
 
 class _ServerMetricsSettings(BaseSettings):
@@ -380,6 +396,30 @@ class _ServerMetricsSettings(BaseSettings):
         le=300.0,
         default=5.0,
         description="Delay in seconds before shutting down server metrics service to allow command response transmission",
+    )
+
+
+class _TimingSettings(BaseSettings):
+    """Timing manager configuration.
+
+    Controls timing-related settings for credit phase execution and scheduling.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="AIPERF_TIMING_",
+    )
+
+    CANCEL_DRAIN_TIMEOUT: float = Field(
+        ge=1.0,
+        le=300.0,
+        default=10.0,
+        description="Timeout in seconds for waiting for cancelled credits to drain after phase timeout",
+    )
+    RATE_RAMP_UPDATE_INTERVAL: float = Field(
+        ge=0.01,
+        le=10.0,
+        default=0.1,
+        description="Update interval in seconds for continuous rate ramping (default 0.1s = 100ms)",
     )
 
 
@@ -445,6 +485,12 @@ class _ServiceSettings(BaseSettings):
         le=100000.0,
         default=60.0,
         description="Timeout in seconds for profile start command",
+    )
+    PROFILE_CANCEL_TIMEOUT: float = Field(
+        ge=1.0,
+        le=100000.0,
+        default=10.0,
+        description="Timeout in seconds for profile cancel command",
     )
     REGISTRATION_INTERVAL: float = Field(
         ge=1.0,
@@ -522,6 +568,10 @@ class _UISettings(BaseSettings):
         le=1000.0,
         default=5.0,
         description="Interval in seconds between real-time metrics messages",
+    )
+    REALTIME_METRICS_ENABLED: bool = Field(
+        default=False,
+        description="Enable real-time metrics collection and reporting despite UI type",
     )
     SPINNER_REFRESH_RATE: float = Field(
         ge=0.1,
@@ -721,6 +771,10 @@ class _Environment(BaseSettings):
     SERVICE: _ServiceSettings = Field(
         default_factory=_ServiceSettings,
         description="Service lifecycle and communication settings",
+    )
+    TIMING: _TimingSettings = Field(
+        default_factory=_TimingSettings,
+        description="Timing manager settings",
     )
     UI: _UISettings = Field(
         default_factory=_UISettings,

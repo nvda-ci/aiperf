@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -15,7 +15,8 @@ from aiperf.common.config.service_config import ServiceConfig
 from aiperf.common.enums import GPUTelemetryMode, WorkerStatus
 from aiperf.common.environment import Environment
 from aiperf.common.messages import StartRealtimeTelemetryCommand
-from aiperf.common.models import MetricResult, RecordsStats, RequestsStats, WorkerStats
+from aiperf.common.mixins import CombinedPhaseStats
+from aiperf.common.models import MetricResult, WorkerStats
 from aiperf.controller.system_controller import SystemController
 from aiperf.ui.dashboard.aiperf_theme import AIPERF_THEME
 from aiperf.ui.dashboard.progress_dashboard import ProgressDashboard
@@ -101,9 +102,9 @@ class AIPerfTextualApp(App):
         self.profile_results: list[RenderableType] = []
         self.service_config = service_config
         self.controller: SystemController = controller
-        self._warmup_stats: RequestsStats | None = None
-        self._profiling_stats: RequestsStats | None = None
-        self._records_stats: RecordsStats | None = None
+        self._warmup_stats: CombinedPhaseStats | None = None
+        self._profiling_stats: CombinedPhaseStats | None = None
+        self._records_stats: CombinedPhaseStats | None = None
         self._has_result_data = False
 
     def on_mount(self) -> None:
@@ -216,22 +217,24 @@ class AIPerfTextualApp(App):
 
         await self.action_toggle_maximize("telemetry")
 
-    async def on_warmup_progress(self, warmup_stats: RequestsStats) -> None:
+    async def on_warmup_progress(self, warmup_stats: CombinedPhaseStats) -> None:
         """Forward warmup progress updates to the Textual App."""
         if not self._has_result_data:
             self._on_first_result_data()
         self._warmup_stats = warmup_stats
+
         if self.progress_dashboard:
             async with self.progress_dashboard.batch():
                 self.progress_dashboard.on_warmup_progress(warmup_stats)
+
         if self.progress_header:
             self.progress_header.update_progress(
                 header="Warmup",
-                progress=warmup_stats.finished,
-                total=warmup_stats.total_expected_requests,
+                progress=warmup_stats.requests_progress_percent,
+                total=100,
             )
 
-    async def on_profiling_progress(self, profiling_stats: RequestsStats) -> None:
+    async def on_profiling_progress(self, profiling_stats: CombinedPhaseStats) -> None:
         """Forward requests phase progress updates to the Textual App."""
         if not self._has_result_data:
             self._on_first_result_data()
@@ -242,11 +245,11 @@ class AIPerfTextualApp(App):
         if self.progress_header:
             self.progress_header.update_progress(
                 header="Profiling",
-                progress=profiling_stats.finished,
-                total=profiling_stats.total_expected_requests,
+                progress=profiling_stats.requests_progress_percent,
+                total=100,
             )
 
-    async def on_records_progress(self, records_stats: RecordsStats) -> None:
+    async def on_records_progress(self, records_stats: CombinedPhaseStats) -> None:
         """Forward records progress updates to the Textual App."""
         self._records_stats = records_stats
         if self.progress_dashboard:
@@ -255,13 +258,14 @@ class AIPerfTextualApp(App):
 
         if (
             self._profiling_stats
-            and self._profiling_stats.is_complete
+            and self._profiling_stats.is_requests_complete
             and self.progress_header
+            and records_stats.records_progress_percent is not None
         ):
             self.progress_header.update_progress(
                 header="Records",
-                progress=self._profiling_stats.finished,
-                total=self._profiling_stats.total_expected_requests,
+                progress=records_stats.records_progress_percent,
+                total=100,
             )
 
     async def on_worker_update(self, worker_id: str, worker_stats: WorkerStats):

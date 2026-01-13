@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 from collections.abc import Callable, Coroutine
@@ -211,6 +211,7 @@ class ZMQRouterReplyClient(BaseZMQClient):
                 self.execute_async(
                     self._wait_for_response(request.request_id, routing_envelope)
                 )
+                await yield_to_event_loop()
 
             except Exception as e:
                 self.exception(f"Exception receiving request: {e}")

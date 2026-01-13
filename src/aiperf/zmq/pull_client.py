@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 from collections.abc import Callable, Coroutine
@@ -15,6 +15,7 @@ from aiperf.common.messages import Message
 from aiperf.common.protocols import PullClientProtocol
 from aiperf.common.types import MessageTypeT
 from aiperf.common.utils import yield_to_event_loop
+from aiperf.timing.concurrency import DynamicConcurrencyLimit
 from aiperf.zmq.zmq_base_client import BaseZMQClient
 
 
@@ -74,12 +75,9 @@ class ZMQPullClient(BaseZMQClient):
             MessageTypeT, Callable[[Message], Coroutine[Any, Any, None]]
         ] = {}
 
-        if max_pull_concurrency is not None:
-            self.semaphore = asyncio.Semaphore(value=max_pull_concurrency)
-        else:
-            self.semaphore = asyncio.Semaphore(
-                value=Environment.ZMQ.PULL_MAX_CONCURRENCY
-            )
+        self.semaphore = DynamicConcurrencyLimit(
+            max_pull_concurrency or Environment.ZMQ.PULL_MAX_CONCURRENCY
+        )
 
     @background_task(immediate=True, interval=None)
     async def _pull_receiver(self) -> None:
@@ -102,6 +100,7 @@ class ZMQPullClient(BaseZMQClient):
                     )
                 # Use AUTO-LOOKUP approach (no prefix) - optimal for large messages
                 self.execute_async(self._process_message(message_json_bytes))
+                await yield_to_event_loop()
 
             except zmq.Again:
                 self.debug("Pull client receiver task timed out")

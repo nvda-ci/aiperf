@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Literal, TypeVar
@@ -181,9 +181,13 @@ class MooncakeTrace(AIPerfBaseModel):
         None, description="The output sequence length of a request"
     )
     hash_ids: list[int] | None = Field(None, description="The hash ids of a request")
-    timestamp: int | None = Field(None, description="The timestamp of a request")
-    delay: int | None = Field(
-        None, description="Amount of milliseconds to wait before sending the turn."
+    timestamp: int | float | None = Field(
+        None,
+        description="The timestamp of a request in milliseconds. Supports floating point by rounding to the nearest millisecond.",
+    )
+    delay: int | float | None = Field(
+        None,
+        description="Amount of milliseconds to wait before sending the turn. Supports floating point by rounding to the nearest millisecond.",
     )
     session_id: str | None = Field(
         None, description="Unique identifier for the conversation session"

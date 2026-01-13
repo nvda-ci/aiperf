@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from aiperf.common.config import ServiceConfig, UserConfig
@@ -62,12 +62,20 @@ class RecordExportResultsProcessor(
             display_metrics = metric_dict.to_display_dict(
                 MetricRegistry, self.show_internal, self.show_experimental
             )
-            if not display_metrics:
+            # Skip records with no displayable metrics UNLESS they have an error
+            # (error records should always be exported for debugging/analysis)
+            if not display_metrics and not record_data.error:
                 return
+
+            # Convert trace data to export format (wall-clock timestamps)
+            export_trace_data = None
+            if record_data.trace_data:
+                export_trace_data = record_data.trace_data.to_export()
 
             record_info = MetricRecordInfo(
                 metadata=record_data.metadata,
                 metrics=display_metrics,
+                trace_data=export_trace_data,
                 error=record_data.error,
             )
 

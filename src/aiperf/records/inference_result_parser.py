@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import time
@@ -106,7 +106,7 @@ class InferenceResultParser(CommunicationMixin):
         """Handle an inference results message."""
         self.trace_or_debug(
             lambda: f"Received inference results message: {request_record}",
-            lambda: f"Received inference results for credit '{request_record.credit_num}' (id: {request_record.x_request_id})",
+            lambda: f"Received inference results for credit '{request_record.request_info.credit_num}' (id: {request_record.request_info.x_request_id})",
         )
 
         # Make sure any invalid request records are converted to error records for combined processing.
@@ -212,7 +212,13 @@ class InferenceResultParser(CommunicationMixin):
     async def compute_input_token_count(
         self, request_record: RequestRecord
     ) -> int | None:
-        """Compute the number of tokens in the input for a given request record."""
+        """Compute the number of tokens in the input for a given request record.
+
+        This includes:
+        - system_message (shared system prompt)
+        - user_context_message (per-conversation user context)
+        - All turns' text content
+        """
         turns = request_record.turns
         if turns is None:
             self.warning(
@@ -222,6 +228,23 @@ class InferenceResultParser(CommunicationMixin):
 
         tokenizer = await self.get_tokenizer(request_record.model_name)
         input_token_count = 0
+
+        # Include system_message if present (shared system prompt)
+        if request_record.request_info and request_record.request_info.system_message:
+            input_token_count += len(
+                tokenizer.encode(request_record.request_info.system_message)
+            )
+
+        # Include user_context_message if present (per-conversation user context)
+        if (
+            request_record.request_info
+            and request_record.request_info.user_context_message
+        ):
+            input_token_count += len(
+                tokenizer.encode(request_record.request_info.user_context_message)
+            )
+
+        # Include all turns' text content
         # TODO: We need to handle images, audios, videos, etc.
         for turn in turns:
             for text in turn.texts:

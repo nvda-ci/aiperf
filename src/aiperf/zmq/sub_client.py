@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import contextlib
@@ -80,6 +80,8 @@ class ZMQSubClient(BaseZMQClient):
         super().__init__(zmq.SocketType.SUB, address, bind, socket_ops, **kwargs)
 
         self._subscribers: dict[MessageTypeT, list[Callable[[Message], Any]]] = {}
+        self._msg_count: int = 0
+        self._msg_count_interval: int = 10
 
     async def subscribe_all(
         self,
@@ -178,7 +180,12 @@ class ZMQSubClient(BaseZMQClient):
                     self.trace(
                         f"Socket received message: {topic_bytes} {message_bytes}"
                     )
+                # NOTE: This must be async otherwise it may deadlock the event loop.
                 self.execute_async(self._handle_message(topic_bytes, message_bytes))
+                self._msg_count += 1
+                if self._msg_count % self._msg_count_interval == 0:
+                    await yield_to_event_loop()
+                    self._msg_count = 0
 
             except zmq.Again:
                 self.debug(f"Sub client {self.client_id} receiver task timed out")
