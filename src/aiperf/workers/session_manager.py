@@ -66,7 +66,7 @@ class UserSessionManager:
     Manages user sessions for multi-turn processing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._cache: dict[str, UserSession] = {}
 
     def create_and_store(

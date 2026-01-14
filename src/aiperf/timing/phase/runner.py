@@ -542,7 +542,7 @@ class PhaseRunner(TaskManagerMixin):
 
         except Exception as e:
             self.exception(f"Error waiting for event '{name}' with timeout: {e!r}")
-            raise e
+            raise
 
     async def _progress_report_loop(self) -> None:
         """Publish phase progress stats at regular intervals.

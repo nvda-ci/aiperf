@@ -23,7 +23,7 @@ from aiperf.common.protocols import DatasetSamplingStrategyProtocol
 from aiperf.credit.structs import Credit, TurnToSend
 
 
-@dataclass
+@dataclass(slots=True)
 class SampledSession:
     """A runtime session instance of a conversation.
 
