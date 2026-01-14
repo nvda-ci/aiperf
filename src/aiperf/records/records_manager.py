@@ -192,7 +192,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
         self._records_tracker.atomic_update_from_record_data(record_data)
         if record_data.error:
-            self._error_tracker.atomic_increment_error_count(
+            self._error_tracker.increment_error_count_for_phase(
                 record_data.metadata.benchmark_phase, record_data.error
             )
 
@@ -564,7 +564,6 @@ class RecordsManager(PullClientMixin, BaseComponentService):
     ) -> ProcessRecordsResult:
         """Process the results."""
         self.debug(lambda: f"Processing records (cancelled: {cancelled})")
-        self.logger.set_level("DEBUG")
         self.info("Processing records results...")
 
         # Debug: log processors being summarized

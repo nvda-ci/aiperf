@@ -196,6 +196,7 @@ class PhaseProgressTracker:
             requests_sent=self._counter.requests_sent,
             requests_completed=self._counter.requests_completed,
             requests_cancelled=self._counter.requests_cancelled,
+            request_errors=self._counter.request_errors,
             sent_sessions=self._counter.sent_sessions,
             completed_sessions=self._counter.completed_sessions,
             cancelled_sessions=self._counter.cancelled_sessions,

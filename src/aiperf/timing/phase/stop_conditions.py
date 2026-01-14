@@ -126,7 +126,8 @@ class DurationStopCondition(StopCondition):
 
     def can_send_any_turn(self) -> bool:
         """Returns True if the duration has not been reached."""
-        return self._lifecycle.time_left_in_seconds() > 0
+        time_left = self._lifecycle.time_left_in_seconds()
+        return time_left is not None and time_left > 0
 
 
 # NOTE: The order of these classes will determine the order that the stop conditions are checked in.

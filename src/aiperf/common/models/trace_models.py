@@ -74,7 +74,7 @@ class TraceDataExport(AIPerfBaseModel):
 
     trace_type: str = Field(
         ...,
-        description="The type of the trace. This is typically the name of the library used"
+        description="The type of the trace. This is typically the name of the library used "
         "and must match the trace_type of the corresponding trace data model.",
     )
 
