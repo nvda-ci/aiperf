@@ -80,7 +80,14 @@ class UserSessionManager:
             conversation: Conversation
             num_turns: Number of turns to execute (from Credit.num_turns). May be less than
                 len(conversation.turns) for ramp-up users who start mid-session.
+
+        Raises:
+            ValueError: If num_turns exceeds the actual conversation length.
         """
+        if num_turns > len(conversation.turns):
+            raise ValueError(
+                f"num_turns ({num_turns}) exceeds conversation length ({len(conversation.turns)})"
+            )
         user_session = UserSession(
             x_correlation_id=x_correlation_id,
             num_turns=num_turns,

@@ -9,6 +9,7 @@ Owns the LoopScheduler and all per-phase components (lifecycle, progress, stop_c
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from aiperf.common.enums import CreditPhase
@@ -95,6 +96,7 @@ class PhaseRunner(TaskManagerMixin):
         self._concurrency_manager = concurrency_manager
         self._cancellation_policy = cancellation_policy
         self._callback_handler = callback_handler
+        self._on_phase_complete: Callable[[], None] | None = None
 
         # Per-phase components - order matters
         self._scheduler = LoopScheduler()
@@ -127,6 +129,14 @@ class PhaseRunner(TaskManagerMixin):
         """Phase enum (WARMUP or PROFILING)."""
         return self._config.phase
 
+    def set_phase_complete_callback(self, callback: Callable[[], None]) -> None:
+        """Set callback to invoke when phase fully completes.
+
+        Used for seamless phases to notify the orchestrator when the background
+        return wait task finishes, allowing cleanup of the runner from active list.
+        """
+        self._on_phase_complete = callback
+
     def cancel(self) -> None:
         """Cancel the phase runner (external cancellation like Ctrl+C)."""
         self._was_cancelled = True
@@ -140,6 +150,18 @@ class PhaseRunner(TaskManagerMixin):
         for ramper in self._rampers:
             ramper.stop()
         self._scheduler.cancel_all()
+
+    def _on_return_wait_complete(self, task: asyncio.Task) -> None:
+        """Handle completion of background return wait task (seamless mode).
+
+        Called when _return_wait_task finishes. Cancels progress reporting and
+        notifies the orchestrator via on_phase_complete callback.
+        """
+        if self._progress_task:
+            self._progress_task.cancel()
+
+        if self._on_phase_complete:
+            self._on_phase_complete()
 
     async def run(
         self,
@@ -215,7 +237,7 @@ class PhaseRunner(TaskManagerMixin):
                 self._return_wait_task = self.execute_async(
                     self._wait_for_returning_complete()
                 )
-                self._return_wait_task.add_done_callback(self._progress_task.cancel)
+                self._return_wait_task.add_done_callback(self._on_return_wait_complete)
             else:
                 await self._wait_for_returning_complete()
                 self._progress_task.cancel()
