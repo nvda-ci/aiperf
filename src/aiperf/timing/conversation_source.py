@@ -98,7 +98,11 @@ class ConversationSource:
         return self._metadata_lookup[conversation_id]
 
     def get_next_turn_metadata(self, credit: Credit) -> TurnMetadata:
-        """Get metadata for next turn after completed credit."""
+        """Get metadata for next turn after completed credit.
+
+        Raises:
+            ValueError: If next turn doesn't exist (credit is final turn).
+        """
         metadata = self.get_metadata(credit.conversation_id)
         next_index = credit.turn_index + 1
 

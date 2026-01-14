@@ -172,9 +172,10 @@ class UserCentricStrategy(AIPerfLoggerMixin):
         max_turns: int | None = None,
         order: int | None = None,
     ) -> User:
-        """Generate the next user at the given target timestamp, and add it to the session_to_user mapping.
+        """Generate next user and add to session_to_user mapping.
 
-        This will increment the next user id and set the x_correlation_id for the sampled session.
+        Creates user with sequential user_id, samples conversation (x_correlation_id
+        set to user_id string), and configures timing/turn limits.
         """
         user_id = self._next_user_id
         self._next_user_id += 1

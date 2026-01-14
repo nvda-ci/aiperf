@@ -169,10 +169,13 @@ class PhaseRunner(TaskManagerMixin):
     ) -> CreditPhaseStats:
         """Execute phase with full lifecycle management.
 
-        Creates timing strategy with all dependencies, executes it, waits for completion.
+        Lifecycle: register callback handler → setup strategy → configure rampers →
+        start phase → execute timing strategy → wait for sends → wait for returns →
+        complete phase → cleanup (cancel scheduler, stop rampers).
 
         Args:
-            is_final_phase: True if this is the last phase (affects grace period handling).
+            is_final_phase: True if this is the last phase. Non-final seamless phases
+                spawn background return-wait task; final phases wait synchronously.
 
         Returns:
             CreditPhaseStats snapshot of final phase state.
@@ -252,11 +255,9 @@ class PhaseRunner(TaskManagerMixin):
     def _create_rampers(self, strategy: TimingStrategyProtocol) -> None:
         """Create rampers for concurrency and rate if ramp durations are configured.
 
-        When a ramp duration is configured, the value starts at 1 (or minimal rate)
-        and gradually increases to the target over the specified duration.
-
-        Concurrency rampers use stepped mode (discrete integer steps).
-        Rate rampers use continuous mode (smooth float interpolation via update_interval).
+        Concurrency rampers use stepped mode (discrete integer steps), starting at 1.
+        Rate rampers use continuous mode (smooth float interpolation), starting at a
+        rate proportional to target (to avoid issues when target < 1 QPS).
         """
         self._rampers = []
         config = self._config

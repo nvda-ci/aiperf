@@ -57,9 +57,12 @@ class StopCondition(ABC):
         pass
 
     def can_start_new_session(self) -> bool:
-        """True if phase can start a NEW session. This is checked in addition to can_send_any_turn() on every first turn.
+        """True if phase can start a NEW session.
 
-        By default, we return True because can_send_any_turn() is always checked first, so this is a no-op.
+        Checked in addition to can_send_any_turn() on every first turn.
+        Default returns True (no additional restriction). Subclasses like
+        SessionCountStopCondition override to prevent new sessions while
+        still allowing continuation turns from existing sessions.
         """
         return True
 
