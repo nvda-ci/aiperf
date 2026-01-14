@@ -266,6 +266,8 @@ class UserCentricStrategy(AIPerfLoggerMixin):
 
         Uses virtual history to simulate steady-state from t=0 with precise stagger spacing.
         """
+        if self._lifecycle.started_at_perf_ns is None:
+            raise RuntimeError("started_at_perf_ns is not set in the lifecycle")
 
         self.info(
             f"User-centric mode: "

@@ -564,7 +564,6 @@ class RecordsManager(PullClientMixin, BaseComponentService):
     ) -> ProcessRecordsResult:
         """Process the results."""
         self.debug(lambda: f"Processing records (cancelled: {cancelled})")
-        self.logger.set_level("DEBUG")
         self.info("Processing records results...")
 
         # Debug: log processors being summarized

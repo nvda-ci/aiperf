@@ -97,7 +97,7 @@ class PhaseLifecycle:
             ValueError: If not started or already in SENDING_COMPLETE/COMPLETE.
         """
         if self.state == PhaseState.CREATED:
-            raise ValueError("Credit phase not started. Call mark_started() first.")
+            raise ValueError("Credit phase not started. Call start() first.")
         if self.state in _SENDING_COMPLETE_STATES:
             raise ValueError("Credit phase already completed sending")
         self.state = PhaseState.SENDING_COMPLETE
