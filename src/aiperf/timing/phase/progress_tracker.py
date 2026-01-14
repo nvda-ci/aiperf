@@ -100,7 +100,7 @@ class PhaseProgressTracker:
         1. Call freeze_sent_counts()
         2. Set all_credits_sent_event
         """
-        return self._counter.atomic_increment_sent(turn)
+        return self._counter.increment_sent(turn)
 
     def increment_returned(
         self,
@@ -123,7 +123,7 @@ class PhaseProgressTracker:
         Note: Late arrivals (after phase complete) are handled by caller
         checking lifecycle.is_complete before calling this method.
         """
-        return self._counter.atomic_increment_returned(is_final_turn, cancelled)
+        return self._counter.increment_returned(is_final_turn, cancelled)
 
     def increment_prefill_released(self) -> None:
         """Increment prefill released count.

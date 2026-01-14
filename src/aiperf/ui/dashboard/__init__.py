@@ -39,7 +39,6 @@ from aiperf.ui.dashboard.realtime_telemetry_dashboard import (
 from aiperf.ui.dashboard.rich_log_viewer import (
     LogConsumer,
     RichLogViewer,
-    SelectableRichLog,
 )
 from aiperf.ui.dashboard.worker_dashboard import (
     WorkerDashboard,
@@ -63,7 +62,6 @@ __all__ = [
     "RealtimeMetricsTable",
     "RealtimeTelemetryDashboard",
     "RichLogViewer",
-    "SelectableRichLog",
     "SingleNodeView",
     "WORKER_STATUS_STYLES",
     "WorkerDashboard",

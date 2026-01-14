@@ -190,7 +190,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
         await self._send_results_to_results_processors(record_data)
 
-        self._records_tracker.atomic_update_from_record_data(record_data)
+        self._records_tracker.update_from_record_data(record_data)
         if record_data.error:
             self._error_tracker.increment_error_count_for_phase(
                 record_data.metadata.benchmark_phase, record_data.error
