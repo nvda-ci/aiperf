@@ -387,8 +387,9 @@ class BaseRampStrategy(ABC):
     def _time_to_value_progress(self, time_progress: float) -> float:
         """Transform time progress [0,1] to value progress [0,1]. Default: linear.
 
-        This is the inverse of _apply_curve for continuous sampling mode.
-        Override in subclasses that have non-linear curves.
+        Used by continuous sampling mode to compute value at any point in time.
+        For non-linear strategies, this must be the mathematical inverse of
+        _apply_curve. Override in subclasses that have non-linear curves.
         """
         return time_progress
 

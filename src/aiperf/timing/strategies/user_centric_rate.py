@@ -81,7 +81,8 @@ if TYPE_CHECKING:
 def _find_alternate_spacing_step(n: int) -> int:
     """Find a step that produces unique positions when iterating 0 to n-1.
 
-    Returns the smallest integer > 1 that shares no common factors with n.
+    Returns the smallest integer > 1 that is coprime with n, or 1 if n <= 2
+    (since no valid coprime step exists for n <= 2).
     """
     for step in range(2, n):
         if gcd(n, step) == 1:
@@ -326,8 +327,9 @@ class UserCentricStrategy(AIPerfLoggerMixin):
     ) -> None:
         """Handle credit return: dispatch next turn.
 
-        Schedules next turn at `next_send_perf_sec + turn_gap` regardless of when response arrived.
-        Late responses send immediately.
+        Schedules next turn at `max(now, user.next_send_time + turn_gap)`.
+        This maintains ideal pacing when responses arrive on time, but if the
+        response is late, the max() re-aligns to current time (sends immediately).
         """
         if credit.is_final_turn:
             # User finished all their turns. New users continue spawning in execute_phase.

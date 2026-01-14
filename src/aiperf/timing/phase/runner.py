@@ -383,7 +383,12 @@ class PhaseRunner(TaskManagerMixin):
         return " | ".join(parts)
 
     async def _wait_for_sending_complete(self) -> None:
-        """Wait for phase to send all credits (with timeout)."""
+        """Wait for phase to send all credits (with timeout).
+
+        Uses lifecycle.time_left_in_seconds() for timeout duration.
+        On timeout or completion, cancels pending scheduled requests,
+        freezes sent counts, and marks sending complete.
+        """
         timed_out = False
         try:
             timeout = self._lifecycle.time_left_in_seconds()
@@ -411,7 +416,14 @@ class PhaseRunner(TaskManagerMixin):
             await self._phase_publisher.publish_phase_sending_complete(stats)
 
     async def _wait_for_returning_complete(self) -> None:
-        """Wait for all credits to return (with grace period)."""
+        """Wait for all credits to return (with grace period).
+
+        Multi-stage process on timeout:
+        1. Initial wait with grace period timeout
+        2. If timed out: cancel_all_credits() via credit router
+        3. Wait for cancelled credits to drain (CANCEL_DRAIN_TIMEOUT)
+        4. If drain times out: release stuck concurrency slots and force completion
+        """
         timed_out = False
         try:
             if self._progress.check_all_returned_or_cancelled():

@@ -92,7 +92,7 @@ class RequestCountStopCondition(StopCondition):
         return config.total_expected_requests is not None
 
     def can_send_any_turn(self) -> bool:
-        """Returns True if the request count has not been reached."""
+        """Returns True if the request count limit has not been reached."""
         return self._counter.requests_sent < self._config.total_expected_requests
 
 
@@ -105,14 +105,22 @@ class SessionCountStopCondition(StopCondition):
         return config.expected_num_sessions is not None
 
     def can_send_any_turn(self) -> bool:
-        """Returns True if there are more sessions to send, or if the current sessions have not sent all their turns."""
+        """Returns True if more turns can be sent.
+
+        True when either: session limit not reached (can start new sessions),
+        OR already-started sessions still have unsent turns remaining.
+        """
         return (
             self._counter.sent_sessions < self._config.expected_num_sessions
             or self._counter.requests_sent < self._counter.total_session_turns
         )
 
     def can_start_new_session(self) -> bool:
-        """Returns True if the session count limit has not been reached."""
+        """Returns True if new sessions can be started (limit not reached).
+
+        More restrictive than can_send_any_turn(): prevents starting NEW sessions
+        but can_send_any_turn() may still allow turns from already-started sessions.
+        """
         return self._counter.sent_sessions < self._config.expected_num_sessions
 
 
