@@ -169,10 +169,13 @@ class PhaseRunner(TaskManagerMixin):
     ) -> CreditPhaseStats:
         """Execute phase with full lifecycle management.
 
-        Creates timing strategy with all dependencies, executes it, waits for completion.
+        Lifecycle: register callback handler → setup strategy → configure rampers →
+        start phase → execute timing strategy → wait for sends → wait for returns →
+        complete phase → cleanup (cancel scheduler, stop rampers).
 
         Args:
-            is_final_phase: True if this is the last phase (affects grace period handling).
+            is_final_phase: True if this is the last phase. Non-final seamless phases
+                spawn background return-wait task; final phases wait synchronously.
 
         Returns:
             CreditPhaseStats snapshot of final phase state.
@@ -252,11 +255,9 @@ class PhaseRunner(TaskManagerMixin):
     def _create_rampers(self, strategy: TimingStrategyProtocol) -> None:
         """Create rampers for concurrency and rate if ramp durations are configured.
 
-        When a ramp duration is configured, the value starts at 1 (or minimal rate)
-        and gradually increases to the target over the specified duration.
-
-        Concurrency rampers use stepped mode (discrete integer steps).
-        Rate rampers use continuous mode (smooth float interpolation via update_interval).
+        Concurrency rampers use stepped mode (discrete integer steps), starting at 1.
+        Rate rampers use continuous mode (smooth float interpolation), starting at a
+        rate proportional to target (to avoid issues when target < 1 QPS).
         """
         self._rampers = []
         config = self._config
@@ -383,7 +384,12 @@ class PhaseRunner(TaskManagerMixin):
         return " | ".join(parts)
 
     async def _wait_for_sending_complete(self) -> None:
-        """Wait for phase to send all credits (with timeout)."""
+        """Wait for phase to send all credits (with timeout).
+
+        Uses lifecycle.time_left_in_seconds() for timeout duration.
+        On timeout or completion, cancels pending scheduled requests,
+        freezes sent counts, and marks sending complete.
+        """
         timed_out = False
         try:
             timeout = self._lifecycle.time_left_in_seconds()
@@ -411,7 +417,14 @@ class PhaseRunner(TaskManagerMixin):
             await self._phase_publisher.publish_phase_sending_complete(stats)
 
     async def _wait_for_returning_complete(self) -> None:
-        """Wait for all credits to return (with grace period)."""
+        """Wait for all credits to return (with grace period).
+
+        Multi-stage process on timeout:
+        1. Initial wait with grace period timeout
+        2. If timed out: cancel_all_credits() via credit router
+        3. Wait for cancelled credits to drain (CANCEL_DRAIN_TIMEOUT)
+        4. If drain times out: release stuck concurrency slots and force completion
+        """
         timed_out = False
         try:
             if self._progress.check_all_returned_or_cancelled():
@@ -542,7 +555,7 @@ class PhaseRunner(TaskManagerMixin):
 
         except Exception as e:
             self.exception(f"Error waiting for event '{name}' with timeout: {e!r}")
-            raise e
+            raise
 
     async def _progress_report_loop(self) -> None:
         """Publish phase progress stats at regular intervals.

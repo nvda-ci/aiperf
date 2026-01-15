@@ -4,11 +4,12 @@
 
 The orchestrator handles all orchestration concerns:
 - Lifecycle management (init, start, stop)
-- Phase execution and progress reporting
+- Phase execution loop (creates PhaseRunner per phase)
 - Cancellation
 
 The actual timing logic is delegated to a pluggable TimingMode (created per-phase).
 Credit callbacks are handled by CreditCallbackHandler (registered directly with router).
+Progress reporting is delegated to PhaseRunner.
 """
 
 from __future__ import annotations
@@ -39,7 +40,6 @@ class PhaseOrchestrator(AIPerfLifecycleMixin):
     - Component composition (ConversationSource, ConcurrencyManager, CancellationPolicy)
     - Lifecycle hooks (@on_init, @on_start)
     - Phase execution loop (creates PhaseRunner per phase)
-    - Progress reporting
     - Cancellation
 
     The orchestrator does NOT handle:
