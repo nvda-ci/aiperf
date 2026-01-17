@@ -58,7 +58,7 @@ Example entry:
 
 ## Profile using a Custom Trace File
 
-Create a trace file with timing information:
+Create a trace file with timing information and run AIPerf:
 
 <!-- aiperf-run-vllm-default-openai-endpoint-server -->
 ```bash
@@ -67,12 +67,7 @@ cat > custom_trace.jsonl << 'EOF'
 {"timestamp": 10535, "input_length": 672, "output_length": 26, "hash_ids": [0, 3, 4, 5]}
 {"timestamp": 27482, "input_length": 655, "output_length": 52, "hash_ids": [0, 6, 7]}
 EOF
-```
-<!-- /aiperf-run-vllm-default-openai-endpoint-server -->
-Run AIPerf with the trace file:
 
-<!-- aiperf-run-vllm-default-openai-endpoint-server -->
-```bash
 aiperf profile \
     --model Qwen/Qwen3-0.6B \
     --endpoint-type chat \
@@ -93,11 +88,9 @@ For real-world benchmarking, use the FAST25 production trace data from the Moonc
 <!-- aiperf-run-vllm-default-openai-endpoint-server -->
 ```bash
 # Download the Mooncake trace data
-curl -o mooncake_trace.jsonl https://raw.githubusercontent.com/kvcache-ai/Mooncake/refs/heads/main/FAST25-release/arxiv-trace/mooncake_trace.jsonl
-
+curl -L -o mooncake_trace.jsonl https://raw.githubusercontent.com/kvcache-ai/Mooncake/refs/heads/main/FAST25-release/arxiv-trace/mooncake_trace.jsonl && \
 # Create a subset for quick testing
-head -n 10 mooncake_trace.jsonl > mooncake_trace_short.jsonl
-
+head -n 10 mooncake_trace.jsonl > mooncake_trace_short.jsonl && \
 # Run the trace replay
 aiperf profile \
     --model Qwen/Qwen3-0.6B \
