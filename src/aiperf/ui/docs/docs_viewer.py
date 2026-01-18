@@ -79,6 +79,7 @@ class FindBar(Horizontal):
         self._current_match_idx: int = -1
         self._last_query: str = ""
         self._highlighted_widget: Static | None = None
+        self._original_content: str | None = None  # Store original for restoration
 
     def compose(self) -> ComposeResult:
         """Compose the find bar layout."""
@@ -129,39 +130,68 @@ class FindBar(Horizontal):
             self._goto_prev_match()
             event.stop()
 
+    def _get_widget_text(self, widget: Static) -> str:
+        """Extract plain text from a widget.
+
+        Args:
+            widget: Widget to extract text from
+
+        Returns:
+            Plain text content, or empty string if not extractable
+        """
+        if hasattr(widget, "renderable"):
+            renderable = widget.renderable
+            if hasattr(renderable, "plain"):
+                return renderable.plain
+            return str(renderable)
+        return ""
+
     def _search(self, query: str) -> None:
-        """Search for query in the markdown content.
+        """Search for query using concatenated widget text.
+
+        Builds a linear string from all widget text, searches it,
+        then maps match positions back to source widgets.
 
         Args:
             query: Search query string
         """
+        # Clear any previous highlight before searching (prevents markup contamination)
+        self._clear_highlight()
+
         self._last_query = query
         self._matches.clear()
         self._current_match_idx = -1
 
-        # Get the markdown widget from parent app
         try:
             markdown = self.app.query_one("#markdown", DocsMarkdown)
         except LookupError:
             return
 
-        # Search through all text-containing widgets in the markdown
-        query_lower = query.lower()
-        for widget in markdown.walk_children():
-            # Check if widget has renderable text content
-            if hasattr(widget, "renderable"):
-                text = str(widget.renderable)
-                if query_lower in text.lower():
-                    # Find all occurrences in this widget
-                    start = 0
-                    while True:
-                        idx = text.lower().find(query_lower, start)
-                        if idx == -1:
-                            break
-                        self._matches.append((widget, idx))
-                        start = idx + 1
+        # Build linear text: list of (widget, start_pos_in_linear, text)
+        segments: list[tuple[Static, int, str]] = []
+        linear_text = ""
 
-        # Go to first match if any
+        for widget in markdown.walk_children():
+            text = self._get_widget_text(widget)
+            if text:
+                segments.append((widget, len(linear_text), text))
+                linear_text += text
+
+        # Search the concatenated text
+        query_lower = query.lower()
+        linear_lower = linear_text.lower()
+
+        start = 0
+        while (idx := linear_lower.find(query_lower, start)) != -1:
+            # Map position back to source widget
+            for widget, seg_start, seg_text in segments:
+                seg_end = seg_start + len(seg_text)
+                if seg_start <= idx < seg_end:
+                    char_offset = idx - seg_start
+                    self._matches.append((widget, char_offset))
+                    break
+            start = idx + 1
+
         if self._matches:
             self._current_match_idx = 0
             self._scroll_to_current_match()
@@ -180,8 +210,12 @@ class FindBar(Horizontal):
         """Remove highlight from currently highlighted widget."""
         if self._highlighted_widget is not None:
             with contextlib.suppress(Exception):
+                # Restore original content if we modified it
+                if self._original_content is not None:
+                    self._highlighted_widget.update(self._original_content)
                 self._highlighted_widget.remove_class("find-highlight")
             self._highlighted_widget = None
+            self._original_content = None
 
     def _update_status(self) -> None:
         """Update the status display."""
@@ -210,26 +244,52 @@ class FindBar(Horizontal):
         self._update_status()
         self._scroll_to_current_match()
 
+    def _highlight_text(self, text: str, offset: int, length: int) -> str:
+        """Create highlighted version of text using Rich markup.
+
+        Args:
+            text: Original text
+            offset: Start position of highlight
+            length: Length of text to highlight
+
+        Returns:
+            Text with Rich markup for highlighting
+        """
+        # Escape square brackets to prevent Rich markup interpretation
+        before = text[:offset].replace("[", r"\[")
+        matched = text[offset : offset + length].replace("[", r"\[")
+        after = text[offset + length :].replace("[", r"\[")
+        return f"{before}[reverse]{matched}[/reverse]{after}"
+
     def _scroll_to_current_match(self) -> None:
-        """Scroll to the current match and highlight it."""
-        if self._current_match_idx < 0 or self._current_match_idx >= len(self._matches):
+        """Scroll to the current match and highlight the matched text."""
+        if not (0 <= self._current_match_idx < len(self._matches)):
             return
 
-        widget, _ = self._matches[self._current_match_idx]
+        widget, char_offset = self._matches[self._current_match_idx]
         try:
-            # Clear previous highlight
             self._clear_highlight()
 
-            # Highlight the current match widget
-            widget.add_class("find-highlight")
+            # Store original for restoration
+            original_text = self._get_widget_text(widget) or str(
+                getattr(widget, "renderable", "")
+            )
+            self._original_content = original_text
             self._highlighted_widget = widget
 
-            # Get the scrollable container
+            # Highlight the match at the stored offset
+            highlighted = self._highlight_text(
+                original_text, char_offset, len(self._last_query)
+            )
+            widget.update(highlighted)
+
+            widget.add_class("find-highlight")
+
+            # Scroll into view
             content = self.app.query_one("#content", ScrollableContainer)
-            # Scroll the widget into view
             content.scroll_to_widget(widget, animate=False)
         except LookupError:
-            pass  # Widget not found in DOM
+            pass
 
     def focus_input(self) -> None:
         """Focus the find input."""
