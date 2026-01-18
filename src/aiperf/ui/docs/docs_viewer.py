@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Main documentation viewer application."""
 
+import contextlib
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -12,6 +13,7 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import (
     Footer,
     Header,
+    Input,
     Markdown,
     Static,
     TabbedContent,
@@ -36,6 +38,199 @@ class DocsMarkdown(Markdown):
         # Don't call super() - that's what opens the browser
         # The event will still bubble up to the app for handling
         event.prevent_default()
+
+
+class FindBar(Horizontal):
+    """Find bar for searching within the current document."""
+
+    DEFAULT_CSS = """
+    FindBar {
+        height: 4;
+        background: $surface;
+        border-top: solid $primary;
+        dock: bottom;
+    }
+
+    FindBar.hidden {
+        display: none;
+    }
+
+    FindBar Input {
+        width: 1fr;
+        margin: 0 1;
+    }
+
+    FindBar #find-status {
+        width: auto;
+        min-width: 10;
+        padding: 0 1;
+        text-style: bold;
+    }
+    """
+
+    def __init__(self, **kwargs) -> None:
+        """Initialize the find bar."""
+        super().__init__(**kwargs)
+        self._matches: list[tuple[object, int]] = []  # (widget, char_offset)
+        self._current_match_idx: int = -1
+        self._last_query: str = ""
+        self._highlighted_widget: object | None = None
+
+    def compose(self) -> ComposeResult:
+        """Compose the find bar layout."""
+        yield Input(
+            placeholder="Find in page... (Enter=next, Shift+Enter=prev)",
+            id="find-input",
+        )
+        yield Static("", id="find-status")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle input changes for live search.
+
+        Args:
+            event: Input change event
+        """
+        query = event.value.strip()
+        if len(query) < 2:
+            self._clear_matches()
+            return
+
+        self._search(query)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key to go to next match.
+
+        Args:
+            event: Input submit event
+        """
+        # Check if Shift was held (for previous match)
+        # Since we can't easily detect shift in submitted, use a different approach
+        if self._matches:
+            self._goto_next_match()
+
+    def on_key(self, event) -> None:
+        """Handle key events for navigation.
+
+        Args:
+            event: Key event
+        """
+        if event.key == "escape":
+            self._clear_highlight()
+            self.add_class("hidden")
+            event.stop()
+        elif event.key == "f3":
+            self._goto_next_match()
+            event.stop()
+        elif event.key == "shift+f3":
+            self._goto_prev_match()
+            event.stop()
+
+    def _search(self, query: str) -> None:
+        """Search for query in the markdown content.
+
+        Args:
+            query: Search query string
+        """
+        self._last_query = query
+        self._matches.clear()
+        self._current_match_idx = -1
+
+        # Get the markdown widget from parent app
+        try:
+            app = self.app
+            markdown = app.query_one("#markdown", DocsMarkdown)
+        except Exception:
+            return
+
+        # Search through all text-containing widgets in the markdown
+        query_lower = query.lower()
+        for widget in markdown.walk_children():
+            # Check if widget has renderable text content
+            if hasattr(widget, "renderable"):
+                text = str(widget.renderable)
+                if query_lower in text.lower():
+                    # Find all occurrences in this widget
+                    start = 0
+                    while True:
+                        idx = text.lower().find(query_lower, start)
+                        if idx == -1:
+                            break
+                        self._matches.append((widget, idx))
+                        start = idx + 1
+
+        self._update_status()
+
+        # Go to first match if any
+        if self._matches:
+            self._current_match_idx = 0
+            self._scroll_to_current_match()
+
+    def _clear_matches(self) -> None:
+        """Clear all matches."""
+        self._clear_highlight()
+        self._matches.clear()
+        self._current_match_idx = -1
+        self._last_query = ""
+        self._update_status()
+
+    def _clear_highlight(self) -> None:
+        """Remove highlight from currently highlighted widget."""
+        if self._highlighted_widget is not None:
+            with contextlib.suppress(Exception):
+                self._highlighted_widget.remove_class("find-highlight")
+            self._highlighted_widget = None
+
+    def _update_status(self) -> None:
+        """Update the status display."""
+        status = self.query_one("#find-status", Static)
+        if not self._matches:
+            if self._last_query:
+                status.update("No matches")
+            else:
+                status.update("")
+        else:
+            status.update(f"{self._current_match_idx + 1}/{len(self._matches)}")
+
+    def _goto_next_match(self) -> None:
+        """Go to the next match."""
+        if not self._matches:
+            return
+        self._current_match_idx = (self._current_match_idx + 1) % len(self._matches)
+        self._update_status()
+        self._scroll_to_current_match()
+
+    def _goto_prev_match(self) -> None:
+        """Go to the previous match."""
+        if not self._matches:
+            return
+        self._current_match_idx = (self._current_match_idx - 1) % len(self._matches)
+        self._update_status()
+        self._scroll_to_current_match()
+
+    def _scroll_to_current_match(self) -> None:
+        """Scroll to the current match and highlight it."""
+        if self._current_match_idx < 0 or self._current_match_idx >= len(self._matches):
+            return
+
+        widget, _ = self._matches[self._current_match_idx]
+        try:
+            # Clear previous highlight
+            self._clear_highlight()
+
+            # Highlight the current match widget
+            widget.add_class("find-highlight")
+            self._highlighted_widget = widget
+
+            # Get the scrollable container
+            content = self.app.query_one("#content", ScrollableContainer)
+            # Scroll the widget into view
+            content.scroll_to_widget(widget, animate=False)
+        except Exception:
+            pass
+
+    def focus_input(self) -> None:
+        """Focus the find input."""
+        self.query_one("#find-input", Input).focus()
 
 
 class TableOfContents(Tree[str]):
@@ -266,11 +461,16 @@ class DocsViewerApp(App):
         background: $panel;
         color: $warning;
     }
+
+    .find-highlight {
+        background: $warning 30%;
+    }
     """
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+s", "search", "Search"),
+        Binding("ctrl+f", "find", "Find"),
         Binding("ctrl+t", "toggle_sidebar", "Nav"),
         Binding("escape", "clear_search", "Clear"),
         Binding("home", "scroll_top", "Top"),
@@ -310,6 +510,7 @@ class DocsViewerApp(App):
                 yield Static("Document", id="content-title")
                 with ScrollableContainer(id="content"):
                     yield DocsMarkdown(id="markdown")
+                yield FindBar(id="find-bar", classes="hidden")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -519,12 +720,12 @@ class DocsViewerApp(App):
         if not markdown.goto_anchor(slug):
             self.notify(f"Anchor '{slug}' not found", severity="warning", timeout=3)
 
-    def _load_document(self, doc_path: Path, jump_to_line: int | None = None) -> None:
+    def _load_document(self, doc_path: Path, search_text: str | None = None) -> None:
         """Load and display a documentation file.
 
         Args:
             doc_path: Path to the documentation file
-            jump_to_line: Optional line number to scroll to
+            search_text: Optional text to search for and scroll to
         """
         try:
             if not doc_path.exists():
@@ -561,15 +762,13 @@ class DocsViewerApp(App):
             toc = self.query_one("#toc-tree", TableOfContents)
             toc.update_toc(content)
 
-            # Scroll to top of document
+            # Scroll to top of document first
             content_container = self.query_one("#content", ScrollableContainer)
             content_container.scroll_home(animate=False)
 
-            # Scroll to line if specified
-            if jump_to_line:
-                # Note: MarkdownViewer doesn't have direct line scrolling
-                # This is a limitation of the widget
-                self.notify(f"Navigated to {relative_path}:{jump_to_line}", timeout=3)
+            # Scroll to search text if specified
+            if search_text:
+                self._scroll_to_text(search_text)
 
         except UnicodeDecodeError:
             self._show_error("File encoding error - cannot display")
@@ -600,21 +799,47 @@ class DocsViewerApp(App):
         markdown.update(f"# Error\n\n{message}")
         self.notify(message, severity="error", timeout=10)
 
+    def _scroll_to_text(self, search_text: str) -> None:
+        """Scroll to the first occurrence of text in the rendered markdown.
+
+        Args:
+            search_text: Text to search for and scroll to
+        """
+
+        def do_scroll() -> None:
+            try:
+                markdown = self.query_one("#markdown", DocsMarkdown)
+                container = self.query_one("#content", ScrollableContainer)
+                search_lower = search_text.lower()
+
+                # Search through rendered widgets for matching text
+                for widget in markdown.walk_children():
+                    if hasattr(widget, "renderable"):
+                        text = str(widget.renderable)
+                        if search_lower in text.lower():
+                            # Found a match - scroll to this widget
+                            container.scroll_to_widget(widget, animate=False)
+                            return
+            except Exception:
+                pass
+
+        self.call_after_refresh(do_scroll)
+
     def action_search(self) -> None:
         """Open the search modal."""
         self.push_screen(SearchModal(self.initial_search), self._handle_search_result)
         # Clear initial search after first use
         self.initial_search = None
 
-    def _handle_search_result(self, result: tuple[Path, int] | None) -> None:
+    def _handle_search_result(self, result: tuple[Path, int, str] | None) -> None:
         """Handle search result selection.
 
         Args:
-            result: Tuple of (file_path, line_number) or None if cancelled
+            result: Tuple of (file_path, line_number, search_query) or None if cancelled
         """
         if result:
-            file_path, line_number = result
-            self._load_document(file_path, jump_to_line=line_number)
+            file_path, line_number, search_query = result
+            self._load_document(file_path, search_text=search_query)
 
     def action_toggle_sidebar(self) -> None:
         """Toggle sidebar visibility."""
@@ -628,9 +853,20 @@ class DocsViewerApp(App):
 
     def action_clear_search(self) -> None:
         """Clear search and return to normal view."""
-        # If a modal is open, close it
-        if self.screen_stack:
+        # If a modal is open (more than just the default screen), close it
+        if len(self.screen_stack) > 1:
             self.pop_screen()
+        # Also hide the find bar if visible and clear its highlight
+        find_bar = self.query_one("#find-bar", FindBar)
+        if not find_bar.has_class("hidden"):
+            find_bar._clear_highlight()
+            find_bar.add_class("hidden")
+
+    def action_find(self) -> None:
+        """Open or focus the find bar."""
+        find_bar = self.query_one("#find-bar", FindBar)
+        find_bar.remove_class("hidden")
+        find_bar.focus_input()
 
     def action_scroll_top(self) -> None:
         """Scroll to the top of the document."""

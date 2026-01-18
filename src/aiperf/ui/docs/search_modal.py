@@ -2,15 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Search modal for documentation."""
 
+import re
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, ListItem, ListView
+from textual.widgets import Input, Label, ListItem, ListView, Static
 
 
-class SearchModal(ModalScreen[tuple[Path, int] | None]):
+class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
     """Modal screen for searching documentation."""
 
     CSS = """
@@ -40,6 +41,17 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
         text-align: center;
         color: $text-muted;
     }
+
+    #results-count {
+        height: 1;
+        text-align: right;
+        color: $text-muted;
+        margin-top: 1;
+    }
+
+    #results-count.hidden {
+        display: none;
+    }
     """
 
     def __init__(self, initial_query: str | None = None) -> None:
@@ -60,6 +72,7 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
                 id="search-input",
             )
             yield ListView(id="search-results")
+            yield Static("", id="results-count", classes="hidden")
 
     def on_mount(self) -> None:
         """Focus the input when mounted."""
@@ -78,7 +91,9 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
         if len(event.value) < 2:
             # Clear results if query too short
             results_list = self.query_one("#search-results", ListView)
+            results_count = self.query_one("#results-count", Static)
             results_list.clear()
+            results_count.add_class("hidden")
             if event.value:
                 results_list.append(
                     ListItem(Label("Type at least 2 characters to search..."))
@@ -86,6 +101,31 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
             return
 
         self._perform_search(event.value)
+
+    def _format_markdown_content(self, content: str) -> str:
+        """Convert markdown syntax to Rich markup.
+
+        Args:
+            content: Raw content string
+
+        Returns:
+            Content with Rich markup for backticks, bold, and italic
+        """
+        # Escape any existing Rich markup brackets
+        content = content.replace("[", r"\[").replace("]", r"\]")
+
+        # Convert backticks to code style (cyan)
+        content = re.sub(r"`([^`]+)`", r"[bold cyan]\1[/bold cyan]", content)
+
+        # Convert **bold** to bold (must come before single *)
+        content = re.sub(r"\*\*([^*]+)\*\*", r"[bold]\1[/bold]", content)
+
+        # Convert _italic_ to italic (word boundaries to avoid underscores in identifiers)
+        content = re.sub(
+            r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])", r"[italic]\1[/italic]", content
+        )
+
+        return content
 
     def _perform_search(self, query: str) -> None:
         """Perform search and update results.
@@ -101,20 +141,38 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
 
         results = app.search_index.search(query)
         results_list = self.query_one("#search-results", ListView)
+        results_count = self.query_one("#results-count", Static)
         results_list.clear()
 
         if not results:
             results_list.append(ListItem(Label("No results found.", id="no-results")))
+            results_count.add_class("hidden")
             return
 
+        # Count unique files
+        unique_files = len({result.file for result in results})
+
         for result in results:
-            # Format: filename:line - preview
+            # Format with separate styles for filename vs content
             relative_path = result.file.relative_to(app.docs_dir)
-            label = f"{relative_path}:{result.line_number} - {result.line_content}"
-            list_item = ListItem(Label(label))
+
+            # Style: path and line number subdued, content with markdown formatting
+            styled_content = self._format_markdown_content(result.line_content)
+            label_text = (
+                f"[dim]{relative_path}:{result.line_number}[/dim] {styled_content}"
+            )
+
+            list_item = ListItem(Static(label_text))
             list_item.result_file = result.file
             list_item.result_line = result.line_number
+            list_item.result_query = query  # Store the search query for scrolling
             results_list.append(list_item)
+
+        # Update results count
+        results_count.update(
+            f"Found {len(results)} results across {unique_files} files"
+        )
+        results_count.remove_class("hidden")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle result selection.
@@ -123,8 +181,14 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
             event: ListView selection event
         """
         if hasattr(event.item, "result_file"):
-            # Return selected file and line number
-            self.dismiss((event.item.result_file, event.item.result_line))
+            # Return selected file, line number, and search query
+            self.dismiss(
+                (
+                    event.item.result_file,
+                    event.item.result_line,
+                    event.item.result_query,
+                )
+            )
         else:
             # No valid result (e.g., "No results" message)
             pass
@@ -140,7 +204,13 @@ class SearchModal(ModalScreen[tuple[Path, int] | None]):
         if results_list.children:
             first_item = results_list.children[0]
             if hasattr(first_item, "result_file"):
-                self.dismiss((first_item.result_file, first_item.result_line))
+                self.dismiss(
+                    (
+                        first_item.result_file,
+                        first_item.result_line,
+                        first_item.result_query,
+                    )
+                )
 
     def on_key(self, event) -> None:
         """Handle key presses.

@@ -5,6 +5,7 @@
 from aiperf.ui.docs.docs_viewer import (
     DocsMarkdown,
     DocsViewerApp,
+    FindBar,
     SidebarFrame,
     TableOfContents,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "DocsSearchIndex",
     "DocsSidebar",
     "DocsViewerApp",
+    "FindBar",
     "SearchModal",
     "SearchResult",
     "SidebarFrame",
