@@ -27,6 +27,17 @@ def _register_trace_commands() -> None:
 _register_trace_commands()
 
 
+def _register_docs_command() -> None:
+    """Register documentation viewer command."""
+    from aiperf.cli_commands.docs import docs_app
+
+    app.command(docs_app)
+
+
+# Register docs command
+_register_docs_command()
+
+
 @app.command(name="profile")
 def profile(
     user_config: UserConfig,

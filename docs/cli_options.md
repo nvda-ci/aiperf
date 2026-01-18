@@ -11,6 +11,10 @@ SPDX-License-Identifier: Apache-2.0
 
 Analyze mooncake trace for prefix statistics
 
+### [`docs`](#aiperf-docs)
+
+View AIPerf documentation in the terminal
+
 ### [`profile`](#aiperf-profile)
 
 Run the Profile subcommand.
@@ -39,6 +43,20 @@ KV cache block size for analysis (default: 512).
 #### `--output-file` `<str>`
 
 Optional output path for analysis report (JSON).
+
+<hr>
+
+## `aiperf docs`
+
+View AIPerf documentation in the terminal
+
+#### `--file` `<str>`
+
+Specific documentation file to open (relative to docs root).
+
+#### `--search` `<str>`
+
+Search query to filter documentation.
 
 <hr>
 

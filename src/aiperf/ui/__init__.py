@@ -32,6 +32,16 @@ from aiperf.ui.dashboard import (
     WorkerDashboard,
     WorkerStatusTable,
 )
+from aiperf.ui.docs import (
+    DocsMarkdown,
+    DocsSearchIndex,
+    DocsSidebar,
+    DocsViewerApp,
+    SearchModal,
+    SearchResult,
+    SidebarFrame,
+    TableOfContents,
+)
 from aiperf.ui.no_ui import (
     NoUI,
 )
@@ -50,6 +60,10 @@ __all__ = [
     "AIPerfDashboardUI",
     "AIPerfTextualApp",
     "BaseAIPerfUI",
+    "DocsMarkdown",
+    "DocsSearchIndex",
+    "DocsSidebar",
+    "DocsViewerApp",
     "GPUMetricsTable",
     "LogConsumer",
     "MaximizableWidget",
@@ -62,9 +76,13 @@ __all__ = [
     "RealtimeMetricsTable",
     "RealtimeTelemetryDashboard",
     "RichLogViewer",
+    "SearchModal",
+    "SearchResult",
     "SelectableRichLog",
+    "SidebarFrame",
     "SingleNodeView",
     "TQDMProgressUI",
+    "TableOfContents",
     "WORKER_STATUS_STYLES",
     "WorkerDashboard",
     "WorkerStatusTable",

@@ -7,5 +7,9 @@ from aiperf.cli_commands.analyze_trace import (
     analyze_app,
     analyze_trace,
 )
+from aiperf.cli_commands.docs import (
+    docs_app,
+    docs_command,
+)
 
-__all__ = ["STAT_COLUMNS", "analyze_app", "analyze_trace"]
+__all__ = ["STAT_COLUMNS", "analyze_app", "analyze_trace", "docs_app", "docs_command"]
