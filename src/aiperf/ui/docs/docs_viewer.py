@@ -4,6 +4,7 @@
 
 import contextlib
 import re
+import webbrowser
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -11,14 +12,13 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Click, Key
+from textual.screen import ModalScreen
 from textual.widgets import (
     Footer,
     Header,
     Input,
     Markdown,
     Static,
-    TabbedContent,
-    TabPane,
     Tree,
 )
 from textual.widgets._markdown import MarkdownFence
@@ -26,6 +26,9 @@ from textual.widgets._markdown import MarkdownFence
 from aiperf.ui.docs.search_index import DocsSearchIndex
 from aiperf.ui.docs.search_modal import SearchModal
 from aiperf.ui.docs.sidebar import DocsSidebar
+
+# Maximum history size for back/forward navigation
+MAX_HISTORY_SIZE = 50
 
 
 class DocsMarkdown(Markdown):
@@ -158,12 +161,12 @@ class FindBar(Horizontal):
                         self._matches.append((widget, idx))
                         start = idx + 1
 
-        self._update_status()
-
         # Go to first match if any
         if self._matches:
             self._current_match_idx = 0
             self._scroll_to_current_match()
+
+        self._update_status()
 
     def _clear_matches(self) -> None:
         """Clear all matches."""
@@ -233,6 +236,128 @@ class FindBar(Horizontal):
         self.query_one("#find-input", Input).focus()
 
 
+class HelpScreen(ModalScreen[None]):
+    """Modal screen showing keyboard shortcuts help."""
+
+    CSS = """
+    HelpScreen {
+        align: center middle;
+    }
+
+    #help-container {
+        width: 60;
+        height: auto;
+        max-height: 80%;
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+    }
+
+    #help-title {
+        text-align: center;
+        text-style: bold;
+        color: $primary;
+        padding-bottom: 1;
+    }
+
+    #help-content {
+        height: auto;
+    }
+
+    .help-section {
+        padding-top: 1;
+        color: $secondary;
+        text-style: bold;
+    }
+
+    .help-row {
+        height: 1;
+    }
+
+    .help-key {
+        width: 20;
+        color: $warning;
+    }
+
+    .help-desc {
+        width: 1fr;
+    }
+
+    #help-footer {
+        text-align: center;
+        padding-top: 1;
+        color: $text-muted;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("question_mark", "dismiss", "Close"),
+        Binding("q", "dismiss", "Close"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        """Compose the help screen layout."""
+        with Vertical(id="help-container"):
+            yield Static("Keyboard Shortcuts", id="help-title")
+            with Vertical(id="help-content"):
+                # Navigation
+                yield Static("Navigation", classes="help-section")
+                yield self._help_row("j / ↓", "Scroll down")
+                yield self._help_row("k / ↑", "Scroll up")
+                yield self._help_row("d / PgDn", "Scroll half page down")
+                yield self._help_row("u / PgUp", "Scroll half page up")
+                yield self._help_row("g / Home", "Go to top")
+                yield self._help_row("G / End", "Go to bottom")
+                yield self._help_row("Alt+← / [", "Go back in history")
+                yield self._help_row("Alt+→ / ]", "Go forward in history")
+
+                # Search
+                yield Static("Search", classes="help-section")
+                yield self._help_row("Ctrl+S", "Search all documents")
+                yield self._help_row("Ctrl+F", "Find in current page")
+                yield self._help_row("n", "Next search match")
+                yield self._help_row("N", "Previous search match")
+
+                # View
+                yield Static("View", classes="help-section")
+                yield self._help_row("Ctrl+T", "Toggle sidebar")
+                yield self._help_row("w", "Toggle word wrap / scroll")
+                yield self._help_row("?", "Show this help")
+
+                # Actions
+                yield Static("Actions", classes="help-section")
+                yield self._help_row("Enter", "Open link / select item")
+                yield self._help_row("Click code", "Copy code block")
+                yield self._help_row("Escape", "Close modal / clear search")
+                yield self._help_row("Ctrl+C / q", "Quit")
+
+            yield Static("Press ? or Escape to close", id="help-footer")
+
+    def _help_row(self, key: str, description: str) -> Horizontal:
+        """Create a help row with key and description.
+
+        Args:
+            key: Keyboard shortcut
+            description: Description of the action
+
+        Returns:
+            Horizontal container with key and description
+        """
+        row = Horizontal(classes="help-row")
+        row.compose_add_child(Static(key, classes="help-key"))
+        row.compose_add_child(Static(description, classes="help-desc"))
+        return row
+
+    def on_key(self, event: Key) -> None:
+        """Handle any key press to close help.
+
+        Args:
+            event: Key event
+        """
+        self.dismiss(None)
+
+
 class TableOfContents(Tree[str]):
     """Table of contents tree for current document headings."""
 
@@ -247,6 +372,7 @@ class TableOfContents(Tree[str]):
     def __init__(self, **kwargs) -> None:
         """Initialize the TOC tree."""
         super().__init__("Contents", **kwargs)
+        self._slug_to_node: dict[str, object] = {}
 
     @staticmethod
     def _strip_markdown(text: str) -> str:
@@ -345,7 +471,7 @@ class TableOfContents(Tree[str]):
 
 
 class SidebarFrame(Vertical):
-    """Framed container for the sidebar navigation with tabs."""
+    """Framed container for the sidebar navigation split vertically."""
 
     DEFAULT_CSS = """
     SidebarFrame {
@@ -359,19 +485,30 @@ class SidebarFrame(Vertical):
         display: none;
     }
 
-    SidebarFrame TabbedContent {
+    SidebarFrame .sidebar-section {
         height: 1fr;
+        border-bottom: solid $primary-darken-2;
     }
 
-    SidebarFrame TabPane {
-        padding: 0;
+    SidebarFrame .sidebar-section:last-child {
+        border-bottom: none;
     }
 
-    SidebarFrame ContentSwitcher {
-        height: 1fr;
+    SidebarFrame .sidebar-label {
+        height: 1;
+        padding: 0 1;
+        background: $primary-darken-1;
+        color: $text;
+        text-style: bold;
     }
 
     SidebarFrame DocsSidebar {
+        height: 1fr;
+        padding: 0;
+        scrollbar-gutter: stable;
+    }
+
+    SidebarFrame TableOfContents {
         height: 1fr;
         padding: 0;
         scrollbar-gutter: stable;
@@ -384,12 +521,13 @@ class SidebarFrame(Vertical):
         self.docs_dir = docs_dir
 
     def compose(self) -> ComposeResult:
-        """Compose the sidebar frame with tabs."""
-        with TabbedContent(id="sidebar-tabs"):
-            with TabPane("Docs", id="docs-tab"):
-                yield DocsSidebar(self.docs_dir, id="sidebar-tree")
-            with TabPane("TOC", id="toc-tab"):
-                yield TableOfContents(id="toc-tree")
+        """Compose the sidebar frame with vertical split."""
+        with Vertical(classes="sidebar-section"):
+            yield Static("Documents", classes="sidebar-label")
+            yield DocsSidebar(self.docs_dir, id="sidebar-tree")
+        with Vertical(classes="sidebar-section"):
+            yield Static("Contents", classes="sidebar-label")
+            yield TableOfContents(id="toc-tree")
 
 
 class DocsViewerApp(App):
@@ -408,17 +546,40 @@ class DocsViewerApp(App):
         background: $surface;
     }
 
-    #content-title {
+    #content-header {
         height: 1;
+        width: 100%;
+    }
+
+    #content-title {
+        width: 1fr;
         padding: 0 1;
         background: $accent;
         color: $text;
         text-style: bold;
     }
 
+    #progress-indicator {
+        width: auto;
+        min-width: 8;
+        padding: 0 1;
+        background: $accent;
+        color: $text-muted;
+        text-align: right;
+    }
+
     #content {
         height: 1fr;
         padding: 0 1;
+    }
+
+    #content.horizontal-scroll {
+        overflow-x: auto;
+    }
+
+    #content.horizontal-scroll #markdown {
+        width: auto;
+        min-width: 100%;
     }
 
     #markdown {
@@ -443,16 +604,40 @@ class DocsViewerApp(App):
     .find-highlight {
         background: $warning 30%;
     }
+
+    .search-highlight {
+        background: $success 30%;
+    }
     """
 
     BINDINGS = [
+        # Quit
         Binding("ctrl+c", "quit", "Quit"),
+        Binding("q", "quit", "Quit", show=False),
+        # Search
         Binding("ctrl+s", "search", "Search"),
         Binding("ctrl+f", "find", "Find"),
+        Binding("n", "find_next", "Next", show=False),
+        Binding("N", "find_prev", "Prev", show=False),
+        # View
         Binding("ctrl+t", "toggle_sidebar", "Nav"),
+        Binding("w", "toggle_wrap", "Wrap", show=False),
         Binding("escape", "clear_search", "Clear"),
+        Binding("question_mark", "help", "Help"),
+        # Vim-style scrolling
+        Binding("j", "scroll_down", "↓", show=False),
+        Binding("k", "scroll_up", "↑", show=False),
+        Binding("d", "scroll_half_down", "½↓", show=False),
+        Binding("u", "scroll_half_up", "½↑", show=False),
+        Binding("g", "scroll_top", "Top", show=False),
+        Binding("G", "scroll_bottom", "Bot", show=False),
         Binding("home", "scroll_top", "Top"),
         Binding("end", "scroll_bottom", "Bottom"),
+        # History navigation
+        Binding("alt+left", "go_back", "Back", show=False),
+        Binding("alt+right", "go_forward", "Fwd", show=False),
+        Binding("left_square_bracket", "go_back", "Back", show=False),
+        Binding("right_square_bracket", "go_forward", "Fwd", show=False),
     ]
 
     def __init__(
@@ -460,6 +645,8 @@ class DocsViewerApp(App):
         docs_dir: Path,
         initial_file: str | None = None,
         initial_search: str | None = None,
+        initial_find: bool = False,
+        sidebar_hidden: bool = False,
     ) -> None:
         """Initialize the docs viewer app.
 
@@ -467,15 +654,25 @@ class DocsViewerApp(App):
             docs_dir: Root directory containing documentation files
             initial_file: Optional initial file to open (relative to docs_dir)
             initial_search: Optional initial search query
+            initial_find: Open the find bar on startup
+            sidebar_hidden: Start with sidebar hidden
         """
         super().__init__()
         self.docs_dir = docs_dir
         self.initial_file = initial_file
         self.initial_search = initial_search
+        self.initial_find = initial_find
+        self._start_sidebar_hidden = sidebar_hidden
         self.current_doc: Path | None = None
         self.search_index = DocsSearchIndex(docs_dir)
-        self.sidebar_visible = True
+        self.sidebar_visible = not sidebar_hidden
         self._last_clicked_fence: MarkdownFence | None = None
+        # Navigation history for back/forward
+        self._history: list[Path] = []
+        self._history_index: int = -1
+        self._navigating_history: bool = False
+        # Last search query for highlighting
+        self._last_search_query: str | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the application layout."""
@@ -483,7 +680,9 @@ class DocsViewerApp(App):
         with Horizontal(id="main-container"):
             yield SidebarFrame(self.docs_dir, id="sidebar-frame")
             with Vertical(id="content-frame"):
-                yield Static("Document", id="content-title")
+                with Horizontal(id="content-header"):
+                    yield Static("Document", id="content-title")
+                    yield Static("0%", id="progress-indicator")
                 with ScrollableContainer(id="content"):
                     yield DocsMarkdown(id="markdown")
                 yield FindBar(id="find-bar", classes="hidden")
@@ -514,6 +713,15 @@ class DocsViewerApp(App):
             # Load index.md by default
             self._load_document(self.docs_dir / "index.md")
 
+        # Open find bar if requested
+        if self.initial_find:
+            self.action_find()
+
+        # Hide sidebar if requested
+        if self._start_sidebar_hidden:
+            sidebar_frame = self.query_one("#sidebar-frame", SidebarFrame)
+            sidebar_frame.add_class("hidden")
+
     def on_tree_node_selected(self, event: Tree.NodeSelected[Path | str]) -> None:
         """Handle tree node selection.
 
@@ -526,8 +734,6 @@ class DocsViewerApp(App):
         # Check if it's a document path (from DocsSidebar) - only load files, not folders
         if isinstance(event.node.data, Path) and event.node.data.is_file():
             self._load_document(event.node.data)
-            # Switch to TOC tab when opening a document from sidebar
-            self.query_one("#sidebar-tabs", TabbedContent).active = "toc-tab"
         # Check if it's a heading slug (from TableOfContents)
         elif isinstance(event.node.data, str):
             self._scroll_to_heading(event.node.data)
@@ -598,9 +804,21 @@ class DocsViewerApp(App):
                 self.notify(f"Anchor '{slug}' not found", severity="warning", timeout=3)
             return
 
-        # External links
-        if href.startswith(("http://", "https://", "mailto:")):
-            self.notify(f"External link: {href}", timeout=5)
+        # External links - open in browser
+        if href.startswith(("http://", "https://")):
+            try:
+                webbrowser.open(href)
+                self.notify(f"Opened in browser: {href}", timeout=3)
+            except Exception:
+                self.notify(f"Could not open: {href}", severity="warning", timeout=5)
+            return
+
+        if href.startswith("mailto:"):
+            try:
+                webbrowser.open(href)
+                self.notify("Opening email client...", timeout=2)
+            except Exception:
+                self.notify(f"Email: {href[7:]}", timeout=5)
             return
 
         # Relative file link - resolve relative to current document
@@ -696,9 +914,18 @@ class DocsViewerApp(App):
             content_container = self.query_one("#content", ScrollableContainer)
             content_container.scroll_home(animate=False)
 
-            # Scroll to search text if specified
+            # Reset progress indicator
+            self._update_progress()
+
+            # Add to history (unless we're navigating history)
+            if not self._navigating_history:
+                self._add_to_history(doc_path)
+
+            # Store and handle search text for highlighting
+            self._last_search_query = search_text
             if search_text:
                 self._scroll_to_text(search_text)
+                self._highlight_search_terms(search_text)
 
         except UnicodeDecodeError:
             self._show_error("File encoding error - cannot display")
@@ -781,6 +1008,16 @@ class DocsViewerApp(App):
         else:
             sidebar_frame.add_class("hidden")
 
+    def action_toggle_wrap(self) -> None:
+        """Toggle horizontal scrolling for wide content."""
+        content = self.query_one("#content", ScrollableContainer)
+        if content.has_class("horizontal-scroll"):
+            content.remove_class("horizontal-scroll")
+            self.notify("Word wrap enabled", timeout=2)
+        else:
+            content.add_class("horizontal-scroll")
+            self.notify("Horizontal scroll enabled", timeout=2)
+
     def action_clear_search(self) -> None:
         """Clear search and return to normal view."""
         # If a modal is open (more than just the default screen), close it
@@ -834,3 +1071,148 @@ class DocsViewerApp(App):
             self.copy_to_clipboard(fence.code)
             # Show brief notification
             self.notify("Code copied to clipboard", timeout=2)
+
+    # --- Vim-style navigation actions ---
+
+    def action_scroll_down(self) -> None:
+        """Scroll down one line (vim j)."""
+        content = self.query_one("#content", ScrollableContainer)
+        content.scroll_relative(y=3)
+        self._update_progress()
+
+    def action_scroll_up(self) -> None:
+        """Scroll up one line (vim k)."""
+        content = self.query_one("#content", ScrollableContainer)
+        content.scroll_relative(y=-3)
+        self._update_progress()
+
+    def action_scroll_half_down(self) -> None:
+        """Scroll down half a page (vim d)."""
+        content = self.query_one("#content", ScrollableContainer)
+        content.scroll_relative(y=content.size.height // 2)
+        self._update_progress()
+
+    def action_scroll_half_up(self) -> None:
+        """Scroll up half a page (vim u)."""
+        content = self.query_one("#content", ScrollableContainer)
+        content.scroll_relative(y=-(content.size.height // 2))
+        self._update_progress()
+
+    # --- Progress tracking ---
+
+    def _update_progress(self) -> None:
+        """Update the reading progress indicator."""
+
+        def do_update() -> None:
+            try:
+                content = self.query_one("#content", ScrollableContainer)
+                progress = self.query_one("#progress-indicator", Static)
+
+                # Calculate progress percentage
+                max_scroll = content.max_scroll_y
+                if max_scroll > 0:
+                    pct = int((content.scroll_y / max_scroll) * 100)
+                    progress.update(f"{pct}%")
+                else:
+                    progress.update("100%")
+            except LookupError:
+                pass
+
+        self.call_after_refresh(do_update)
+
+    def on_scroll(self) -> None:
+        """Handle scroll events to update progress."""
+        self._update_progress()
+
+    # --- History navigation ---
+
+    def _add_to_history(self, doc_path: Path) -> None:
+        """Add a document to the navigation history.
+
+        Args:
+            doc_path: Path to the document
+        """
+        # If we're in the middle of history, truncate forward history
+        if self._history_index < len(self._history) - 1:
+            self._history = self._history[: self._history_index + 1]
+
+        # Don't add duplicates consecutively
+        if self._history and self._history[-1] == doc_path:
+            return
+
+        # Add to history
+        self._history.append(doc_path)
+
+        # Limit history size
+        if len(self._history) > MAX_HISTORY_SIZE:
+            self._history = self._history[-MAX_HISTORY_SIZE:]
+
+        self._history_index = len(self._history) - 1
+
+    def action_go_back(self) -> None:
+        """Go back in navigation history."""
+        if self._history_index > 0:
+            self._history_index -= 1
+            self._navigating_history = True
+            self._load_document(self._history[self._history_index])
+            self._navigating_history = False
+        else:
+            self.notify("No previous page", timeout=2)
+
+    def action_go_forward(self) -> None:
+        """Go forward in navigation history."""
+        if self._history_index < len(self._history) - 1:
+            self._history_index += 1
+            self._navigating_history = True
+            self._load_document(self._history[self._history_index])
+            self._navigating_history = False
+        else:
+            self.notify("No next page", timeout=2)
+
+    # --- Help screen ---
+
+    def action_help(self) -> None:
+        """Show the help screen with keyboard shortcuts."""
+        self.push_screen(HelpScreen())
+
+    # --- Find navigation ---
+
+    def action_find_next(self) -> None:
+        """Go to next find match (n key)."""
+        find_bar = self.query_one("#find-bar", FindBar)
+        if not find_bar.has_class("hidden"):
+            find_bar._goto_next_match()
+        elif self._last_search_query:
+            # Use the last search query if find bar is hidden
+            self._scroll_to_text(self._last_search_query)
+
+    def action_find_prev(self) -> None:
+        """Go to previous find match (N key)."""
+        find_bar = self.query_one("#find-bar", FindBar)
+        if not find_bar.has_class("hidden"):
+            find_bar._goto_prev_match()
+
+    # --- Search highlighting ---
+
+    def _highlight_search_terms(self, search_text: str) -> None:
+        """Highlight search terms in the document.
+
+        Args:
+            search_text: Text to highlight
+        """
+
+        def do_highlight() -> None:
+            try:
+                markdown = self.query_one("#markdown", DocsMarkdown)
+                search_lower = search_text.lower()
+
+                # Find and highlight widgets containing the search text
+                for widget in markdown.walk_children():
+                    if hasattr(widget, "renderable"):
+                        text = str(widget.renderable)
+                        if search_lower in text.lower():
+                            widget.add_class("search-highlight")
+            except LookupError:
+                pass
+
+        self.call_after_refresh(do_highlight)

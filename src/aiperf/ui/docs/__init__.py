@@ -3,9 +3,11 @@
 """Documentation viewer UI components."""
 
 from aiperf.ui.docs.docs_viewer import (
+    MAX_HISTORY_SIZE,
     DocsMarkdown,
     DocsViewerApp,
     FindBar,
+    HelpScreen,
     SidebarFrame,
     TableOfContents,
 )
@@ -27,6 +29,8 @@ __all__ = [
     "DocsSidebar",
     "DocsViewerApp",
     "FindBar",
+    "HelpScreen",
+    "MAX_HISTORY_SIZE",
     "SearchModal",
     "SearchResult",
     "SearchResultItem",

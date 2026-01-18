@@ -38,6 +38,17 @@ def _register_docs_command() -> None:
 _register_docs_command()
 
 
+def _register_help_command() -> None:
+    """Register CLI help command."""
+    from aiperf.cli_commands.help import help_app
+
+    app.command(help_app)
+
+
+# Register help command
+_register_help_command()
+
+
 @app.command(name="profile")
 def profile(
     user_config: UserConfig,

@@ -33,11 +33,13 @@ from aiperf.ui.dashboard import (
     WorkerStatusTable,
 )
 from aiperf.ui.docs import (
+    MAX_HISTORY_SIZE,
     DocsMarkdown,
     DocsSearchIndex,
     DocsSidebar,
     DocsViewerApp,
     FindBar,
+    HelpScreen,
     SearchModal,
     SearchResult,
     SearchResultItem,
@@ -68,7 +70,9 @@ __all__ = [
     "DocsViewerApp",
     "FindBar",
     "GPUMetricsTable",
+    "HelpScreen",
     "LogConsumer",
+    "MAX_HISTORY_SIZE",
     "MaximizableWidget",
     "NoUI",
     "NonFocusableDataTable",

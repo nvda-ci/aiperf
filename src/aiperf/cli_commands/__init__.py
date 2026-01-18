@@ -11,5 +11,17 @@ from aiperf.cli_commands.docs import (
     docs_app,
     docs_command,
 )
+from aiperf.cli_commands.help import (
+    help_app,
+    help_command,
+)
 
-__all__ = ["STAT_COLUMNS", "analyze_app", "analyze_trace", "docs_app", "docs_command"]
+__all__ = [
+    "STAT_COLUMNS",
+    "analyze_app",
+    "analyze_trace",
+    "docs_app",
+    "docs_command",
+    "help_app",
+    "help_command",
+]

@@ -15,6 +15,12 @@ Analyze mooncake trace for prefix statistics
 
 View AIPerf documentation in the terminal
 
+### [`help`](#aiperf-help)
+
+View AIPerf CLI options reference
+
+
+
 ### [`profile`](#aiperf-profile)
 
 Run the Profile subcommand.
@@ -57,6 +63,12 @@ Specific documentation file to open (relative to docs root).
 #### `--search` `<str>`
 
 Search query to filter documentation.
+
+<hr>
+
+## `aiperf help`
+
+View AIPerf CLI options reference
 
 <hr>
 
