@@ -4,6 +4,7 @@
 
 from aiperf.ui.docs.docs_viewer import (
     MAX_HISTORY_SIZE,
+    ContentScroll,
     DocsMarkdown,
     DocsViewerApp,
     FindBar,
@@ -24,6 +25,7 @@ from aiperf.ui.docs.sidebar import (
 )
 
 __all__ = [
+    "ContentScroll",
     "DocsMarkdown",
     "DocsSearchIndex",
     "DocsSidebar",

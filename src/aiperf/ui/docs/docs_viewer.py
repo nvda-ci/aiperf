@@ -12,6 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Click, Key
+from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import (
     Footer,
@@ -29,6 +30,21 @@ from aiperf.ui.docs.sidebar import DocsSidebar
 
 # Maximum history size for back/forward navigation
 MAX_HISTORY_SIZE = 50
+
+
+class ContentScroll(ScrollableContainer):
+    """ScrollableContainer that notifies when scroll position changes."""
+
+    class Scrolled(Message):
+        """Posted when scroll position changes."""
+
+    def on_mount(self) -> None:
+        """Set up scroll position watcher on mount."""
+        self.watch(self, "scroll_y", self._on_scroll_y_change, init=False)
+
+    def _on_scroll_y_change(self) -> None:
+        """Handle scroll_y changes and post message."""
+        self.post_message(self.Scrolled())
 
 
 class DocsMarkdown(Markdown):
@@ -286,7 +302,7 @@ class FindBar(Horizontal):
             widget.add_class("find-highlight")
 
             # Scroll into view
-            content = self.app.query_one("#content", ScrollableContainer)
+            content = self.app.query_one("#content", ContentScroll)
             content.scroll_to_widget(widget, animate=False)
         except LookupError:
             pass
@@ -743,7 +759,7 @@ class DocsViewerApp(App):
                 with Horizontal(id="content-header"):
                     yield Static("Document", id="content-title")
                     yield Static("0%", id="progress-indicator")
-                with ScrollableContainer(id="content"):
+                with ContentScroll(id="content"):
                     yield DocsMarkdown(id="markdown")
                 yield FindBar(id="find-bar", classes="hidden")
         yield Footer()
@@ -971,11 +987,12 @@ class DocsViewerApp(App):
             toc.update_toc(content)
 
             # Scroll to top of document first
-            content_container = self.query_one("#content", ScrollableContainer)
+            content_container = self.query_one("#content", ContentScroll)
             content_container.scroll_home(animate=False)
 
-            # Reset progress indicator
-            self._update_progress()
+            # Reset progress indicator to 0% (we're at the top)
+            progress = self.query_one("#progress-indicator", Static)
+            progress.update("0%")
 
             # Add to history (unless we're navigating history)
             if not self._navigating_history:
@@ -1026,7 +1043,7 @@ class DocsViewerApp(App):
         def do_scroll() -> None:
             try:
                 markdown = self.query_one("#markdown", DocsMarkdown)
-                container = self.query_one("#content", ScrollableContainer)
+                container = self.query_one("#content", ContentScroll)
                 search_lower = search_text.lower()
 
                 # Search through rendered widgets for matching text
@@ -1040,7 +1057,10 @@ class DocsViewerApp(App):
             except LookupError:
                 pass  # Widgets not yet in DOM
 
-        self.call_after_refresh(do_scroll)
+        # Use set_timer to give markdown time to fully render
+        # call_after_refresh only waits one refresh cycle, which isn't enough
+        # for the markdown content to be parsed and widgets created
+        self.set_timer(0.15, do_scroll)
 
     def action_search(self) -> None:
         """Open the search modal."""
@@ -1070,7 +1090,7 @@ class DocsViewerApp(App):
 
     def action_toggle_wrap(self) -> None:
         """Toggle horizontal scrolling for wide content."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         if content.has_class("horizontal-scroll"):
             content.remove_class("horizontal-scroll")
             self.notify("Word wrap enabled", timeout=2)
@@ -1097,12 +1117,12 @@ class DocsViewerApp(App):
 
     def action_scroll_top(self) -> None:
         """Scroll to the top of the document."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_home(animate=False)
 
     def action_scroll_bottom(self) -> None:
         """Scroll to the bottom of the document."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_end(animate=False)
 
     def on_click(self, event: Click) -> None:
@@ -1136,25 +1156,25 @@ class DocsViewerApp(App):
 
     def action_scroll_down(self) -> None:
         """Scroll down one line (vim j)."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_relative(y=3)
         self._update_progress()
 
     def action_scroll_up(self) -> None:
         """Scroll up one line (vim k)."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_relative(y=-3)
         self._update_progress()
 
     def action_scroll_half_down(self) -> None:
         """Scroll down half a page (vim d)."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_relative(y=content.size.height // 2)
         self._update_progress()
 
     def action_scroll_half_up(self) -> None:
         """Scroll up half a page (vim u)."""
-        content = self.query_one("#content", ScrollableContainer)
+        content = self.query_one("#content", ContentScroll)
         content.scroll_relative(y=-(content.size.height // 2))
         self._update_progress()
 
@@ -1165,7 +1185,7 @@ class DocsViewerApp(App):
 
         def do_update() -> None:
             try:
-                content = self.query_one("#content", ScrollableContainer)
+                content = self.query_one("#content", ContentScroll)
                 progress = self.query_one("#progress-indicator", Static)
 
                 # Calculate progress percentage
@@ -1180,7 +1200,7 @@ class DocsViewerApp(App):
 
         self.call_after_refresh(do_update)
 
-    def on_scroll(self) -> None:
+    def on_content_scroll_scrolled(self, event: ContentScroll.Scrolled) -> None:
         """Handle scroll events to update progress."""
         self._update_progress()
 

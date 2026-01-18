@@ -34,6 +34,7 @@ from aiperf.ui.dashboard import (
 )
 from aiperf.ui.docs import (
     MAX_HISTORY_SIZE,
+    ContentScroll,
     DocsMarkdown,
     DocsSearchIndex,
     DocsSidebar,
@@ -64,6 +65,7 @@ __all__ = [
     "AIPerfDashboardUI",
     "AIPerfTextualApp",
     "BaseAIPerfUI",
+    "ContentScroll",
     "DocsMarkdown",
     "DocsSearchIndex",
     "DocsSidebar",
