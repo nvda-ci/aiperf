@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlparse
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.events import Click, Key
 from textual.widgets import (
     Footer,
     Header,
@@ -71,10 +72,10 @@ class FindBar(Horizontal):
     def __init__(self, **kwargs) -> None:
         """Initialize the find bar."""
         super().__init__(**kwargs)
-        self._matches: list[tuple[object, int]] = []  # (widget, char_offset)
+        self._matches: list[tuple[Static, int]] = []  # (widget, char_offset)
         self._current_match_idx: int = -1
         self._last_query: str = ""
-        self._highlighted_widget: object | None = None
+        self._highlighted_widget: Static | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the find bar layout."""
@@ -108,7 +109,7 @@ class FindBar(Horizontal):
         if self._matches:
             self._goto_next_match()
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: Key) -> None:
         """Handle key events for navigation.
 
         Args:
@@ -137,9 +138,8 @@ class FindBar(Horizontal):
 
         # Get the markdown widget from parent app
         try:
-            app = self.app
-            markdown = app.query_one("#markdown", DocsMarkdown)
-        except Exception:
+            markdown = self.app.query_one("#markdown", DocsMarkdown)
+        except LookupError:
             return
 
         # Search through all text-containing widgets in the markdown
@@ -225,8 +225,8 @@ class FindBar(Horizontal):
             content = self.app.query_one("#content", ScrollableContainer)
             # Scroll the widget into view
             content.scroll_to_widget(widget, animate=False)
-        except Exception:
-            pass
+        except LookupError:
+            pass  # Widget not found in DOM
 
     def focus_input(self) -> None:
         """Focus the find input."""
@@ -455,9 +455,6 @@ class DocsViewerApp(App):
         Binding("end", "scroll_bottom", "Bottom"),
     ]
 
-    # Track the last clicked code block for potential keyboard copy
-    _last_clicked_fence: MarkdownFence | None = None
-
     def __init__(
         self,
         docs_dir: Path,
@@ -478,6 +475,7 @@ class DocsViewerApp(App):
         self.current_doc: Path | None = None
         self.search_index = DocsSearchIndex(docs_dir)
         self.sidebar_visible = True
+        self._last_clicked_fence: MarkdownFence | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the application layout."""
@@ -495,10 +493,10 @@ class DocsViewerApp(App):
         """Initialize the app when mounted."""
         # Get version from package metadata
         try:
-            from importlib.metadata import version
+            from importlib.metadata import PackageNotFoundError, version
 
             pkg_version = version("aiperf")
-        except Exception:
+        except PackageNotFoundError:
             pkg_version = "unknown"
         self.title = f"AIPerf {pkg_version} Documentation"
 
@@ -516,7 +514,7 @@ class DocsViewerApp(App):
             # Load index.md by default
             self._load_document(self.docs_dir / "index.md")
 
-    def on_tree_node_selected(self, event) -> None:
+    def on_tree_node_selected(self, event: Tree.NodeSelected[Path | str]) -> None:
         """Handle tree node selection.
 
         Args:
@@ -752,8 +750,8 @@ class DocsViewerApp(App):
                             # Found a match - scroll to this widget
                             container.scroll_to_widget(widget, animate=False)
                             return
-            except Exception:
-                pass
+            except LookupError:
+                pass  # Widgets not yet in DOM
 
         self.call_after_refresh(do_scroll)
 
@@ -810,7 +808,7 @@ class DocsViewerApp(App):
         content = self.query_one("#content", ScrollableContainer)
         content.scroll_end(animate=False)
 
-    def on_click(self, event) -> None:
+    def on_click(self, event: Click) -> None:
         """Handle click events to detect code block clicks for copying.
 
         Args:

@@ -7,8 +7,33 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.events import Key
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label, ListItem, ListView, Static
+
+
+class SearchResultItem(ListItem):
+    """ListItem that stores search result data."""
+
+    def __init__(
+        self,
+        content: Static,
+        result_file: Path,
+        result_line: int,
+        result_query: str,
+    ) -> None:
+        """Initialize the search result item.
+
+        Args:
+            content: The static widget to display
+            result_file: Path to the matching file
+            result_line: Line number of the match
+            result_query: The search query that produced this result
+        """
+        super().__init__(content)
+        self.result_file = result_file
+        self.result_line = result_line
+        self.result_query = result_query
 
 
 class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
@@ -162,10 +187,12 @@ class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
                 f"[dim]{relative_path}:{result.line_number}[/dim] {styled_content}"
             )
 
-            list_item = ListItem(Static(label_text))
-            list_item.result_file = result.file
-            list_item.result_line = result.line_number
-            list_item.result_query = query  # Store the search query for scrolling
+            list_item = SearchResultItem(
+                Static(label_text),
+                result_file=result.file,
+                result_line=result.line_number,
+                result_query=query,
+            )
             results_list.append(list_item)
 
         # Update results count
@@ -180,7 +207,7 @@ class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
         Args:
             event: ListView selection event
         """
-        if hasattr(event.item, "result_file"):
+        if isinstance(event.item, SearchResultItem):
             # Return selected file, line number, and search query
             self.dismiss(
                 (
@@ -189,9 +216,6 @@ class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
                     event.item.result_query,
                 )
             )
-        else:
-            # No valid result (e.g., "No results" message)
-            pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in search input.
@@ -203,7 +227,7 @@ class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
         results_list = self.query_one("#search-results", ListView)
         if results_list.children:
             first_item = results_list.children[0]
-            if hasattr(first_item, "result_file"):
+            if isinstance(first_item, SearchResultItem):
                 self.dismiss(
                     (
                         first_item.result_file,
@@ -212,7 +236,7 @@ class SearchModal(ModalScreen[tuple[Path, int, str] | None]):
                     )
                 )
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: Key) -> None:
         """Handle key presses.
 
         Args:

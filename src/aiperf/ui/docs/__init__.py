@@ -15,6 +15,7 @@ from aiperf.ui.docs.search_index import (
 )
 from aiperf.ui.docs.search_modal import (
     SearchModal,
+    SearchResultItem,
 )
 from aiperf.ui.docs.sidebar import (
     DocsSidebar,
@@ -28,6 +29,7 @@ __all__ = [
     "FindBar",
     "SearchModal",
     "SearchResult",
+    "SearchResultItem",
     "SidebarFrame",
     "TableOfContents",
 ]

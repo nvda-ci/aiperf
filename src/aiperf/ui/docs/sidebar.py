@@ -37,6 +37,7 @@ class DocsSidebar(Tree[Path]):
         try:
             items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
         except (PermissionError, OSError):
+            # Skip directories that can't be read
             return
 
         for item in items:

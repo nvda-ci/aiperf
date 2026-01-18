@@ -40,6 +40,7 @@ from aiperf.ui.docs import (
     FindBar,
     SearchModal,
     SearchResult,
+    SearchResultItem,
     SidebarFrame,
     TableOfContents,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "RichLogViewer",
     "SearchModal",
     "SearchResult",
+    "SearchResultItem",
     "SelectableRichLog",
     "SidebarFrame",
     "SingleNodeView",

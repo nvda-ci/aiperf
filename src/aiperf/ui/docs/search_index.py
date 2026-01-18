@@ -2,18 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """Search index for documentation files."""
 
-from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import Field
 
-@dataclass
-class SearchResult:
+from aiperf.common.models import AIPerfBaseModel
+
+
+class SearchResult(AIPerfBaseModel):
     """A single search result."""
 
-    file: Path
-    line_number: int
-    line_content: str
-    relevance: float
+    file: Path = Field(description="Path to the matching file")
+    line_number: int = Field(description="Line number of the match")
+    line_content: str = Field(description="Content of the matching line")
+    relevance: float = Field(description="Relevance score for sorting")
 
 
 class DocsSearchIndex:
@@ -40,10 +42,10 @@ class DocsSearchIndex:
                 continue
 
             try:
-                with open(md_file, encoding="utf-8") as f:
-                    self.index[md_file] = f.readlines()
-            except Exception:
-                # Skip files that can't be read
+                content = md_file.read_text(encoding="utf-8")
+                self.index[md_file] = content.splitlines(keepends=True)
+            except (OSError, UnicodeDecodeError):
+                # Skip files that can't be read or have encoding issues
                 continue
 
     def search(self, query: str, limit: int = 50) -> list[SearchResult]:
