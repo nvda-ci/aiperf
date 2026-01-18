@@ -247,8 +247,6 @@ class TableOfContents(Tree[str]):
     def __init__(self, **kwargs) -> None:
         """Initialize the TOC tree."""
         super().__init__("Contents", **kwargs)
-        # Map slug -> tree node for quick lookup during scroll sync
-        self._slug_to_node: dict[str, object] = {}
 
     @staticmethod
     def _strip_markdown(text: str) -> str:
@@ -344,26 +342,6 @@ class TableOfContents(Tree[str]):
             leaf = self.root.add_leaf(display_title)
             # Store the original label text for slugify attempts
             leaf.data = label
-
-            # Map slug to node for scroll sync
-            slug = self._slugify(label)
-            self._slug_to_node[slug] = leaf
-
-    def highlight_by_slug(self, slug: str) -> bool:
-        """Highlight a TOC entry by its slug.
-
-        Args:
-            slug: The anchor slug to highlight
-
-        Returns:
-            True if found and highlighted, False otherwise
-        """
-        if slug in self._slug_to_node:
-            node = self._slug_to_node[slug]
-            self.select_node(node)
-            self.scroll_to_node(node)
-            return True
-        return False
 
 
 class SidebarFrame(Vertical):
@@ -555,52 +533,6 @@ class DocsViewerApp(App):
         # Check if it's a heading slug (from TableOfContents)
         elif isinstance(event.node.data, str):
             self._scroll_to_heading(event.node.data)
-
-    def on_scrollable_container_scroll_end(self, _event) -> None:
-        """Sync TOC highlight when scrolling ends."""
-        self._sync_toc_to_scroll()
-
-    def _sync_toc_to_scroll(self) -> None:
-        """Find the topmost visible heading and highlight it in TOC."""
-        try:
-            markdown = self.query_one("#markdown", DocsMarkdown)
-            content = self.query_one("#content", ScrollableContainer)
-            toc = self.query_one("#toc-tree", TableOfContents)
-
-            # Query all heading widgets (H1-H6)
-            headings = list(
-                markdown.query(
-                    "MarkdownH1, MarkdownH2, MarkdownH3, MarkdownH4, MarkdownH5, MarkdownH6"
-                )
-            )
-            if not headings:
-                return
-
-            # Find the heading closest to the top of the visible area
-            scroll_y = content.scroll_y
-            best_heading = None
-            best_distance = float("inf")
-
-            for heading in headings:
-                # Get heading position relative to the scrollable container
-                heading_y = heading.region.y - content.region.y + scroll_y
-                distance = abs(heading_y - scroll_y)
-
-                # Prefer headings at or above the scroll position
-                if heading_y <= scroll_y + 5:  # Small buffer for headings near top
-                    if best_heading is None or heading_y > (
-                        best_heading.region.y - content.region.y + scroll_y
-                    ):
-                        best_heading = heading
-                elif distance < best_distance and best_heading is None:
-                    best_distance = distance
-                    best_heading = heading
-
-            if best_heading and best_heading.id:
-                toc.highlight_by_slug(best_heading.id)
-        except Exception:
-            # Silently ignore errors during scroll sync
-            pass
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
         """Handle link clicks within markdown documents.
