@@ -324,10 +324,13 @@ class EndToEndTestRunner:
             )
 
             # Execute aiperf command in the container with verbose output (use the virtual environment)
-            # Add --ui-type simple to all aiperf commands
-            aiperf_command_with_ui = aiperf_cmd.command.replace(
-                "aiperf profile", f"aiperf profile --ui-type {AIPERF_UI_TYPE}"
-            )
+            # Add --ui-type simple only to commands that contain an 'aiperf' invocation
+            # Check if the command contains 'aiperf profile' or 'aiperf compare' (actual aiperf commands)
+            command_text = aiperf_cmd.command
+            if "\naiperf " in command_text or command_text.strip().startswith("aiperf "):
+                aiperf_command_with_ui = f"{aiperf_cmd.command} --ui-type {AIPERF_UI_TYPE}"
+            else:
+                aiperf_command_with_ui = aiperf_cmd.command
             exec_command = f"docker exec {self.aiperf_container_id} bash -c 'source /opt/aiperf/venv/bin/activate && {aiperf_command_with_ui}'"
 
             logger.info(
