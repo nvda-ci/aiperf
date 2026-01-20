@@ -138,8 +138,9 @@ FROM nvcr.io/nvidia/distroless/python:3.13-v3.1.2-dev AS runtime
 # Include license and attribution files
 COPY LICENSE ATTRIBUTIONS*.md /legal/
 
-# Copy bash with executable permissions preserved using --chmod
+# Copy bash and wget with executable permissions preserved using --chmod
 COPY --from=env-builder --chown=1000:1000 --chmod=755 /bin/bash /bin/bash
+COPY --from=env-builder --chown=1000:1000 --chmod=755 /usr/bin/wget /usr/bin/wget
 
 # Copy ffmpeg binaries and libraries (includes libvpx)
 COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
