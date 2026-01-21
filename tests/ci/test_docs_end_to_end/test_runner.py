@@ -83,109 +83,83 @@ class EndToEndTestRunner:
             logger.info("=" * 60)
 
     def _build_aiperf_container(self) -> bool:
-        """Build AIPerf container using python slim image + pip install"""
+        """Build AIPerf container from Dockerfile"""
         logger.info("Building AIPerf container...")
 
         # Get repo root using centralized function
         repo_root = get_repo_root()
 
-        # Build a simple container with aiperf installed via pip in a venv
-        # This avoids the complexity of distroless and library copying for tests
-        dockerfile_content = f"""FROM python:3.13-slim-bookworm
-RUN apt-get update -y && \\
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-        build-essential \\
-        curl \\
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /workspace
-COPY . /workspace
-RUN python -m venv /opt/aiperf/venv && \\
-    /opt/aiperf/venv/bin/pip install --no-cache-dir .
-ENV VIRTUAL_ENV=/opt/aiperf/venv
-ENV PATH="/opt/aiperf/venv/bin:$PATH"
-"""
+        # Build the container
+        build_command = f"cd {repo_root} && docker build -t aiperf:test ."
 
-        # Write temporary Dockerfile
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.Dockerfile', delete=False, dir=repo_root) as f:
-            f.write(dockerfile_content)
-            temp_dockerfile = f.name
+        logger.info("Building AIPerf Docker image...")
+        logger.info(f"Build command: {build_command}")
+        logger.info("=" * 60)
 
-        try:
-            build_command = f"cd {repo_root} && docker build -f {os.path.basename(temp_dockerfile)} -t aiperf:test ."
+        build_process = subprocess.Popen(
+            build_command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
 
-            logger.info("Building AIPerf Docker image (test version)...")
-            logger.info(f"Build command: {build_command}")
-            logger.info("=" * 60)
+        # Show real-time build output
+        build_output_lines = []
+        while True:
+            line = build_process.stdout.readline()
+            if not line and build_process.poll() is not None:
+                break
+            if line:
+                print(f"BUILD: {line.rstrip()}")
+                build_output_lines.append(line)
 
-            build_process = subprocess.Popen(
-                build_command,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
+        build_process.wait()
 
-            # Show real-time build output
-            build_output_lines = []
-            while True:
-                line = build_process.stdout.readline()
-                if not line and build_process.poll() is not None:
-                    break
-                if line:
-                    print(f"BUILD: {line.rstrip()}")
-                    build_output_lines.append(line)
+        if build_process.returncode != 0:
+            logger.error("=" * 60)
+            logger.error("Failed to build AIPerf container")
+            logger.error(f"Return code: {build_process.returncode}")
+            return False
 
-            build_process.wait()
+        logger.info("=" * 60)
+        logger.info("AIPerf Docker image built successfully")
 
-            if build_process.returncode != 0:
-                logger.error("=" * 60)
-                logger.error("Failed to build AIPerf container")
-                logger.error(f"Return code: {build_process.returncode}")
-                return False
+        # Start the container with bash entrypoint override
+        container_name = f"aiperf-test-{os.getpid()}"
+        run_command = f"docker run -d --name {container_name} --network host --entrypoint bash aiperf:test -c 'tail -f /dev/null'"
 
-            logger.info("=" * 60)
-            logger.info("AIPerf Docker image built successfully")
+        result = subprocess.run(
+            run_command, shell=True, capture_output=True, text=True, timeout=60
+        )
 
-            # Start the container with bash entrypoint override
-            container_name = f"aiperf-test-{os.getpid()}"
-            run_command = f"docker run -d --name {container_name} --network host aiperf:test tail -f /dev/null"
+        if result.returncode != 0:
+            logger.error("Failed to start AIPerf container")
+            logger.error(f"Error: {result.stderr}")
+            return False
 
-            result = subprocess.run(
-                run_command, shell=True, capture_output=True, text=True, timeout=60
-            )
+        self.aiperf_container_id = container_name
+        logger.info(f"AIPerf container ready: {container_name}")
 
-            if result.returncode != 0:
-                logger.error("Failed to start AIPerf container")
-                logger.error(f"Error: {result.stderr}")
-                return False
+        # Verify aiperf works by checking the virtual environment
+        verify_result = subprocess.run(
+            f"docker exec {container_name} bash -c 'source /opt/aiperf/venv/bin/activate && aiperf --version'",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
 
-            self.aiperf_container_id = container_name
-            logger.info(f"AIPerf container ready: {container_name}")
+        if verify_result.returncode != 0:
+            logger.error("AIPerf verification failed")
+            logger.error(f"Stdout: {verify_result.stdout}")
+            logger.error(f"Stderr: {verify_result.stderr}")
+            return False
 
-            # Verify aiperf works (installed in venv, but venv is in PATH)
-            verify_result = subprocess.run(
-                f"docker exec {container_name} aiperf --version",
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            if verify_result.returncode != 0:
-                logger.error("AIPerf verification failed")
-                logger.error(f"Stdout: {verify_result.stdout}")
-                logger.error(f"Stderr: {verify_result.stderr}")
-                return False
-
-            logger.info(f"AIPerf version: {verify_result.stdout.strip()}")
-            return True
-        finally:
-            # Clean up temporary Dockerfile
-            if os.path.exists(temp_dockerfile):
-                os.unlink(temp_dockerfile)
+        logger.info(f"AIPerf version: {verify_result.stdout.strip()}")
+        return True
 
     def _validate_servers(self, servers: dict[str, Server]) -> bool:
         """Validate that all servers have required commands and no duplicates"""
@@ -350,13 +324,10 @@ ENV PATH="/opt/aiperf/venv/bin:$PATH"
             )
 
             # Execute aiperf command in the container with verbose output (use the virtual environment)
-            # Add --ui-type simple only to commands that contain an 'aiperf' invocation
-            # Check if the command contains 'aiperf profile' or 'aiperf compare' (actual aiperf commands)
-            command_text = aiperf_cmd.command
-            if "\naiperf " in command_text or command_text.strip().startswith("aiperf "):
-                aiperf_command_with_ui = f"{aiperf_cmd.command} --ui-type {AIPERF_UI_TYPE}"
-            else:
-                aiperf_command_with_ui = aiperf_cmd.command
+            # Add --ui-type simple to all aiperf commands
+            aiperf_command_with_ui = aiperf_cmd.command.replace(
+                "aiperf profile", f"aiperf profile --ui-type {AIPERF_UI_TYPE}"
+            )
             exec_command = f"docker exec {self.aiperf_container_id} bash -c 'source /opt/aiperf/venv/bin/activate && {aiperf_command_with_ui}'"
 
             logger.info(
@@ -510,3 +481,4 @@ ENV PATH="/opt/aiperf/venv/bin:$PATH"
             force_cleanup_containers(all_tracked_containers)
         else:
             logger.info("No tracked containers to clean up")
+            
