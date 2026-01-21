@@ -481,4 +481,3 @@ class EndToEndTestRunner:
             force_cleanup_containers(all_tracked_containers)
         else:
             logger.info("No tracked containers to clean up")
-            
