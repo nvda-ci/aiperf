@@ -93,7 +93,7 @@ For real-world benchmarking, use the FAST25 production trace data from the Moonc
 <!-- aiperf-run-vllm-default-openai-endpoint-server -->
 ```bash
 # Download the Mooncake trace data
-wget -O mooncake_trace.jsonl https://raw.githubusercontent.com/kvcache-ai/Mooncake/refs/heads/main/FAST25-release/arxiv-trace/mooncake_trace.jsonl
+curl -Lo mooncake_trace.jsonl https://raw.githubusercontent.com/kvcache-ai/Mooncake/refs/heads/main/FAST25-release/arxiv-trace/mooncake_trace.jsonl
 
 # Create a subset for quick testing
 head -n 10 mooncake_trace.jsonl > mooncake_trace_short.jsonl
