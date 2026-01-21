@@ -86,7 +86,6 @@ WORKDIR /workspace
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
-        curl \
         nasm \
         pkg-config \
         wget \
@@ -139,20 +138,8 @@ FROM nvcr.io/nvidia/distroless/python:3.13-v3.1.2-dev AS runtime
 # Include license and attribution files
 COPY LICENSE ATTRIBUTIONS*.md /legal/
 
-# Copy bash and curl with executable permissions preserved using --chmod
+# Copy bash with executable permissions preserved using --chmod
 COPY --from=env-builder --chown=1000:1000 --chmod=755 /bin/bash /bin/bash
-COPY --from=env-builder --chown=1000:1000 --chmod=755 /usr/bin/curl /usr/bin/curl
-
-# Copy curl's shared library dependencies
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libcurl.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libnghttp2.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libidn2.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/librtmp.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libssh2.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libpsl.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libunistring.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libbrotlidec.so.* /usr/lib/x86_64-linux-gnu/
-COPY --from=env-builder --chown=1000:1000 /usr/lib/x86_64-linux-gnu/libbrotlicommon.so.* /usr/lib/x86_64-linux-gnu/
 
 # Copy ffmpeg binaries and libraries (includes libvpx)
 COPY --from=env-builder --chown=1000:1000 /opt/ffmpeg /opt/ffmpeg
