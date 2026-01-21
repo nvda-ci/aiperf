@@ -93,8 +93,10 @@ class EndToEndTestRunner:
         # This avoids the complexity of distroless and library copying for tests
         dockerfile_content = f"""FROM python:3.13-slim-bookworm
 RUN apt-get update -y && \\
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl && \\
-    rm -rf /var/lib/apt/lists/*
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
+        build-essential \\
+        curl \\
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 COPY . /workspace
 RUN python -m venv /opt/aiperf/venv && \\
