@@ -567,14 +567,14 @@ class DatasetClientStoreProtocol(AIPerfLifecycleProtocol, Protocol):
         """
         ...
 
-    async def get_conversation(self, conversation_id: str) -> Conversation:
+    async def get_conversation(self, conversation_id: str) -> Conversation | bytes:
         """Retrieve a conversation by ID (always async).
 
         Args:
             conversation_id: The session ID of the conversation
 
         Returns:
-            Conversation object
+            Conversation object or bytes if the conversation is a payload
 
         Raises:
             KeyError: If conversation_id not found

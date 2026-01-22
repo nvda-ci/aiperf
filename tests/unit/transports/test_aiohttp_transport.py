@@ -245,11 +245,12 @@ class TestAioHttpTransport:
         await transport.send_request(request_info, payload)
 
         args = self._extract_call_args(transport.aiohttp_client.post_request.call_args)
-        json_str = args["json_str"]
+        request_data = args["json_str"]
 
-        assert isinstance(json_str, str)
-        assert "messages" in json_str
-        assert "gpt-4" in json_str
+        # request_data is bytes (orjson.dumps returns bytes, no decode needed)
+        assert isinstance(request_data, bytes)
+        assert b"messages" in request_data
+        assert b"gpt-4" in request_data
 
     @pytest.mark.asyncio
     async def test_send_request_handles_exception(
@@ -324,7 +325,7 @@ class TestAioHttpTransport:
 
         assert isinstance(record, RequestRecord)
         args = self._extract_call_args(transport.aiohttp_client.post_request.call_args)
-        assert args["json_str"] == "{}"
+        assert args["json_str"] == b"{}"
 
     @pytest.mark.asyncio
     async def test_send_request_complex_payload(
@@ -357,10 +358,10 @@ class TestAioHttpTransport:
 
         assert isinstance(record, RequestRecord)
         args = self._extract_call_args(transport.aiohttp_client.post_request.call_args)
-        json_str = args["json_str"]
-        assert "messages" in json_str
-        assert "image_url" in json_str
-        assert "0.7" in json_str
+        request_data = args["json_str"]
+        assert b"messages" in request_data
+        assert b"image_url" in request_data
+        assert b"0.7" in request_data
 
 
 class TestAioHttpTransportLifecycle:
@@ -460,7 +461,7 @@ class TestAioHttpTransportIntegration:
 
         assert "https://api.example.com/v1/chat/completions" in args["url"]
         assert "api-version=2024-10-01" in args["url"]
-        assert "Hello" in args["json_str"]
+        assert b"Hello" in args["json_str"]
         assert args["headers"]["Authorization"] == "Bearer test-key"
         assert args["headers"]["Custom-Header"] == "value"
         assert args["headers"]["X-Request-ID"] == "req-123"

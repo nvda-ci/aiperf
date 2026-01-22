@@ -207,11 +207,11 @@ class AioHttpTransport(BaseTransport):
     async def send_request(
         self,
         request_info: RequestInfo,
-        payload: dict[str, Any],
+        payload: dict[str, Any] | bytes,
         *,
         first_token_callback: FirstTokenCallback | None = None,
     ) -> RequestRecord:
-        """Send HTTP POST request with JSON payload.
+        """Send HTTP POST request with payload.
 
         Connection behavior depends on the configured connection_reuse_strategy:
         - POOLED: Uses shared connection pool (default aiohttp behavior)
@@ -220,7 +220,7 @@ class AioHttpTransport(BaseTransport):
 
         Args:
             request_info: Request context and metadata (includes cancel_after_ns)
-            payload: JSON-serializable request payload
+            payload: Request payload - either a dict (JSON-serialized) or bytes (sent directly)
             first_token_callback: Optional callback fired on first SSE message with ttft_ns
 
         Returns:
@@ -241,7 +241,12 @@ class AioHttpTransport(BaseTransport):
         try:
             url = self.build_url(request_info)
             headers = self.build_headers(request_info)
-            json_str = orjson.dumps(payload).decode("utf-8")
+
+            # Support direct bytes payload (pre-serialized) or dict (serialize now)
+            if isinstance(payload, bytes):
+                request_data = payload
+            else:
+                request_data = orjson.dumps(payload)
 
             match reuse_strategy:
                 case ConnectionReuseStrategy.NEVER:
@@ -280,7 +285,7 @@ class AioHttpTransport(BaseTransport):
 
             record = await self.aiohttp_client.post_request(
                 url,
-                json_str,
+                request_data,
                 headers,
                 cancel_after_ns=request_info.cancel_after_ns,
                 first_token_callback=first_token_callback,

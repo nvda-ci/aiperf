@@ -489,6 +489,7 @@ class DatasetBackingStoreFactory(
     def create_instance(  # type: ignore[override]
         cls,
         class_type: DatasetBackingStoreType | str,
+        user_config: UserConfig,
         **kwargs,
     ) -> DatasetBackingStoreProtocol:
         """Create a dataset backing store instance.
@@ -497,12 +498,13 @@ class DatasetBackingStoreFactory(
 
         Args:
             class_type: Type of backing store to create
+            user_config: User configuration
             **kwargs: Implementation-specific configuration
 
         Returns:
             DatasetBackingStoreProtocol implementation
         """
-        return super().create_instance(class_type, **kwargs)
+        return super().create_instance(class_type, user_config=user_config, **kwargs)
 
 
 class DatasetClientStoreFactory(

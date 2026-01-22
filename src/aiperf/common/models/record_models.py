@@ -368,6 +368,10 @@ class RequestInfo(AIPerfBaseModel):
         ...,
         description="The model endpoint that the request was sent to.",
     )
+    payload: bytes | None = Field(
+        default=None,
+        description="The pre-serialized payload of the request. This is used to send the request directly to the inference server without re-serialization.",
+    )
     turns: list[Turn] = Field(
         default_factory=list,
         description="The actual turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",

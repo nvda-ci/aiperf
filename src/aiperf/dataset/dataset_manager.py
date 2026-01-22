@@ -88,12 +88,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self._conversation_ids_cache: list[str] = []
         self.dataset_configured = asyncio.Event()
 
-        self._backing_store: DatasetBackingStoreProtocol = (
-            DatasetBackingStoreFactory.create_instance(
-                DatasetBackingStoreType.MEMORY_MAP,
-                benchmark_id=user_config.benchmark_id,
-            )
-        )
+        self._backing_store: DatasetBackingStoreProtocol | None = None
 
     @on_command(CommandType.PROFILE_CONFIGURE)
     async def _profile_configure_command(
@@ -286,11 +281,27 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             conversation.session_id for conversation in conversations
         ]
 
+        is_single_turn = all(
+            len(conversation.turns) == 1 for conversation in conversations
+        )
+        # If all conversations are single turn, use payload store for efficiency.
+        backing_store_type = (
+            DatasetBackingStoreType.MEMORY_MAP_PAYLOAD
+            if is_single_turn
+            else DatasetBackingStoreType.MEMORY_MAP_CONVERSATION
+        )
+
         # Initialize backing store and stream conversations to mmap files
         # Workers read directly from these files
+        self._backing_store = DatasetBackingStoreFactory.create_instance(
+            backing_store_type,
+            user_config=self.user_config,
+        )
         await self._backing_store.initialize()
-        conversations_dict = {conv.session_id: conv for conv in conversations}
-        await self._backing_store.add_conversations(conversations_dict)
+        for conversation in conversations:
+            await self._backing_store.add_conversation(
+                conversation.session_id, conversation
+            )
         await self._backing_store.finalize()
         client_metadata = self._backing_store.get_client_metadata()
         self.info(f"Backing store finalized: {client_metadata}")

@@ -17,6 +17,7 @@ import mmap
 import os
 import tempfile
 import weakref
+from abc import ABC, abstractmethod
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -26,9 +27,14 @@ import orjson
 from pydantic import Field, field_validator
 
 from aiperf.common.aiperf_logger import AIPerfLogger
+from aiperf.common.config.user_config import UserConfig
 from aiperf.common.constants import BYTES_PER_MIB
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DatasetBackingStoreType, DatasetClientStoreType
+from aiperf.common.enums import (
+    CreditPhase,
+    DatasetBackingStoreType,
+    DatasetClientStoreType,
+)
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import (
     MemoryMapFileOperationError,
@@ -37,10 +43,19 @@ from aiperf.common.exceptions import (
 from aiperf.common.factories import (
     DatasetBackingStoreFactory,
     DatasetClientStoreFactory,
+    EndpointFactory,
 )
 from aiperf.common.hooks import on_init, on_stop
 from aiperf.common.mixins import AIPerfLifecycleMixin
-from aiperf.common.models import AIPerfBaseModel, Conversation, MemoryMapClientMetadata
+from aiperf.common.models import (
+    AIPerfBaseModel,
+    BaseMemoryMapClientMetadata,
+    Conversation,
+    MemoryMapConversationClientMetadata,
+    MemoryMapPayloadClientMetadata,
+    ModelEndpointInfo,
+    RequestInfo,
+)
 from aiperf.common.protocols import (
     DatasetBackingStoreProtocol,
     DatasetClientStoreProtocol,
@@ -50,8 +65,7 @@ _logger = AIPerfLogger(__name__)
 
 
 @implements_protocol(DatasetBackingStoreProtocol)
-@DatasetBackingStoreFactory.register(DatasetBackingStoreType.MEMORY_MAP)
-class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
+class BaseMemoryMapDatasetBackingStore(AIPerfLifecycleMixin, ABC):
     """Streams conversations to disk as they arrive (DatasetManager side).
 
     Writes each conversation immediately — constant memory usage regardless of dataset size.
@@ -67,26 +81,27 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
     so workers across pods can access the same files.
     """
 
-    def __init__(self, benchmark_id: str | None = None, **kwargs) -> None:
+    def __init__(self, user_config: UserConfig, **kwargs) -> None:
         """Initialize memory-mapped storage.
 
         Args:
-            benchmark_id: Unique identifier for this benchmark run (used for directory isolation)
+            user_config: User configuration
             **kwargs: Additional configuration (unused for local mmap)
         """
         super().__init__()
         self._finalized = False
+        self._user_config = user_config
 
         # Streaming state
         self._data_file = None
         self._current_offset = 0
         self._offsets: dict[str, ConversationOffset] = {}
-        self._session_ids: list[str] = []  # Maintain insertion order
+        self._conversation_ids: list[str] = []  # Maintain insertion order
 
         # File paths (configurable base path for k8s mounted volumes)
         # Directory structure: {base_path}/aiperf_mmap_{benchmark_id}/
         base_path = Environment.DATASET.MMAP_BASE_PATH or Path(tempfile.gettempdir())
-        dir_suffix = benchmark_id or f"{os.getpid()}_{id(self)}"
+        dir_suffix = user_config.benchmark_id or f"{os.getpid()}_{id(self)}"
         mmap_dir = base_path / f"aiperf_mmap_{dir_suffix}"
         self._data_path: Path = mmap_dir / "dataset.dat"
         self._index_path: Path = mmap_dir / "index.dat"
@@ -100,34 +115,40 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
             f"Memory-mapped backing store initialized (streaming to {self._data_path})"
         )
 
+    async def _write_conversation_bytes(
+        self, conversation_id: str, conv_bytes: bytes
+    ) -> None:
+        """Write conversation bytes to the data file."""
+        if self._finalized:
+            raise RuntimeError("Cannot add conversations after finalization")
+
+        await self._data_file.write(conv_bytes)
+
+        self._offsets[conversation_id] = ConversationOffset(
+            offset=self._current_offset, size=len(conv_bytes)
+        )
+        self._conversation_ids.append(conversation_id)
+        self._current_offset += len(conv_bytes)
+
+        if len(self._conversation_ids) % 1000 == 0:
+            self.debug(
+                f"Streamed {len(self._conversation_ids)} conversations ({self._current_offset} bytes)"
+            )
+
+    @abstractmethod
     async def add_conversation(
         self, conversation_id: str, conversation: Conversation
     ) -> None:
         """Add a single conversation (written immediately to file).
 
         Args:
-            conversation_id: Session ID of the conversation
+            conversation_id: Unique ID of the conversation
             conversation: Conversation object to add
 
         Raises:
             RuntimeError: If already finalized
         """
-        if self._finalized:
-            raise RuntimeError("Cannot add conversations after finalization")
-
-        conv_bytes = conversation.model_dump_json().encode("utf-8")
-        await self._data_file.write(conv_bytes)
-
-        self._offsets[conversation_id] = ConversationOffset(
-            offset=self._current_offset, size=len(conv_bytes)
-        )
-        self._session_ids.append(conversation_id)
-        self._current_offset += len(conv_bytes)
-
-        if len(self._session_ids) % 1000 == 0:
-            self.debug(
-                f"Streamed {len(self._session_ids)} conversations ({self._current_offset} bytes)"
-            )
+        pass
 
     async def add_conversations(self, conversations: dict[str, Conversation]) -> None:
         """Add multiple conversations (written immediately to file).
@@ -154,11 +175,11 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
 
         await self._data_file.close()
         self.info(
-            f"Data file finalized: {len(self._session_ids)} conversations, {self._current_offset / BYTES_PER_MIB:,.2f} MB"
+            f"Data file finalized: {len(self._conversation_ids)} conversations, {self._current_offset / BYTES_PER_MIB:,.2f} MB"
         )
 
         index = MemoryMapDatasetIndex(
-            conversation_ids=self._session_ids,
+            conversation_ids=self._conversation_ids,
             offsets=self._offsets,
             total_size=self._current_offset,
         )
@@ -168,7 +189,8 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
         self._finalized = True
         self.info(f"Index file created: {self._index_path}")
 
-    def get_client_metadata(self) -> MemoryMapClientMetadata:
+    @abstractmethod
+    def get_client_metadata(self) -> BaseMemoryMapClientMetadata:
         """Return file paths for client initialization.
 
         Returns:
@@ -177,17 +199,7 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
         Raises:
             RuntimeError: If not finalized
         """
-        if not self._finalized:
-            raise RuntimeError(
-                "Cannot get metadata before finalization. Call finalize() first."
-            )
-
-        return MemoryMapClientMetadata(
-            data_file_path=self._data_path,
-            index_file_path=self._index_path,
-            conversation_count=len(self._session_ids),
-            total_size_bytes=self._current_offset,
-        )
+        pass
 
     @on_stop
     async def _cleanup(self) -> None:
@@ -206,25 +218,152 @@ class MemoryMapDatasetBackingStore(AIPerfLifecycleMixin):
         self.debug("Memory-mapped backing store cleanup complete")
 
 
+@implements_protocol(DatasetBackingStoreProtocol)
+@DatasetBackingStoreFactory.register(DatasetBackingStoreType.MEMORY_MAP_CONVERSATION)
+class MemoryMapConversationDatasetBackingStore(BaseMemoryMapDatasetBackingStore):
+    """Write conversations to memory-mapped files (DatasetManager side).
+
+    Uses mmap for zero-copy writes — the OS pages data into memory as needed.
+    """
+
+    async def add_conversation(
+        self, conversation_id: str, conversation: Conversation
+    ) -> None:
+        """Add a single conversation (written immediately to file).
+
+        Args:
+            conversation_id: Unique ID of the conversation
+            conversation: Conversation object to add
+        """
+        if self._finalized:
+            raise RuntimeError("Cannot add conversations after finalization")
+
+        conv_bytes = orjson.dumps(
+            conversation.model_dump(exclude_none=True, mode="json")
+        )
+        await self._write_conversation_bytes(conversation_id, conv_bytes)
+
+    def get_client_metadata(self) -> BaseMemoryMapClientMetadata:
+        """Return file paths for client initialization.
+
+        Returns:
+            MemoryMapClientMetadata with file paths and stats
+
+        Raises:
+            RuntimeError: If not finalized
+        """
+        if not self._finalized:
+            raise RuntimeError(
+                "Cannot get metadata before finalization. Call finalize() first."
+            )
+
+        return MemoryMapConversationClientMetadata(
+            data_file_path=self._data_path,
+            index_file_path=self._index_path,
+            conversation_count=len(self._conversation_ids),
+            total_size_bytes=self._current_offset,
+        )
+
+
+@implements_protocol(DatasetBackingStoreProtocol)
+@DatasetBackingStoreFactory.register(DatasetBackingStoreType.MEMORY_MAP_PAYLOAD)
+class MemoryMapPayloadDatasetBackingStore(BaseMemoryMapDatasetBackingStore):
+    """Write payloads to memory-mapped files (DatasetManager side).
+
+    Uses mmap for zero-copy writes — the OS pages data into memory as needed.
+    """
+
+    def __init__(self, user_config: UserConfig, **kwargs) -> None:
+        """Initialize memory-mapped storage.
+
+        Args:
+            user_config: User configuration
+            **kwargs: Additional configuration (unused for local mmap)
+        """
+        super().__init__(user_config=user_config, **kwargs)
+        self._model_endpoint = ModelEndpointInfo.from_user_config(user_config)
+        self._endpoint = EndpointFactory.create_instance(
+            self._model_endpoint.endpoint.type,
+            model_endpoint=self._model_endpoint,
+        )
+
+    async def add_conversation(
+        self, conversation_id: str, conversation: Conversation
+    ) -> None:
+        """Add a single payload (written immediately to file).
+
+        Args:
+            conversation_id: Unique ID of the conversation
+            conversation: Conversation object to add
+        """
+        if self._finalized:
+            raise RuntimeError("Cannot add payloads after finalization")
+
+        if len(conversation.turns) != 1:
+            raise ValueError(
+                "Raw Payload DatasetBackingStore must have exactly one turn"
+            )
+
+        payload = self._endpoint.format_payload(
+            RequestInfo(
+                model_endpoint=self._model_endpoint,
+                turns=conversation.turns,
+                turn_index=0,
+                credit_num=0,
+                credit_phase=CreditPhase.PROFILING,
+                x_request_id="",
+                x_correlation_id="",
+                conversation_id=conversation_id,
+            )
+        )
+        conv_bytes = orjson.dumps(payload)
+        await self._write_conversation_bytes(conversation_id, conv_bytes)
+
+    def get_client_metadata(self) -> BaseMemoryMapClientMetadata:
+        """Return file paths for client initialization.
+
+        Returns:
+            MemoryMapClientMetadata with file paths and stats
+
+        Raises:
+            RuntimeError: If not finalized
+        """
+        if not self._finalized:
+            raise RuntimeError(
+                "Cannot get metadata before finalization. Call finalize() first."
+            )
+
+        return MemoryMapPayloadClientMetadata(
+            data_file_path=self._data_path,
+            index_file_path=self._index_path,
+            conversation_count=len(self._conversation_ids),
+            total_size_bytes=self._current_offset,
+        )
+
+
 @implements_protocol(DatasetClientStoreProtocol)
-@DatasetClientStoreFactory.register(DatasetClientStoreType.MEMORY_MAP)
-class MemoryMapDatasetClientStore(AIPerfLifecycleMixin):
+class BaseMemoryMapDatasetClientStore(AIPerfLifecycleMixin, ABC):
     """Reads conversations from memory-mapped files (Worker side).
 
     Uses mmap for zero-copy reads — the OS pages data into memory as needed.
     """
 
-    def __init__(self, client_metadata: MemoryMapClientMetadata, **kwargs) -> None:
+    def __init__(self, client_metadata: BaseMemoryMapClientMetadata, **kwargs) -> None:
         """Initialize from metadata provided by backing store.
 
         Args:
-            client_metadata: Typed metadata from MemoryMapDatasetBackingStore.get_client_metadata()
+            client_metadata: Typed metadata from BaseMemoryMapDatasetBackingStore.get_client_metadata()
         """
         super().__init__(**kwargs)
         self._data_path: Path = client_metadata.data_file_path
         self._index_path: Path = client_metadata.index_file_path
-        self._client: MemoryMapDatasetClient | None = None
+        self._client: BaseMemoryMapDatasetClient | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+
+    @abstractmethod
+    def _create_client(self) -> "BaseMemoryMapDatasetClient":
+        """Create a new instance of the memory-mapped client."""
+        pass
 
     @on_init
     async def _setup(self) -> None:
@@ -233,13 +372,13 @@ class MemoryMapDatasetClientStore(AIPerfLifecycleMixin):
         self.debug(
             lambda: f"Opening memory-mapped files: data={self._data_path}, index={self._index_path}"
         )
-        self._client = MemoryMapDatasetClient(self._data_path, self._index_path)
+        self._client = self._create_client()
         self.debug(
             lambda: f"Memory-mapped client store initialized with "
             f"{len(self._client.index.conversation_ids)} conversations"
         )
 
-    async def get_conversation(self, conversation_id: str) -> Conversation:
+    async def get_conversation(self, conversation_id: str) -> Conversation | bytes:
         """Retrieve conversation from memory-mapped file.
 
         Runs in executor since mmap reads can block on page faults.
@@ -266,6 +405,30 @@ class MemoryMapDatasetClientStore(AIPerfLifecycleMixin):
             self.debug("Closing memory-mapped files")
             self._client.close()
             self.debug("Memory-mapped client store cleanup complete")
+
+
+@implements_protocol(DatasetClientStoreProtocol)
+@DatasetClientStoreFactory.register(DatasetClientStoreType.MEMORY_MAP_CONVERSATION)
+class MemoryMapConversationClientStore(BaseMemoryMapDatasetClientStore):
+    """Read conversations from memory-mapped files (Worker side).
+
+    Uses mmap for zero-copy reads — the OS pages data into memory as needed.
+    """
+
+    def _create_client(self) -> "BaseMemoryMapDatasetClient":
+        return MemoryMapConversationClient(self._data_path, self._index_path)
+
+
+@implements_protocol(DatasetClientStoreProtocol)
+@DatasetClientStoreFactory.register(DatasetClientStoreType.MEMORY_MAP_PAYLOAD)
+class MemoryMapPayloadClientStore(BaseMemoryMapDatasetClientStore):
+    """Read payloads from memory-mapped files (Worker side).
+
+    Uses mmap for zero-copy reads — the OS pages data into memory as needed.
+    """
+
+    def _create_client(self) -> "BaseMemoryMapDatasetClient":
+        return MemoryMapPayloadClient(self._data_path, self._index_path)
 
 
 class ConversationOffset(AIPerfBaseModel):
@@ -301,7 +464,7 @@ class MemoryMapDatasetIndex(AIPerfBaseModel):
         return v
 
 
-class MemoryMapDatasetClient:
+class BaseMemoryMapDatasetClient(ABC):
     """Low-level mmap client for reading conversations.
 
     Use as context manager or call close() explicitly.
@@ -370,10 +533,10 @@ class MemoryMapDatasetClient:
         )
 
         _logger.debug(
-            lambda: f"MemoryMapDatasetClient initialized successfully: data_file={self.data_file_path}, index_file={self.index_file_path}, conversations={len(self.index.conversation_ids)}, size={self.index.total_size} bytes"
+            lambda: f"{self.__class__.__name__} initialized successfully: data_file={self.data_file_path}, index_file={self.index_file_path}, conversations={len(self.index.conversation_ids)}, size={self.index.total_size} bytes"
         )
 
-    def __enter__(self) -> "MemoryMapDatasetClient":
+    def __enter__(self) -> "BaseMemoryMapDatasetClient":
         """Context manager entry."""
         return self
 
@@ -406,6 +569,44 @@ class MemoryMapDatasetClient:
                 with suppress(Exception):
                     obj.close()
 
+    @abstractmethod
+    def get_conversation(self, conversation_id: str) -> Conversation | bytes:
+        """Get a conversation by ID. O(1) lookup using byte offset index.
+
+        Args:
+            conversation_id: Specific conversation ID to retrieve
+
+        Returns:
+            Conversation object
+
+        Raises:
+            KeyError: If conversation_id is not found
+            MemoryMapSerializationError: If conversation data is corrupted
+        """
+        pass
+
+    def close(self) -> None:
+        """Close the memory-mapped files and associated resources.
+
+        This method is safe to call multiple times.
+        """
+        for attr_name in ["data_mmap", "index_mmap", "data_file", "index_file"]:
+            resource = getattr(self, attr_name, None)
+            if resource is not None:
+                try:
+                    resource.close()
+                except Exception as e:
+                    _logger.warning(f"Error closing {attr_name}: {e}")
+                finally:
+                    setattr(self, attr_name, None)
+
+
+class MemoryMapConversationClient(BaseMemoryMapDatasetClient):
+    """Low-level mmap client for reading conversations.
+
+    Use as context manager or call close() explicitly.
+    """
+
     def _deserialize_conversation(self, data: bytes) -> Conversation:
         """Deserialize a single conversation from bytes.
 
@@ -425,7 +626,7 @@ class MemoryMapDatasetClient:
                 f"Failed to decode conversation data: {e}"
             ) from e
 
-    def get_conversation(self, conversation_id: str) -> Conversation:
+    def get_conversation(self, conversation_id: str) -> Conversation | bytes:
         """Get a conversation by ID. O(1) lookup using byte offset index.
 
         Args:
@@ -437,6 +638,7 @@ class MemoryMapDatasetClient:
         Raises:
             KeyError: If conversation_id is not found
             MemoryMapSerializationError: If conversation data is corrupted
+            OSError: If the file cannot be opened
         """
         if conversation_id not in self.index.offsets:
             raise KeyError(f"Conversation '{conversation_id}' not found in dataset")
@@ -457,19 +659,44 @@ class MemoryMapDatasetClient:
             _logger.error(
                 f"Failed to load conversation '{conversation_id}' from {self.data_file_path}: {e}"
             )
-            raise
+            raise e
 
-    def close(self) -> None:
-        """Close the memory-mapped files and associated resources.
 
-        This method is safe to call multiple times.
+class MemoryMapPayloadClient(BaseMemoryMapDatasetClient):
+    """Low-level mmap client for reading payloads.
+
+    Use as context manager or call close() explicitly.
+    """
+
+    def get_conversation(self, conversation_id: str) -> Conversation | bytes:
+        """Get a conversation by ID. O(1) lookup using byte offset index.
+
+        Args:
+            conversation_id: Specific conversation ID to retrieve
+
+        Returns:
+            Conversation object
+
+        Raises:
+            KeyError: If conversation_id is not found
+            OSError: If the file cannot be opened
         """
-        for attr_name in ["data_mmap", "index_mmap", "data_file", "index_file"]:
-            resource = getattr(self, attr_name, None)
-            if resource is not None:
-                try:
-                    resource.close()
-                except Exception as e:
-                    _logger.warning(f"Error closing {attr_name}: {e}")
-                finally:
-                    setattr(self, attr_name, None)
+        if conversation_id not in self.index.offsets:
+            raise KeyError(f"Conversation '{conversation_id}' not found in dataset")
+
+        offset_info = self.index.offsets[conversation_id]
+
+        try:
+            self.data_mmap.seek(offset_info.offset)
+            payload_bytes = self.data_mmap.read(offset_info.size)
+
+            _logger.debug(
+                lambda: f"Loading conversation '{conversation_id}': offset={offset_info.offset}, size={offset_info.size} bytes"
+            )
+            return payload_bytes
+
+        except OSError as e:
+            _logger.error(
+                f"Failed to load conversation '{conversation_id}' from {self.data_file_path}: {e}"
+            )
+            raise e
