@@ -96,12 +96,18 @@ class DatasetSamplingStrategy(CaseInsensitiveStrEnum):
 class DatasetBackingStoreType(CaseInsensitiveStrEnum):
     """Types of dataset backing stores (DatasetManager side)."""
 
-    MEMORY_MAP = "memory_map"
-    """Store dataset in memory-mapped files for zero-copy worker access."""
+    MEMORY_MAP_CONVERSATION = "memory_map_conversation"
+    """Store conversations in memory-mapped files for zero-copy worker access."""
+
+    MEMORY_MAP_PAYLOAD = "memory_map_payload"
+    """Store pre-serialized HTTP payloads in memory-mapped files for direct transport (no re-serialization)."""
 
 
 class DatasetClientStoreType(CaseInsensitiveStrEnum):
     """Types of dataset client stores (Worker side)."""
 
-    MEMORY_MAP = "memory_map"
-    """Read from memory-mapped files (zero-copy, O(1) lookup)."""
+    MEMORY_MAP_CONVERSATION = "memory_map_conversation"
+    """Read conversations from memory-mapped files (zero-copy, O(1) lookup)."""
+
+    MEMORY_MAP_PAYLOAD = "memory_map_payload"
+    """Read pre-serialized payloads as raw bytes (zero-copy, no deserialization)."""

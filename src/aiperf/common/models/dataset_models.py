@@ -31,14 +31,12 @@ class DatasetClientMetadata(AIPerfBaseModel):
     )
 
 
-class MemoryMapClientMetadata(DatasetClientMetadata):
+class BaseMemoryMapClientMetadata(DatasetClientMetadata):
     """Client metadata for memory-mapped dataset access.
 
     Contains paths to mmap files that workers use for zero-copy,
     O(1) conversation lookups.
     """
-
-    client_type: DatasetClientStoreType = DatasetClientStoreType.MEMORY_MAP
 
     data_file_path: Path = Field(
         ...,
@@ -56,6 +54,26 @@ class MemoryMapClientMetadata(DatasetClientMetadata):
         default=0,
         description="Total size of the data file in bytes.",
     )
+
+
+class MemoryMapPayloadClientMetadata(BaseMemoryMapClientMetadata):
+    """Client metadata for memory-mapped payload access.
+
+    Contains paths to mmap files that workers use for zero-copy,
+    O(1) payload lookups.
+    """
+
+    client_type: DatasetClientStoreType = DatasetClientStoreType.MEMORY_MAP_PAYLOAD
+
+
+class MemoryMapConversationClientMetadata(BaseMemoryMapClientMetadata):
+    """Client metadata for memory-mapped conversation access.
+
+    Contains paths to mmap files that workers use for zero-copy,
+    O(1) conversation lookups.
+    """
+
+    client_type: DatasetClientStoreType = DatasetClientStoreType.MEMORY_MAP_CONVERSATION
 
 
 class Media(AIPerfBaseModel):

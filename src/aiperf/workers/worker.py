@@ -444,20 +444,39 @@ class Worker(BaseComponentService, ProcessHealthMixin):
                     conversation_id=credit_context.credit.conversation_id,
                     credit_context=credit_context,
                 )
-                session = self.session_manager.create_and_store(
-                    x_correlation_id, _conversation, credit_context.credit.num_turns
-                )
-
-            session.advance_turn(credit_context.credit.turn_index)
+                if not isinstance(_conversation, bytes):
+                    session = self.session_manager.create_and_store(
+                        x_correlation_id, _conversation, credit_context.credit.num_turns
+                    )
 
             self.task_stats.total += 1
-            request_info: RequestInfo = self._create_request_info(
-                session=session,
-                credit_context=credit_context,
-                x_request_id=x_request_id,
-                system_message=session.conversation.system_message,
-                user_context_message=session.conversation.user_context_message,
-            )
+            if isinstance(_conversation, bytes):
+                credit = credit_context.credit
+                return RequestInfo(
+                    model_endpoint=self.model_endpoint,
+                    payload=_conversation,
+                    credit_num=credit.id,
+                    credit_phase=credit.phase,
+                    cancel_after_ns=credit.cancel_after_ns,
+                    x_request_id=x_request_id,
+                    x_correlation_id=x_correlation_id,
+                    conversation_id=credit.conversation_id,
+                    turn_index=credit.turn_index,
+                    turns=[],
+                    drop_perf_ns=credit_context.drop_perf_ns,
+                    credit_issued_ns=credit.issued_at_ns,
+                    is_final_turn=credit.is_final_turn,
+                )
+            else:
+                session.advance_turn(credit_context.credit.turn_index)
+                request_info: RequestInfo = self._create_request_info(
+                    x_request_id=x_request_id,
+                    session=session,
+                    credit_context=credit_context,
+                    system_message=session.conversation.system_message,
+                    user_context_message=session.conversation.user_context_message,
+                )
+
             record: RequestRecord = await self.inference_client.send_request(
                 request_info, first_token_callback=first_token_callback
             )
@@ -532,7 +551,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
         *,
         conversation_id: str,
         credit_context: CreditContext,
-    ) -> Conversation:
+    ) -> Conversation | bytes:
         """Retrieve conversation from dataset client.
 
         The dataset client is initialized via factory when DatasetConfiguredNotification
@@ -543,7 +562,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
             credit_context: Credit context
 
         Returns:
-            Conversation object with turns and metadata
+            Conversation object with turns and metadata or bytes if the conversation is a payload
 
         Raises:
             RuntimeError: If dataset client not initialized
