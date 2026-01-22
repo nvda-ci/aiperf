@@ -72,7 +72,11 @@ class InferenceClient(AIPerfLifecycleMixin):
         """
         request_info.endpoint_headers = self.endpoint.get_endpoint_headers(request_info)
         request_info.endpoint_params = self.endpoint.get_endpoint_params(request_info)
-        formatted_payload = self.endpoint.format_payload(request_info)
+        formatted_payload = (
+            self.endpoint.format_payload(request_info)
+            if request_info.payload is None
+            else request_info.payload
+        )
         return await self.transport.send_request(
             request_info,
             payload=formatted_payload,
