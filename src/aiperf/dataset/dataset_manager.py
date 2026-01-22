@@ -101,6 +101,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
     ) -> None:
         """Configure the dataset."""
 
+        # TODO: Make this lazy loading of the tokenizer, only when its actually needed
         self.info("Configuring tokenizer(s) for dataset manager")
         begin = time.perf_counter()
         await self._configure_tokenizer()

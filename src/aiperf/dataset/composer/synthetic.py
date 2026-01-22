@@ -1,5 +1,7 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
+import time
 
 from aiperf.common import random_generator as rng
 from aiperf.common.config import UserConfig
@@ -154,9 +156,15 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
             Image: An image payload object.
         """
         image = Image(name="image_url")
+        self.info(f"Generating {self.config.input.image.batch_size} synthetic image(s)")
+        begin = time.perf_counter()
         for _ in range(self.config.input.image.batch_size):
             data = self.image_generator.generate()
             image.contents.append(data)
+        duration = time.perf_counter() - begin
+        self.info(
+            f"Generated {len(image.contents)} synthetic image(s) in {duration:.2f} seconds"
+        )
         return image
 
     def _generate_audio_payloads(self) -> Audio:
@@ -167,9 +175,15 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
             Audio: An audio payload object.
         """
         audio = Audio(name="input_audio")
+        self.info(f"Generating {self.config.input.audio.batch_size} synthetic audio(s)")
+        begin = time.perf_counter()
         for _ in range(self.config.input.audio.batch_size):
             data = self.audio_generator.generate()
             audio.contents.append(data)
+        duration = time.perf_counter() - begin
+        self.info(
+            f"Generated {len(audio.contents)} synthetic audio(s) in {duration:.2f} seconds"
+        )
         return audio
 
     def _generate_video_payloads(self) -> Video:
@@ -179,11 +193,17 @@ class SyntheticDatasetComposer(BaseDatasetComposer):
         Returns:
             Video: A video payload object.
         """
+        self.info(f"Generating {self.config.input.video.batch_size} synthetic video(s)")
+        begin = time.perf_counter()
         video = Video(name="video_url")
         for _ in range(self.config.input.video.batch_size):
             data = self.video_generator.generate()
             if data:  # Only append if video was actually generated
                 video.contents.append(data)
+        duration = time.perf_counter() - begin
+        self.info(
+            f"Generated {len(video.contents)} synthetic video(s) in {duration:.2f} seconds"
+        )
         return video
 
     @property
