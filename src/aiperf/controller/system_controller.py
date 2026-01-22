@@ -495,7 +495,7 @@ class SystemController(SignalHandlerMixin, BaseService):
         """Handle a profile results message."""
         self.trace_or_debug(
             lambda: f"Received profile results message: {message}",
-            lambda: f"Received profile results message: {len(message.results.results)} records",
+            lambda: f"Received profile results message: {len(message.results.results.records) if message.results.results else 0} records",
         )
         if message.results.errors:
             self.error(
@@ -555,11 +555,11 @@ class SystemController(SignalHandlerMixin, BaseService):
         try:
             self.trace_or_debug(
                 lambda: f"Received server metrics results message: {message}",
-                lambda: f"Received server metrics results message: {len(message.server_metrics_result.results.endpoint_summaries)} endpoints",
+                lambda: f"Received server metrics results message: {len(message.server_metrics_result.results.endpoint_summaries) if message.server_metrics_result.results else 0} endpoints",
             )
 
             self.debug(
-                lambda: f"Server metrics error summary: {message.server_metrics_result.results.error_summary}"
+                lambda: f"Server metrics error summary: {message.server_metrics_result.results.error_summary if message.server_metrics_result.results else []}"
             )
 
             server_metrics_results = message.server_metrics_result.results

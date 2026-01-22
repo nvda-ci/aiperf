@@ -211,6 +211,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
     async def _send_worker_ready_message(self) -> None:
         """Send WorkerReady to announce presence."""
         await self.credit_dealer_client.send(WorkerReady(worker_id=self.service_id))
+        gc.collect()
 
     @on_message(MessageType.DATASET_CONFIGURED_NOTIFICATION)
     async def _on_dataset_configured(self, msg: DatasetConfiguredNotification) -> None:
@@ -452,7 +453,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
             self.task_stats.total += 1
             if isinstance(_conversation, bytes):
                 credit = credit_context.credit
-                return RequestInfo(
+                request_info = RequestInfo(
                     model_endpoint=self.model_endpoint,
                     payload=_conversation,
                     credit_num=credit.id,
@@ -667,6 +668,16 @@ class Worker(BaseComponentService, ProcessHealthMixin):
         """
         # All records will flow through here to be sent to the inference results push client.
         self.task_stats.task_finished(record.valid)
+
+        # Replace all multi-modal media contents with placeholders to avoid large payloads in the record.
+        # The placeholders allow the record processor to still count the media content,
+        for turn in record.request_info.turns:
+            for image in turn.images:
+                image.contents = ["<image_placeholder>" for _ in image.contents]
+            for audio in turn.audios:
+                audio.contents = ["<audio_placeholder>" for _ in audio.contents]
+            for video in turn.videos:
+                video.contents = ["<video_placeholder>" for _ in video.contents]
 
         msg = InferenceResultsMessage(
             service_id=self.service_id,

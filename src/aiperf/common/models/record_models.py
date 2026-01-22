@@ -451,10 +451,6 @@ class RequestRecord(AIPerfBaseModel):
         default=None,
         description="The original request info.",
     )
-    turns: list[Turn] = Field(
-        default_factory=list,
-        description="The actual turns of the request. This will include assistant turns as well as user turns in multi-turn conversations.",
-    )
     request_headers: dict[str, str] | None = Field(
         default=None,
         description="The headers of the request.",
@@ -514,6 +510,12 @@ class RequestRecord(AIPerfBaseModel):
         "Includes detailed timing for connection establishment, DNS resolution, request/response events, etc. "
         "The type of the trace data is determined by the transport and library used.",
     )
+
+    @property
+    def turns(self) -> list[Turn]:
+        """Get the turns of the request.
+        This will include assistant turns as well as user turns in multi-turn conversations."""
+        return self.request_info.turns
 
     @field_validator("trace_data", mode="before")
     @classmethod

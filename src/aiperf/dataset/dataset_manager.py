@@ -291,6 +291,8 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             if is_single_turn
             else DatasetBackingStoreType.MEMORY_MAP_CONVERSATION
         )
+        # TODO: Hard-coding for now
+        backing_store_type = DatasetBackingStoreType.MEMORY_MAP_CONVERSATION
 
         # Initialize backing store and stream conversations to mmap files
         # Workers read directly from these files
