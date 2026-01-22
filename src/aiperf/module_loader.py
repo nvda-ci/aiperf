@@ -23,9 +23,6 @@ def _load_all_modules() -> None:
 
     This is called only when modules are actually needed, not during CLI startup.
     """
-    # proc = psutil.Process()
-    # mem_before = proc.memory_info().rss
-    # print(f"Memory usage: {mem_before / 1024 / 1024:.2f} MB")
     for module in sorted(Path(__file__).parent.iterdir()):
         if (
             module.is_dir()
@@ -63,26 +60,14 @@ def _load_all_modules() -> None:
                     "aiperf." + ".".join(parts) if parts else f"aiperf.{file.stem}"
                 )
 
-                if (
-                    not qualified_name.startswith("aiperf.server_metrics")
-                    and not qualified_name.startswith("aiperf.ui")
-                    and not qualified_name.startswith("aiperf.gpu_telemetry")
-                    and not qualified_name.startswith("aiperf.dataset")
-                    and not qualified_name.startswith("aiperf.timing")
-                    and not qualified_name.startswith("aiperf.records")
-                ):
-                    _logger.debug(f"Loading module: {qualified_name}")
-                    try:
-                        importlib.import_module(qualified_name)
-                        # mem_after = proc.memory_info().rss
-                        # if mem_after - mem_before > 1024 * 1024:
-                        #     print(f"Memory usage delta ({qualified_name}): {(mem_after - mem_before) / 1024 / 1024:.2f} MB")
-                        # mem_before = mem_after
-                    except ImportError:
-                        _logger.exception(
-                            f"Error loading AIPerf module: {qualified_name}. Ensure the file {file.resolve()} is a valid Python module"
-                        )
-                        raise
+                _logger.debug(f"Loading module: {qualified_name}")
+                try:
+                    importlib.import_module(qualified_name)
+                except ImportError:
+                    _logger.exception(
+                        f"Error loading AIPerf module: {qualified_name}. Ensure the file {file.resolve()} is a valid Python module"
+                    )
+                    raise
 
 
 _modules_loaded = False
