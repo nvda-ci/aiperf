@@ -28,6 +28,7 @@ from aiperf_mock_server.app import (
     _build_embedding_response_data,
     _build_hf_tei_ranking_response_data,
     _build_image_response_data,
+    _build_nim_image_embedding_response_data,
     _build_nim_ranking_response_data,
     _build_solido_rag_response_data,
     _build_tgi_response_data,
@@ -42,6 +43,7 @@ from aiperf_mock_server.models import (
     EmbeddingRequest,
     HFTEIRerankRequest,
     ImageGenerationRequest,
+    NIMImageEmbeddingRequest,
     RankingRequest,
     SolidoRAGRequest,
     TGIGenerateRequest,
@@ -319,6 +321,14 @@ class FakeTransport(BaseTransport):
                     EmbeddingRequest,
                     self._do_embedding,
                 )
+            case EndpointType.NIM_IMAGE_EMBEDDINGS:
+                return await self._dispatch(
+                    payload,
+                    endpoint_type,
+                    NIMImageEmbeddingRequest,
+                    self._do_nim_image_embedding,
+                    build_response=_build_nim_image_embedding_response_data,
+                )
             case EndpointType.NIM_RANKINGS:
                 return await self._dispatch(
                     payload,
@@ -404,6 +414,22 @@ class FakeTransport(BaseTransport):
         )
         return self._make_json_record(
             inp.start_perf_ns, _build_embedding_response_data(inp.ctx, inp.req.inputs)
+        )
+
+    async def _do_nim_image_embedding(self, inp: HandlerInput) -> RequestRecord:
+        """Handle NIM image embedding requests (e.g., C-RADIO)."""
+        per_input_latency = self.config.embedding_per_input_latency
+        if inp.req.is_image_request:
+            # Image processing takes longer, scale by number of patches
+            per_input_latency *= inp.req.num_patches
+
+        await _wait_for_processing(
+            self.config.embedding_base_latency,
+            per_input_latency,
+            len(inp.req.inputs),
+        )
+        return self._make_json_record(
+            inp.start_perf_ns, inp.build_response(inp.ctx, inp.req)
         )
 
     async def _do_ranking(self, inp: HandlerInput) -> RequestRecord:

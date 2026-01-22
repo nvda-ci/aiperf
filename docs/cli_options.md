@@ -111,6 +111,7 @@ The API endpoint type to benchmark. Determines request/response format and suppo
 | `huggingface_generate` |  | HuggingFace Text Generation Inference (TGI) API. Supports both /generate and /generate_stream endpoints. |
 | `image_generation` |  | OpenAI Image Generation API. Generates images from text prompts (e.g., FLUX.1). |
 | `nim_rankings` |  | NVIDIA NIM Rankings API. Ranks passages by relevance scores for a given query. |
+| `nim_image_embeddings` |  | NVIDIA NIM Image Embeddings API. Generates embeddings for images with pyramidal patching support. |
 | `solido_rag` |  | SOLIDO RAG API. Retrieval-Augmented Generation endpoint with filter and inference model support. |
 | `template` |  | Custom template endpoint. Uses Jinja2 templates for flexible payload formatting. |
 

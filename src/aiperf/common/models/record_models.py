@@ -611,6 +611,22 @@ class EmbeddingResponseData(BaseResponseData):
     )
 
 
+class NIMImageEmbeddingResponseData(BaseResponseData):
+    """Parsed NIM image embedding response data.
+
+    Supports NVIDIA C-RADIO NIM image embeddings with extended response metadata
+    including pyramidal patch information.
+    """
+
+    embeddings: list[list[float]] = Field(
+        ..., description="The embedding vectors from the response."
+    )
+    patch_metadata: list[Any] | None = Field(
+        default=None,
+        description="Pyramidal patch metadata from the response.",
+    )
+
+
 class RankingsResponseData(BaseResponseData):
     """Parsed rankings response data."""
 
@@ -674,6 +690,7 @@ class ParsedResponse(AIPerfBaseModel):
         ReasoningResponseData
         | TextResponseData
         | EmbeddingResponseData
+        | NIMImageEmbeddingResponseData
         | RankingsResponseData
         | ImageResponseData
         | BaseResponseData

@@ -191,6 +191,7 @@ class GenericMetricUnit(BaseMetricUnit):
     ERRORS = _unit("errors")
     IMAGE = _unit("image")
     IMAGES = _unit("images")
+    PATCHES = _unit("patches")
     PERCENT = _unit("%")
     RATIO = _unit("ratio")
     REQUESTS = _unit("requests")

@@ -44,6 +44,7 @@ from aiperf_mock_server.models import (
     EmbeddingRequest,
     HFTEIRerankRequest,
     ImageGenerationRequest,
+    NIMImageEmbeddingRequest,
     RankingRequest,
     SolidoRAGRequest,
     TGIGenerateRequest,
@@ -338,6 +339,95 @@ async def embeddings(req: EmbeddingRequest, request: Request) -> ORJSONResponse:
         )
 
         return ORJSONResponse(_build_embedding_response_data(ctx, req.inputs))
+
+
+# ============================================================================
+# NIM Image Embeddings
+# ============================================================================
+
+
+def generate_image_embedding(data: str, dim: int = 1024) -> list[float]:
+    """Generate deterministic embedding from image data (base64 or text) using stable hash.
+
+    Args:
+        data: Input data (base64 image or text) to generate embedding for.
+        dim: Embedding dimension (default 1024 for C-RADIOv3-H).
+
+    Returns:
+        List of floats representing the embedding vector.
+    """
+    digest = hashlib.blake2s(data.encode("utf-8")).digest()
+    seed = int.from_bytes(digest, byteorder="big")
+    rng = random.Random(seed)
+    return [rng.random() - 0.5 for _ in range(dim)]
+
+
+def _build_nim_image_embedding_response_data(
+    ctx: RequestCtx, req: NIMImageEmbeddingRequest
+) -> dict[str, Any]:
+    """Build NIM image embedding response data with optional patch_metadata."""
+    data = []
+    for i, input_data in enumerate(req.inputs):
+        embedding_item: dict[str, Any] = {
+            "object": "embedding",
+            "index": i,
+            "embedding": generate_image_embedding(input_data),
+        }
+        # Add patch_metadata for image requests with pyramid config
+        if req.is_image_request and req.pyramid:
+            embedding_item["patch_metadata"] = {
+                "pyramid_level": i % len(req.pyramid),
+                "patch_coords": [0, 0],
+                "pyramid_config": req.pyramid,
+            }
+        data.append(embedding_item)
+
+    # Build usage with num_images and num_patches for image requests
+    usage: dict[str, Any] = dict(ctx.usage)
+    if req.is_image_request:
+        usage["num_images"] = len(req.inputs)
+        usage["num_patches"] = req.num_patches * len(req.inputs)
+
+    return {
+        "object": "list",
+        "model": ctx.model,
+        "data": data,
+        "usage": usage,
+    }
+
+
+@app.post("/v1/nim_image_embeddings", response_model=None)
+@with_error_injection
+async def nim_image_embeddings(
+    req: NIMImageEmbeddingRequest, request: Request
+) -> ORJSONResponse:
+    """NIM Image Embeddings endpoint (e.g., C-RADIO).
+
+    Supports text and image inputs with optional pyramidal patching.
+    """
+    endpoint = "/v1/nim_image_embeddings"
+    start_time = request.state.start_time
+    ctx = make_ctx(req, endpoint, start_time)
+
+    with track_request(endpoint, req.model):
+        # Simulate processing time based on number of inputs and patches
+        base_latency = server_config.embedding_base_latency
+        per_input_latency = server_config.embedding_per_input_latency
+        if req.is_image_request:
+            # Image processing takes longer, scale by number of patches
+            per_input_latency *= req.num_patches
+
+        await _wait_for_processing(base_latency, per_input_latency, len(req.inputs))
+
+        record_embedding_success(
+            endpoint,
+            req.model,
+            ctx.usage["prompt_tokens"],
+            len(req.inputs),
+            perf_counter() - start_time,
+        )
+
+        return ORJSONResponse(_build_nim_image_embedding_response_data(ctx, req))
 
 
 # ============================================================================

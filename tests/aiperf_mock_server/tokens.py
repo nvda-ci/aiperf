@@ -14,6 +14,7 @@ from aiperf_mock_server.models import (
     EmbeddingRequest,
     HFTEIRerankRequest,
     ImageGenerationRequest,
+    NIMImageEmbeddingRequest,
     RankingRequest,
     RequestT,
     SolidoRAGRequest,
@@ -142,6 +143,7 @@ def tokenize_request(request: RequestT) -> TokenizedText:
     if isinstance(
         request,
         EmbeddingRequest
+        | NIMImageEmbeddingRequest
         | RankingRequest
         | HFTEIRerankRequest
         | CohereRerankRequest
@@ -252,7 +254,7 @@ def _extract_request_content(request: RequestT) -> tuple[str, int | None]:
         return text, request.max_output_tokens
     elif isinstance(request, CompletionRequest | TGIGenerateRequest):
         return request.prompt_text, request.max_tokens
-    elif isinstance(request, EmbeddingRequest):
+    elif isinstance(request, EmbeddingRequest | NIMImageEmbeddingRequest):
         text = "\n".join(request.inputs)
         return text, None
     elif isinstance(request, RankingRequest | HFTEIRerankRequest | CohereRerankRequest):
