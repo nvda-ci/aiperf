@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
@@ -85,6 +86,71 @@ class EmbeddingRequest(BaseModel):
             if isinstance(self.input, str)
             else [str(x) for x in self.input]
         )
+
+
+class NIMImageEmbeddingRequest(BaseModel):
+    """Request model for NIM Image Embeddings endpoints (e.g., C-RADIO).
+
+    Supports three request types:
+    - query: Single text or single image input
+    - bulk_text: Multiple text inputs for bulk text embedding
+    - bulk_image: Multiple base64-encoded images for image embedding
+    """
+
+    model: str
+    input: str | list[str]
+    request_type: Literal["query", "bulk_text", "bulk_image"] = "query"
+    pyramid: list[list[int]] | None = None
+    max_pixels: int | None = None
+    encoding_format: str | None = None
+
+    @property
+    def inputs(self) -> list[str]:
+        """Get inputs as list (normalizes single string to list)."""
+        return (
+            [self.input]
+            if isinstance(self.input, str)
+            else [str(x) for x in self.input]
+        )
+
+    @property
+    def is_image_request(self) -> bool:
+        """Check if this is an image embedding request.
+
+        Returns True for bulk_image requests or query requests with image input.
+        Uses same detection logic as the dataset loader (urlparse-based).
+        """
+        if self.request_type == "bulk_image":
+            return True
+        if self.request_type == "query":
+            first_input = self.inputs[0] if self.inputs else ""
+            return self._is_image_content(first_input)
+        return False
+
+    @staticmethod
+    def _is_image_content(content: str) -> bool:
+        """Check if content is an image (data URI or URL).
+
+        Mirrors the detection logic from aiperf.dataset.loader.mixins.
+        """
+        if not content:
+            return False
+
+        url = urlparse(content)
+
+        # Data URI format: data:image/jpeg;base64,...
+        if url.scheme == "data":
+            return url.path.startswith("image/")
+
+        # Any URL is treated as an image URL
+        return bool(url.scheme and url.netloc)
+
+    @property
+    def num_patches(self) -> int:
+        """Calculate number of patches based on pyramid config."""
+        if not self.pyramid:
+            return 1
+        return sum(p[0] * p[1] for p in self.pyramid)
 
 
 class RankingRequest(BaseModel):
@@ -204,6 +270,7 @@ RequestT = (
     ChatCompletionRequest
     | CompletionRequest
     | EmbeddingRequest
+    | NIMImageEmbeddingRequest
     | RankingRequest
     | HFTEIRerankRequest
     | CohereRerankRequest

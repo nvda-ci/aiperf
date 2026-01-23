@@ -18,12 +18,19 @@ from aiperf.gpu_telemetry.accumulator import (
 )
 from aiperf.gpu_telemetry.constants import (
     DCGM_TO_FIELD_MAPPING,
+    GPU_TELEMETRY_COUNTER_METRICS,
     GPU_TELEMETRY_METRICS_CONFIG,
-    SCALING_FACTORS,
+    PYNVML_SOURCE_IDENTIFIER,
     get_gpu_telemetry_metrics_config,
 )
-from aiperf.gpu_telemetry.data_collector import (
-    GPUTelemetryDataCollector,
+from aiperf.gpu_telemetry.dcgm_collector import (
+    DCGMTelemetryCollector,
+)
+from aiperf.gpu_telemetry.factories import (
+    GPUTelemetryCollectorFactory,
+    GPUTelemetryCollectorProtocol,
+    TErrorCallback,
+    TRecordCallback,
 )
 from aiperf.gpu_telemetry.jsonl_writer import (
     GPUTelemetryJSONLWriter,
@@ -34,15 +41,24 @@ from aiperf.gpu_telemetry.manager import (
 from aiperf.gpu_telemetry.metrics_config import (
     MetricsConfigLoader,
 )
+from aiperf.gpu_telemetry.pynvml_collector import (
+    PyNVMLTelemetryCollector,
+)
 
 __all__ = [
+    "DCGMTelemetryCollector",
     "DCGM_TO_FIELD_MAPPING",
     "GPUTelemetryAccumulator",
-    "GPUTelemetryDataCollector",
+    "GPUTelemetryCollectorFactory",
+    "GPUTelemetryCollectorProtocol",
     "GPUTelemetryJSONLWriter",
     "GPUTelemetryManager",
+    "GPU_TELEMETRY_COUNTER_METRICS",
     "GPU_TELEMETRY_METRICS_CONFIG",
     "MetricsConfigLoader",
-    "SCALING_FACTORS",
+    "PYNVML_SOURCE_IDENTIFIER",
+    "PyNVMLTelemetryCollector",
+    "TErrorCallback",
+    "TRecordCallback",
     "get_gpu_telemetry_metrics_config",
 ]

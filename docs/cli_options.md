@@ -111,6 +111,7 @@ The API endpoint type to benchmark. Determines request/response format and suppo
 | `huggingface_generate` |  | HuggingFace Text Generation Inference (TGI) API. Supports both /generate and /generate_stream endpoints. |
 | `image_generation` |  | OpenAI Image Generation API. Generates images from text prompts (e.g., FLUX.1). |
 | `nim_rankings` |  | NVIDIA NIM Rankings API. Ranks passages by relevance scores for a given query. |
+| `nim_image_embeddings` |  | NVIDIA NIM Image Embeddings API. Generates embeddings for images with pyramidal patching support. |
 | `solido_rag` |  | SOLIDO RAG API. Retrieval-Augmented Generation endpoint with filter and inference model support. |
 | `template` |  | Custom template endpoint. Uses Jinja2 templates for flexible payload formatting. |
 
@@ -735,7 +736,7 @@ Duration in seconds to ramp warmup request rate from a proportional minimum to t
 
 #### `--gpu-telemetry` `<list>`
 
-Enable GPU telemetry console display and optionally specify: (1) 'dashboard' for realtime dashboard mode, (2) custom DCGM exporter URLs (e.g., http://node1:9401/metrics), (3) custom metrics CSV file (e.g., custom_gpu_metrics.csv). Default endpoints localhost:9400 and localhost:9401 are always attempted. Example: --gpu-telemetry dashboard node1:9400 custom.csv.
+Enable GPU telemetry console display and optionally specify: (1) 'pynvml' to use local pynvml library instead of DCGM HTTP endpoints, (2) 'dashboard' for realtime dashboard mode, (3) custom DCGM exporter URLs (e.g., http://node1:9401/metrics), (4) custom metrics CSV file (e.g., custom_gpu_metrics.csv). Default: DCGM mode with localhost:9400 and localhost:9401 endpoints. Examples: --gpu-telemetry pynvml | --gpu-telemetry dashboard node1:9400.
 
 #### `--no-gpu-telemetry`
 

@@ -109,6 +109,7 @@ from aiperf.common.enums.system_enums import (
     SystemState,
 )
 from aiperf.common.enums.telemetry_enums import (
+    GPUTelemetryCollectorType,
     GPUTelemetryMode,
 )
 from aiperf.common.enums.timing_enums import (
@@ -150,6 +151,7 @@ __all__ = [
     "ExportLevel",
     "FrequencyMetricUnit",
     "FrequencyMetricUnitInfo",
+    "GPUTelemetryCollectorType",
     "GPUTelemetryMode",
     "GenericMetricUnit",
     "ImageFormat",

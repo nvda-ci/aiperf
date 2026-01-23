@@ -52,6 +52,9 @@ class EndpointType(CaseInsensitiveStrEnum):
     NIM_RANKINGS = "nim_rankings"
     """NVIDIA NIM Rankings API. Ranks passages by relevance scores for a given query."""
 
+    NIM_IMAGE_EMBEDDINGS = "nim_image_embeddings"
+    """NVIDIA NIM Image Embeddings API. Generates embeddings for images with pyramidal patching support."""
+
     SOLIDO_RAG = "solido_rag"
     """SOLIDO RAG API. Retrieval-Augmented Generation endpoint with filter and inference model support."""
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Any, ClassVar
@@ -59,3 +59,13 @@ class Usage(RootModel[dict[str, Any]]):
             if reasoning_tokens := self.get(details_key, {}).get("reasoning_tokens"):
                 return reasoning_tokens
         return None
+
+    @property
+    def num_images(self) -> int | None:
+        """Get the number of images processed (for image embedding APIs)."""
+        return self.get("num_images")
+
+    @property
+    def num_patches(self) -> int | None:
+        """Get the number of patches processed (for image embedding APIs with pyramidal patching)."""
+        return self.get("num_patches")

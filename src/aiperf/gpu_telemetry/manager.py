@@ -9,6 +9,7 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
+    GPUTelemetryCollectorType,
     ServiceType,
 )
 from aiperf.common.environment import Environment
@@ -16,6 +17,7 @@ from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import on_command, on_init, on_stop
 from aiperf.common.messages import (
     ProfileCancelCommand,
+    ProfileCompleteCommand,
     ProfileConfigureCommand,
     TelemetryRecordsMessage,
     TelemetryStatusMessage,
@@ -25,7 +27,9 @@ from aiperf.common.protocols import (
     PushClientProtocol,
     ServiceProtocol,
 )
-from aiperf.gpu_telemetry.data_collector import GPUTelemetryDataCollector
+from aiperf.gpu_telemetry.constants import PYNVML_SOURCE_IDENTIFIER
+from aiperf.gpu_telemetry.dcgm_collector import DCGMTelemetryCollector
+from aiperf.gpu_telemetry.factories import GPUTelemetryCollectorProtocol
 
 __all__ = ["GPUTelemetryManager"]
 
@@ -68,7 +72,7 @@ class GPUTelemetryManager(BaseComponentService):
             CommAddress.RECORDS,
         )
 
-        self._collectors: dict[str, GPUTelemetryDataCollector] = {}
+        self._collectors: dict[str, GPUTelemetryCollectorProtocol] = {}
         self._collector_id_to_url: dict[str, str] = {}
 
         self._telemetry_disabled = user_config.gpu_telemetry_disabled
@@ -76,6 +80,10 @@ class GPUTelemetryManager(BaseComponentService):
             user_config.gpu_telemetry is not None and not self._telemetry_disabled
         )
 
+        # Store the collector type (DCGM or PYNVML)
+        self._collector_type = user_config.gpu_telemetry_collector_type
+
+        # DCGM-specific endpoint configuration
         user_endpoints = user_config.gpu_telemetry_urls or []
         if isinstance(user_endpoints, str):
             user_endpoints = [user_endpoints]
@@ -157,9 +165,9 @@ class GPUTelemetryManager(BaseComponentService):
     ) -> None:
         """Configure the telemetry collectors but don't start them yet.
 
-        Creates TelemetryDataCollector instances for each configured DCGM endpoint,
+        Creates collector instances based on configured type (DCGM or PYNVML),
         tests reachability, and sends status message to RecordsManager.
-        If no endpoints are reachable, disables telemetry and stops the service.
+        If no collectors can be created, disables telemetry and stops the service.
 
         Args:
             message: Profile configuration command from SystemController
@@ -175,11 +183,73 @@ class GPUTelemetryManager(BaseComponentService):
 
         self._collectors.clear()
         self._collector_id_to_url.clear()
+
+        if self._collector_type == GPUTelemetryCollectorType.PYNVML:
+            await self._configure_pynvml_collector()
+        else:
+            await self._configure_dcgm_collectors()
+
+    async def _configure_pynvml_collector(self) -> None:
+        """Configure a single PyNVML collector for local GPU monitoring."""
+        self.debug("GPU Telemetry: Configuring pynvml collector")
+
+        try:
+            # Import here to defer pynvml check until actually needed
+            from aiperf.gpu_telemetry.pynvml_collector import PyNVMLTelemetryCollector
+
+            collector_id = "pynvml_collector"
+            collector = PyNVMLTelemetryCollector(
+                collection_interval=self._collection_interval,
+                record_callback=self._on_telemetry_records,
+                error_callback=self._on_telemetry_error,
+                collector_id=collector_id,
+            )
+
+            is_available = await collector.is_url_reachable()
+            if is_available:
+                self._collectors[PYNVML_SOURCE_IDENTIFIER] = collector
+                self._collector_id_to_url[collector_id] = PYNVML_SOURCE_IDENTIFIER
+                self.debug("GPU Telemetry: pynvml collector configured successfully")
+                await self._send_telemetry_status(
+                    enabled=True,
+                    reason=None,
+                    endpoints_configured=[PYNVML_SOURCE_IDENTIFIER],
+                    endpoints_reachable=[PYNVML_SOURCE_IDENTIFIER],
+                )
+            else:
+                self.warning("GPU Telemetry: pynvml not available or no GPUs found")
+                await self._send_telemetry_status(
+                    enabled=False,
+                    reason="pynvml not available or no GPUs found",
+                    endpoints_configured=[PYNVML_SOURCE_IDENTIFIER],
+                    endpoints_reachable=[],
+                )
+        except RuntimeError as e:
+            # pynvml package not installed
+            self.error(f"GPU Telemetry: {e}")
+            await self._send_telemetry_status(
+                enabled=False,
+                reason=str(e),
+                endpoints_configured=[],
+                endpoints_reachable=[],
+            )
+        except Exception as e:  # noqa: BLE001 - fault-tolerant telemetry
+            self.error(f"GPU Telemetry: Failed to configure pynvml collector: {e}")
+            await self._send_telemetry_status(
+                enabled=False,
+                reason=f"pynvml configuration failed: {e}",
+                endpoints_configured=[],
+                endpoints_reachable=[],
+            )
+
+    async def _configure_dcgm_collectors(self) -> None:
+        """Configure DCGM collectors for HTTP-based GPU telemetry."""
+        # Phase 1: Test reachability for all endpoints
         for dcgm_url in self._dcgm_endpoints:
             self.debug(f"GPU Telemetry: Testing reachability of {dcgm_url}")
             collector_id = f"collector_{dcgm_url.replace(':', '_').replace('/', '_')}"
             self._collector_id_to_url[collector_id] = dcgm_url
-            collector = GPUTelemetryDataCollector(
+            collector = DCGMTelemetryCollector(
                 dcgm_url=dcgm_url,
                 collection_interval=self._collection_interval,
                 record_callback=self._on_telemetry_records,
@@ -218,6 +288,18 @@ class GPUTelemetryManager(BaseComponentService):
             )
             return
 
+        # Phase 2: Capture baseline metrics before profiling starts
+        self.info("GPU Telemetry: Capturing baseline metrics...")
+        for dcgm_url, collector in self._collectors.items():
+            try:
+                await collector.initialize()
+                await collector.collect_and_process_metrics()
+                self.debug(f"GPU Telemetry: Captured baseline from {dcgm_url}")
+            except Exception as e:
+                self.warning(
+                    f"GPU Telemetry: Failed to capture baseline from {dcgm_url}: {e}"
+                )
+
         await self._send_telemetry_status(
             enabled=True,
             reason=None,
@@ -241,13 +323,13 @@ class GPUTelemetryManager(BaseComponentService):
             return
 
         started_count = 0
-        for dcgm_url, collector in self._collectors.items():
+        for source_url, collector in self._collectors.items():
             try:
                 await collector.initialize()
                 await collector.start()
                 started_count += 1
-            except Exception as e:
-                self.error(f"Failed to start collector for {dcgm_url}: {e}")
+            except Exception as e:  # noqa: BLE001 - fault-tolerant telemetry
+                self.error(f"Failed to start collector for {source_url}: {e}")
 
         if started_count == 0:
             self.warning("No GPU telemetry collectors successfully started")
@@ -272,6 +354,36 @@ class GPUTelemetryManager(BaseComponentService):
         Args:
             message: Profile cancel command from SystemController
         """
+        await self._stop_all_collectors()
+
+    @on_command(CommandType.PROFILE_COMPLETE)
+    async def _handle_profile_complete_command(
+        self, message: ProfileCompleteCommand
+    ) -> None:
+        """Trigger final scrape when profiling completes.
+
+        Ensures GPU telemetry captures final state for accurate counter deltas.
+        This final scrape provides the end-point values needed for metrics like
+        energy_consumption which are computed as (final - baseline).
+
+        Args:
+            message: Profile complete command from SystemController
+        """
+        if not self._collectors:
+            self.debug("GPU Telemetry: Already stopped, skipping final scrape")
+            return
+
+        self.info("GPU Telemetry: Profiling complete, capturing final metrics...")
+
+        for dcgm_url, collector in list(self._collectors.items()):
+            try:
+                await collector.collect_and_process_metrics()
+                self.debug(f"GPU Telemetry: Captured final state from {dcgm_url}")
+            except Exception as e:
+                self.warning(
+                    f"GPU Telemetry: Failed to capture final state from {dcgm_url}: {e}"
+                )
+
         await self._stop_all_collectors()
 
     @on_stop
@@ -307,11 +419,11 @@ class GPUTelemetryManager(BaseComponentService):
         if not self._collectors:
             return
 
-        for dcgm_url, collector in self._collectors.items():
+        for source_url, collector in self._collectors.items():
             try:
                 await collector.stop()
-            except Exception as e:
-                self.error(f"Failed to stop collector for {dcgm_url}: {e}")
+            except Exception as e:  # noqa: BLE001 - fault-tolerant telemetry
+                self.error(f"Failed to stop collector for {source_url}: {e}")
 
     async def _on_telemetry_records(
         self, records: list[TelemetryRecord], collector_id: str
