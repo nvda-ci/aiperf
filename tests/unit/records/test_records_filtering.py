@@ -62,6 +62,8 @@ def create_metric_record_data(
     request_start_ns: int,
     request_end_ns: int,
     metrics: dict[MetricTagT, int | float] | None = None,
+    *,
+    was_cancelled: bool = False,
 ) -> MetricRecordsData:
     """Create a MetricRecordsData object with sensible defaults for testing."""
     return MetricRecordsData(
@@ -74,9 +76,24 @@ def create_metric_record_data(
             worker_id="worker-1",
             record_processor_id="processor-1",
             benchmark_phase=CreditPhase.PROFILING,
+            was_cancelled=was_cancelled,
         ),
         metrics=metrics or {},
     )
+
+
+def create_mock_records_manager_for_cancellation(
+    *,
+    steady_state: bool,
+    steady_state_count_tail: bool,
+    steady_state_cancelled: bool,
+) -> MagicMock:
+    instance = MagicMock()
+    instance.user_config.loadgen.steady_state = steady_state
+    instance.user_config.loadgen.steady_state_count_tail = steady_state_count_tail
+    instance.steady_state_cancelled = steady_state_cancelled
+    instance.debug = MagicMock()
+    return instance
 
 
 class TestRecordsManagerFiltering:
@@ -296,6 +313,46 @@ class TestRecordsManagerFiltering:
             RecordsManager._should_include_request_by_duration(
                 instance, record_after_boundary
             )
+            is False
+        )
+
+    def test_ignore_steady_state_cancelled_record_by_default(self):
+        """Steady-state tail cancellations are excluded when count-tail is false."""
+        from aiperf.records.records_manager import RecordsManager
+
+        instance = create_mock_records_manager_for_cancellation(
+            steady_state=True,
+            steady_state_count_tail=False,
+            steady_state_cancelled=True,
+        )
+        record_data = create_metric_record_data(
+            request_start_ns=START_TIME,
+            request_end_ns=START_TIME + int(1.0 * NANOS_PER_SECOND),
+            was_cancelled=True,
+        )
+
+        assert (
+            RecordsManager._should_ignore_cancelled_record(instance, record_data)
+            is True
+        )
+
+    def test_include_steady_state_cancelled_record_when_enabled(self):
+        """Steady-state tail cancellations are included when count-tail is true."""
+        from aiperf.records.records_manager import RecordsManager
+
+        instance = create_mock_records_manager_for_cancellation(
+            steady_state=True,
+            steady_state_count_tail=True,
+            steady_state_cancelled=True,
+        )
+        record_data = create_metric_record_data(
+            request_start_ns=START_TIME,
+            request_end_ns=START_TIME + int(1.0 * NANOS_PER_SECOND),
+            was_cancelled=True,
+        )
+
+        assert (
+            RecordsManager._should_ignore_cancelled_record(instance, record_data)
             is False
         )
 

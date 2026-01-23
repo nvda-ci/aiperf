@@ -105,6 +105,33 @@ class LoadGeneratorConfig(BaseConfig):
         ),
     ] = LoadGeneratorDefaults.REQUEST_COUNT
 
+    steady_state: Annotated[
+        bool,
+        Field(
+            description=(
+                "Enable steady-state measurement by looping the dataset until the stop target completes."
+            ),
+        ),
+        CLIParameter(
+            name=("--steady-state",),
+            group=_CLI_GROUP,
+        ),
+    ] = LoadGeneratorDefaults.STEADY_STATE
+
+    steady_state_count_tail: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include cancelled tail requests in steady-state metrics. "
+                "By default, cancelled tail requests are excluded."
+            ),
+        ),
+        CLIParameter(
+            name=("--steady-state-count-tail",),
+            group=_CLI_GROUP,
+        ),
+    ] = LoadGeneratorDefaults.STEADY_STATE_COUNT_TAIL
+
     warmup_request_count: Annotated[
         int,
         Field(

@@ -111,6 +111,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self.end_time_ns: int | None = None
         self.sent_all_records_received: bool = False
         self.profile_cancelled: bool = False
+        self.steady_state_cancelled: bool = False
         self.timeout_triggered: bool = False
         self.expected_duration_sec: float | None = None
         #########################################################
@@ -190,6 +191,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             return
 
         record_data = message.to_data()
+
+        if self._should_ignore_cancelled_record(record_data):
+            await self._check_if_all_records_received()
+            return
 
         should_include_request = self._should_include_request_by_duration(record_data)
 
@@ -297,6 +302,40 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             return False
 
         return True
+
+    def _should_ignore_cancelled_record(self, record_data: MetricRecordsData) -> bool:
+        """Ignore steady-state tail cancellations unless explicitly requested.
+        
+        Filters out records that complete after steady-state cancellation, including:
+        - Records explicitly cancelled (was_cancelled=True)
+        - Records that fail with errors after cancellation (e.g., ServerDisconnectedError)
+        """
+        if not self.user_config.loadgen.steady_state:
+            return False
+        if self.user_config.loadgen.steady_state_count_tail:
+            return False
+        if not self.steady_state_cancelled:
+            return False
+        
+        # Filter records that were explicitly cancelled
+        if record_data.metadata.was_cancelled:
+            self.debug(
+                f"Filtering steady-state cancelled request {record_data.metadata.x_correlation_id}"
+            )
+            return True
+        
+        # Filter records that complete after steady-state cancellation time
+        # This catches error records (e.g., ServerDisconnectedError) that occur
+        # when the worker stops after cancellation
+        if self.end_time_ns is not None:
+            if record_data.metadata.request_end_ns > self.end_time_ns:
+                self.debug(
+                    f"Filtering steady-state tail request {record_data.metadata.x_correlation_id} "
+                    f"(completed {record_data.metadata.request_end_ns - self.end_time_ns} ns after cancellation)"
+                )
+                return True
+        
+        return False
 
     async def _check_if_all_records_received(self) -> None:
         """Check if all records have been received, and if so, publish a message and process the records."""
@@ -518,6 +557,18 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         """Handle the profile cancel command by cancelling the streaming post processors."""
         self.debug(lambda: f"Received profile cancel command: {message}")
         async with self.processing_status_lock:
+            if message.reason == "steady_state":
+                self.steady_state_cancelled = True
+                return ProcessRecordsResult(
+                    results=ProfileResults(
+                        records=[],
+                        completed=0,
+                        start_ns=self.start_time_ns or time.time_ns(),
+                        end_ns=self.end_time_ns or time.time_ns(),
+                        was_cancelled=False,
+                    ),
+                    errors=[],
+                )
             self.profile_cancelled = True
         return await self._process_results(cancelled=True)
 

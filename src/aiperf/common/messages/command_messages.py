@@ -272,6 +272,11 @@ class ProfileCancelCommand(CommandMessage):
 
     command: CommandTypeT = CommandType.PROFILE_CANCEL
 
+    reason: str | None = Field(
+        default=None,
+        description="Reason for profile cancellation (e.g., steady_state).",
+    )
+
 
 class ShutdownCommand(CommandMessage):
     """Command message sent to request a service to shutdown."""

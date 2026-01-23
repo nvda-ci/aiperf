@@ -19,6 +19,8 @@ class TimingManagerConfig(AIPerfBaseModel):
     request_rate: float | None = LoadGeneratorDefaults.REQUEST_RATE
     request_rate_mode: RequestRateMode = LoadGeneratorDefaults.REQUEST_RATE_MODE
     request_count: int = LoadGeneratorDefaults.REQUEST_COUNT
+    steady_state: bool = LoadGeneratorDefaults.STEADY_STATE
+    steady_state_count_tail: bool = LoadGeneratorDefaults.STEADY_STATE_COUNT_TAIL
     warmup_request_count: int = LoadGeneratorDefaults.WARMUP_REQUEST_COUNT
     benchmark_duration: float | None = LoadGeneratorDefaults.BENCHMARK_DURATION
     benchmark_grace_period: float = LoadGeneratorDefaults.BENCHMARK_GRACE_PERIOD
@@ -40,6 +42,8 @@ class TimingManagerConfig(AIPerfBaseModel):
             request_rate=user_config.loadgen.request_rate,
             request_rate_mode=user_config.loadgen.request_rate_mode,
             request_count=user_config.get_effective_request_count(),
+            steady_state=user_config.loadgen.steady_state,
+            steady_state_count_tail=user_config.loadgen.steady_state_count_tail,
             warmup_request_count=user_config.loadgen.warmup_request_count,
             benchmark_duration=user_config.loadgen.benchmark_duration,
             benchmark_grace_period=user_config.loadgen.benchmark_grace_period,

@@ -114,6 +114,19 @@ class UserConfig(BaseConfig):
 
         return self
 
+    @model_validator(mode="after")
+    def validate_steady_state_mode(self) -> Self:
+        """Validate steady-state options are compatible with timing configuration."""
+        if self.loadgen.steady_state and self.loadgen.benchmark_duration is not None:
+            raise ValueError(
+                "--steady-state cannot be used with duration-based benchmarking (--benchmark-duration)."
+            )
+        if self.loadgen.steady_state and self.input.fixed_schedule:
+            raise ValueError(
+                "--steady-state cannot be used with fixed schedule datasets."
+            )
+        return self
+
     def get_effective_request_count(self) -> int:
         """Get the effective number of requests to send.
 
@@ -123,6 +136,9 @@ class UserConfig(BaseConfig):
         Returns:
             int: The number of requests that should be sent
         """
+        if self.loadgen.steady_state and "request_count" in self.loadgen.model_fields_set:
+            return self.loadgen.request_count
+
         if self.input.custom_dataset_type == CustomDatasetType.MOONCAKE_TRACE:
             try:
                 dataset_size = self._count_dataset_entries()
@@ -135,7 +151,104 @@ class UserConfig(BaseConfig):
                     f"Could not read mooncake_trace dataset file: {e}"
                 ) from e
 
+        if (
+            self.loadgen.steady_state
+            and "request_count" not in self.loadgen.model_fields_set
+        ):
+            steady_state_count = self._get_steady_state_request_count()
+            if steady_state_count > 0:
+                return steady_state_count
+
         return self.loadgen.request_count
+
+    def _get_steady_state_request_count(self) -> int:
+        """Get the steady-state stop target based on dataset configuration."""
+        if self.input.conversation.num is not None:
+            return self.input.conversation.num
+
+        if self.input.public_dataset is not None:
+            _logger.warning(
+                "Steady-state requested without an explicit --request-count for a public dataset; "
+                "falling back to configured request count."
+            )
+            return self.loadgen.request_count
+
+        if self.input.file is None and self.input.custom_dataset_type is None:
+            return self.input.conversation.num_dataset_entries
+
+        dataset_type = self.input.custom_dataset_type
+        if dataset_type is None and self.input.file is not None:
+            dataset_type = self._infer_custom_dataset_type(self.input.file)
+
+        if dataset_type in (
+            CustomDatasetType.MULTI_TURN,
+            CustomDatasetType.MOONCAKE_TRACE,
+        ):
+            return self._count_unique_conversations()
+
+        if dataset_type == CustomDatasetType.RANDOM_POOL:
+            return self.input.conversation.num or 1
+
+        return self._count_dataset_entries()
+
+    def _count_unique_conversations(self) -> int:
+        """Count unique conversations in a multi-turn dataset file."""
+        if not self.input.file:
+            return 0
+
+        unique_sessions: set[str] = set()
+        no_session_count = 0
+
+        try:
+            with open(self.input.file) as f:
+                for line in f:
+                    if not (line := line.strip()):
+                        continue
+                    try:
+                        data = load_json_str(line)
+                    except JSONDecodeError:
+                        continue
+                    session_id = data.get("session_id")
+                    if session_id:
+                        unique_sessions.add(session_id)
+                    else:
+                        no_session_count += 1
+        except (OSError, FileNotFoundError) as e:
+            _logger.error(f"Cannot read dataset file {self.input.file}: {e}")
+            return 0
+
+        return len(unique_sessions) + no_session_count
+
+    def _infer_custom_dataset_type(self, file_path: str) -> CustomDatasetType | None:
+        """Infer the custom dataset type from the input file."""
+        from pathlib import Path
+
+        from aiperf.common.factories import CustomDatasetFactory
+
+        if Path(file_path).is_dir():
+            return CustomDatasetType.RANDOM_POOL
+
+        try:
+            with open(file_path) as f:
+                for line in f:
+                    if not (line := line.strip()):
+                        continue
+                    data = load_json_str(line)
+                    for (
+                        loader_class,
+                        dataset_type,
+                    ) in CustomDatasetFactory.get_all_classes_and_types():
+                        if loader_class.can_load(data, file_path):
+                            return dataset_type
+                    break
+        except (OSError, FileNotFoundError) as e:
+            _logger.error(f"Cannot read dataset file {file_path}: {e}")
+        except Exception as e:
+            _logger.warning(
+                f"Could not infer custom dataset type from {file_path}: {e!r}"
+            )
+
+        return None
 
     def _should_use_fixed_schedule_for_mooncake_trace(self) -> bool:
         """Check if mooncake_trace dataset has timestamps and should use fixed schedule.

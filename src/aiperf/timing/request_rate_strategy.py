@@ -46,7 +46,7 @@ class RequestRateStrategy(CreditIssuingStrategy):
         """Execute credit drops based on the request rate generator, optionally with a max concurrency limit."""
 
         loop_count = 0
-        while phase_stats.should_send():
+        while self._should_send_credit(phase_stats):
             loop_count += 1
 
             # Ensure we have an available credit before dropping
@@ -54,7 +54,7 @@ class RequestRateStrategy(CreditIssuingStrategy):
                 await self._semaphore.acquire()
                 if self.is_trace_enabled:
                     self.trace(f"Acquired credit drop semaphore: {self._semaphore!r}")
-                if not phase_stats.should_send():
+                if not self._should_send_credit(phase_stats):
                     # Check one last time to see if we should still send a credit in case the
                     # time-based phase expired while we were waiting for the semaphore.
                     self._semaphore.release()
@@ -77,12 +77,17 @@ class RequestRateStrategy(CreditIssuingStrategy):
             phase_stats.sent += 1
             # Check if we should break out of the loop before we sleep for the next interval.
             # This is to ensure we don't sleep for any unnecessary time, which could cause race conditions.
-            if not phase_stats.should_send():
+            if not self._should_send_credit(phase_stats):
                 break
 
             next_interval = self._request_rate_generator.next_interval()
             if next_interval > 0:
                 await asyncio.sleep(next_interval)
+
+    def _should_send_credit(self, phase_stats: CreditPhaseStats) -> bool:
+        if self._is_steady_state_profile_phase(phase_stats):
+            return not self._steady_state_stop_event.is_set()
+        return phase_stats.should_send()
 
     async def _on_credit_return(self, message: CreditReturnMessage) -> None:
         """Process a credit return message. If concurrency is enabled, release the semaphore to allow another credit to be issued."""

@@ -207,6 +207,8 @@ class LoadGeneratorDefaults:
     TIMING_MODE = TimingMode.REQUEST_RATE
     REQUEST_CANCELLATION_RATE = 0.0
     REQUEST_CANCELLATION_DELAY = 0.0
+    STEADY_STATE = False
+    STEADY_STATE_COUNT_TAIL = False
 
 
 @dataclass(frozen=True)

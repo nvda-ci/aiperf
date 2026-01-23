@@ -48,6 +48,31 @@ The sleep intervals in step 1 are determined by your chosen request rate mode. A
 >
 > **`constant`** — Requests arrive at precisely evenly-spaced intervals for deterministic, predictable load. Ideal for reproducible benchmarks and regression testing.
 
+## Steady-State Measurement
+
+Steady-state mode loops the dataset continuously and stops measurement when the stop target completes. This is useful for capturing consistent, sustained performance without waiting for tail stragglers.
+
+- The stop target defaults to the dataset size (or conversation count for multi-turn datasets).
+- `--request-count` overrides the default stop target.
+- When the stop target completes, AIPerf cancels remaining in-flight requests.
+- Cancelled tail requests are excluded by default; include them with `--steady-state-count-tail`.
+
+Example:
+
+```bash
+aiperf profile \
+    --model Qwen/Qwen3-0.6B \
+    --endpoint-type chat \
+    --endpoint /v1/chat/completions \
+    --streaming \
+    --url localhost:8000 \
+    --concurrency 100 \
+    --request-rate 200 \
+    --steady-state \
+    --synthetic-input-tokens-mean 500 \
+    --output-tokens-mean 200
+```
+
 ## Setting Up the Server
 
 ```bash
@@ -139,6 +164,8 @@ Simulate organic user behavior with natural variance in request timing. The Pois
 - `--concurrency <number>` — Maximum concurrent requests (acts as ceiling)
 - `--request-rate-mode <poisson|constant>` — Request timing distribution (default: `poisson`)
 - `--random-seed <number>` — Makes Poisson mode reproducible
+- `--steady-state` — Loop dataset until stop target completes
+- `--steady-state-count-tail` — Include cancelled tail requests in metrics
 
 **Behavior:**
 - Sleep-then-gate pattern: sleep based on rate, then wait for semaphore slot (max concurrency)

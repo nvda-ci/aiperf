@@ -488,6 +488,8 @@ class SystemController(SignalHandlerMixin, BaseService):
         self.debug(lambda: f"Error summary: {message.results.results.error_summary}")
 
         self._profile_results = message.results
+        if message.results.results.was_cancelled:
+            self._was_cancelled = True
 
         if not message.results.results:
             self.error(

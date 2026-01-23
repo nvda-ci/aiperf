@@ -237,10 +237,37 @@ class Worker(PullClientMixin, BaseComponentService, ProcessHealthMixin):
             )
 
             return_message.requests_sent += 1
-            record = await self._build_response_record(
-                request_info=request_info,
-                drop_perf_ns=drop_perf_ns,
-            )
+            try:
+                record = await self._build_response_record(
+                    request_info=request_info,
+                    drop_perf_ns=drop_perf_ns,
+                )
+            except asyncio.CancelledError:
+                cancellation_perf_ns = time.perf_counter_ns()
+                record = RequestRecord(
+                    request_headers=request_info.endpoint_headers,
+                    turns=request_info.turns,
+                    model_name=request_info.turns[request_info.turn_index].model
+                    or self.model_endpoint.primary_model_name,
+                    timestamp_ns=time.time_ns(),
+                    start_perf_ns=drop_perf_ns,
+                    end_perf_ns=cancellation_perf_ns,
+                    credit_phase=request_info.credit_phase,
+                    credit_num=request_info.credit_num,
+                    conversation_id=request_info.conversation_id,
+                    turn_index=request_info.turn_index,
+                    x_request_id=request_info.x_request_id,
+                    x_correlation_id=request_info.x_correlation_id,
+                    was_cancelled=True,
+                    cancellation_perf_ns=cancellation_perf_ns,
+                    error=ErrorDetails(
+                        type="RequestCancellationError",
+                        message="Request cancelled by steady-state stop",
+                        code=499,
+                    ),
+                )
+                await self._send_inference_result_message(record)
+                return
             await self._send_inference_result_message(record)
 
             if resp_turn := await self._process_response(record):

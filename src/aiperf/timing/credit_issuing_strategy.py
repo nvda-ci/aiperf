@@ -10,7 +10,7 @@ from aiperf.common.enums import CreditPhase, TimingMode
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import ConfigurationError
 from aiperf.common.factories import AIPerfFactory
-from aiperf.common.messages import CreditReturnMessage
+from aiperf.common.messages import CreditReturnMessage, ProfileCancelCommand
 from aiperf.common.mixins import TaskManagerMixin
 from aiperf.common.models import CreditPhaseConfig, CreditPhaseStats
 from aiperf.timing.config import TimingManagerConfig
@@ -43,6 +43,9 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
 
         # The phases to run including their configuration, in order of execution.
         self.ordered_phase_configs: list[CreditPhaseConfig] = []
+
+        self._steady_state_stop_event = asyncio.Event()
+        self._steady_state_cancel_sent = False
 
         self._setup_phase_configs()
         self._validate_phase_configs()
@@ -134,6 +137,9 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
             phase_stats = CreditPhaseStats.from_phase_config(phase_config)
             phase_stats.start_ns = time.time_ns()
             self.phase_stats[phase_config.type] = phase_stats
+            if self._is_steady_state_profile_phase(phase_stats):
+                self._steady_state_stop_event.clear()
+                self._steady_state_cancel_sent = False
 
             self.execute_async(
                 self.credit_manager.publish_phase_start(
@@ -301,6 +307,10 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         phase_stats.completed += 1
         phase_stats.requests_sent += message.requests_sent
 
+        if self._should_trigger_steady_state_cancel(phase_stats):
+            await self._trigger_steady_state_cancel(phase_stats)
+            return
+
         # Check if this phase is complete
         is_phase_complete = False
         if phase_stats.is_sending_complete:
@@ -335,6 +345,59 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
 
             # We don't need to keep track of the phase stats anymore
             self.phase_stats.pop(message.phase)
+
+    def _is_steady_state_profile_phase(self, phase_stats: CreditPhaseStats) -> bool:
+        return self.config.steady_state and phase_stats.type == CreditPhase.PROFILING
+
+    def _should_trigger_steady_state_cancel(
+        self, phase_stats: CreditPhaseStats
+    ) -> bool:
+        if (
+            not self._is_steady_state_profile_phase(phase_stats)
+            or self._steady_state_cancel_sent
+        ):
+            return False
+        if phase_stats.total_expected_requests is None:
+            return False
+        return phase_stats.completed >= phase_stats.total_expected_requests
+
+    async def _trigger_steady_state_cancel(
+        self, phase_stats: CreditPhaseStats
+    ) -> None:
+        """Stop steady-state profiling once the target completion count is reached."""
+        self._steady_state_cancel_sent = True
+        self._steady_state_stop_event.set()
+
+        phase_stats.end_ns = time.time_ns()
+        final_request_count = phase_stats.total_expected_requests or 0
+
+        self.notice(
+            f"Steady-state target reached, cancelling tail requests: {phase_stats}"
+        )
+
+        self.execute_async(
+            self.credit_manager.publish_phase_complete(
+                phase_stats.type,
+                phase_stats.completed,
+                phase_stats.end_ns,
+                final_request_count,
+            )
+        )
+        self.phase_complete_event.set()
+
+        if phase_stats.type == CreditPhase.PROFILING:
+            await self.credit_manager.publish_credits_complete()
+            self.all_phases_complete_event.set()
+
+        service_id = getattr(self.credit_manager, "service_id", "unknown")
+        await self.credit_manager.publish(
+            ProfileCancelCommand(
+                service_id=service_id,
+                reason="steady_state",
+            )
+        )
+
+        self.phase_stats.pop(phase_stats.type, None)
 
     async def _progress_report_loop(self) -> None:
         """Report the progress at a fixed interval."""

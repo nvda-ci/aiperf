@@ -1,0 +1,210 @@
+{
+  "schema_version": "1.0",
+  "aiperf_version": "0.4.0",
+  "benchmark_id": "4eaf4236-fc53-408b-a020-8f2be4c6033f",
+  "request_throughput": {
+    "unit": "requests/sec",
+    "avg": 661.9265225815901
+  },
+  "request_latency": {
+    "unit": "ms",
+    "avg": 0.6475542,
+    "p1": 0.32045053,
+    "p5": 0.32492065000000003,
+    "p10": 0.3305083,
+    "p25": 0.332875,
+    "p50": 0.360396,
+    "p75": 0.39697925,
+    "p90": 0.704749999999999,
+    "p95": 1.9698124999999969,
+    "p99": 2.9818625000000005,
+    "min": 0.319333,
+    "max": 3.2348749999999997,
+    "std": 0.863024346479611
+  },
+  "request_count": {
+    "unit": "requests",
+    "avg": 10.0
+  },
+  "output_token_throughput": {
+    "unit": "tokens/sec",
+    "avg": 3309.6326129079507
+  },
+  "output_sequence_length": {
+    "unit": "tokens",
+    "avg": 5.0,
+    "p1": 5.0,
+    "p5": 5.0,
+    "p10": 5.0,
+    "p25": 5.0,
+    "p50": 5.0,
+    "p75": 5.0,
+    "p90": 5.0,
+    "p95": 5.0,
+    "p99": 5.0,
+    "min": 5.0,
+    "max": 5.0,
+    "std": 0.0
+  },
+  "input_sequence_length": {
+    "unit": "tokens",
+    "avg": 10.0,
+    "p1": 10.0,
+    "p5": 10.0,
+    "p10": 10.0,
+    "p25": 10.0,
+    "p50": 10.0,
+    "p75": 10.0,
+    "p90": 10.0,
+    "p95": 10.0,
+    "p99": 10.0,
+    "min": 10.0,
+    "max": 10.0,
+    "std": 0.0
+  },
+  "output_token_count": {
+    "unit": "tokens",
+    "avg": 5.0,
+    "p1": 5.0,
+    "p5": 5.0,
+    "p10": 5.0,
+    "p25": 5.0,
+    "p50": 5.0,
+    "p75": 5.0,
+    "p90": 5.0,
+    "p95": 5.0,
+    "p99": 5.0,
+    "min": 5.0,
+    "max": 5.0,
+    "std": 0.0
+  },
+  "min_request_timestamp": {
+    "unit": "ns",
+    "avg": 1.768262655995716e18
+  },
+  "max_response_timestamp": {
+    "unit": "ns",
+    "avg": 1.7682626560108234e18
+  },
+  "total_output_tokens": {
+    "unit": "tokens",
+    "avg": 50.0
+  },
+  "benchmark_duration": {
+    "unit": "sec",
+    "avg": 0.015107417000000001
+  },
+  "total_isl": {
+    "unit": "tokens",
+    "avg": 100.0
+  },
+  "total_osl": {
+    "unit": "tokens",
+    "avg": 50.0
+  },
+  "telemetry_data": {
+    "summary": {
+      "endpoints_configured": [],
+      "endpoints_successful": [],
+      "start_time": "2026-01-12T16:04:15.994487",
+      "end_time": "2026-01-12T16:04:16.011031"
+    },
+    "endpoints": {},
+    "error_summary": []
+  },
+  "input_config": {
+    "endpoint": {
+      "model_names": [
+        "deepseek-r1-nvfp4"
+      ],
+      "type": "chat",
+      "url": "http://127.0.0.1:54899",
+      "use_server_token_count": true
+    },
+    "input": {
+      "file": "../playground/aiperf_standard_inputs_multiturn.jsonl",
+      "custom_dataset_type": "multi_turn"
+    },
+    "output": {
+      "artifact_directory": "test_output"
+    },
+    "tokenizer": {
+      "name": "gpt2"
+    },
+    "loadgen": {
+      "concurrency": 1,
+      "request_rate_mode": "concurrency_burst",
+      "request_count": 10
+    },
+    "cli_command": "aiperf profile --model 'deepseek-r1-nvfp4' --url 'http://127.0.0.1:54899' --endpoint-type 'chat' --input-file '../playground/aiperf_standard_inputs_multiturn.jsonl' --custom-dataset-type 'multi_turn' --num-requests 10 --artifact-dir 'test_output' --max-workers 1 --concurrency 1 --tokenizer 'gpt2' --use-server-token-count --ui-type None",
+    "benchmark_id": "4eaf4236-fc53-408b-a020-8f2be4c6033f"
+  },
+  "was_cancelled": false,
+  "error_summary": [],
+  "start_time": "2026-01-12T16:04:15.994487",
+  "end_time": "2026-01-12T16:04:16.011031",
+  "usage_prompt_tokens": {
+    "unit": "tokens",
+    "avg": 10.0,
+    "p1": 10.0,
+    "p5": 10.0,
+    "p10": 10.0,
+    "p25": 10.0,
+    "p50": 10.0,
+    "p75": 10.0,
+    "p90": 10.0,
+    "p95": 10.0,
+    "p99": 10.0,
+    "min": 10.0,
+    "max": 10.0,
+    "std": 0.0
+  },
+  "usage_completion_tokens": {
+    "unit": "tokens",
+    "avg": 5.0,
+    "p1": 5.0,
+    "p5": 5.0,
+    "p10": 5.0,
+    "p25": 5.0,
+    "p50": 5.0,
+    "p75": 5.0,
+    "p90": 5.0,
+    "p95": 5.0,
+    "p99": 5.0,
+    "min": 5.0,
+    "max": 5.0,
+    "std": 0.0
+  },
+  "usage_total_tokens": {
+    "unit": "tokens",
+    "avg": 15.0,
+    "p1": 15.0,
+    "p5": 15.0,
+    "p10": 15.0,
+    "p25": 15.0,
+    "p50": 15.0,
+    "p75": 15.0,
+    "p90": 15.0,
+    "p95": 15.0,
+    "p99": 15.0,
+    "min": 15.0,
+    "max": 15.0,
+    "std": 0.0
+  },
+  "total_usage_prompt_tokens": {
+    "unit": "tokens",
+    "avg": 100.0
+  },
+  "total_usage_completion_tokens": {
+    "unit": "tokens",
+    "avg": 50.0
+  },
+  "total_usage_total_tokens": {
+    "unit": "tokens",
+    "avg": 150.0
+  },
+  "total_token_throughput": {
+    "unit": "tokens/sec",
+    "avg": 9928.897838723853
+  }
+}
