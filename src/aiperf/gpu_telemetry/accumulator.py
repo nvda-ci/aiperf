@@ -196,8 +196,8 @@ class GPUTelemetryAccumulator(BaseMetricsProcessor):
 
     def export_results(
         self,
-        start_ns: int,
-        end_ns: int,
+        start_ns: int | None = None,
+        end_ns: int | None = None,
         error_summary: list[ErrorDetailsCount] | None = None,
     ) -> "TelemetryExportData | None":
         """Export accumulated telemetry data as a TelemetryExportData object.
@@ -210,22 +210,37 @@ class GPUTelemetryAccumulator(BaseMetricsProcessor):
         - Counter metrics (energy, errors): Delta computed from baseline before start_ns
 
         Args:
-            start_ns: Start time of profiling phase in nanoseconds (excludes warmup)
-            end_ns: End time of profiling phase in nanoseconds
+            start_ns: Start time of profiling phase in nanoseconds (excludes warmup).
+                     If None, includes all data from beginning.
+            end_ns: End time of profiling phase in nanoseconds. If None, includes all
+                   data after start_ns (including final scrape after profiling completes).
             error_summary: Optional list of error counts
 
         Returns:
             TelemetryExportData object with pre-computed metrics for each GPU
         """
         # Create time filter for warmup exclusion
+        # Note: end_ns is typically None to include the final telemetry scrape
+        # that occurs after PROFILE_COMPLETE but before export
         time_filter = TimeRangeFilter(start_ns=start_ns, end_ns=end_ns)
 
         # Build summary
+        # When start_ns/end_ns is None, use current time as the timestamp
+        start_time = (
+            datetime.fromtimestamp(start_ns / NANOS_PER_SECOND)
+            if start_ns is not None
+            else datetime.now()
+        )
+        end_time = (
+            datetime.fromtimestamp(end_ns / NANOS_PER_SECOND)
+            if end_ns is not None
+            else datetime.now()
+        )
         summary = TelemetrySummary(
             endpoints_configured=list(self._hierarchy.dcgm_endpoints.keys()),
             endpoints_successful=list(self._hierarchy.dcgm_endpoints.keys()),
-            start_time=datetime.fromtimestamp(start_ns / NANOS_PER_SECOND),
-            end_time=datetime.fromtimestamp(end_ns / NANOS_PER_SECOND),
+            start_time=start_time,
+            end_time=end_time,
         )
 
         # Build endpoints dict with pre-computed metrics
