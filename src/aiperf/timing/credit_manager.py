@@ -59,6 +59,8 @@ class CreditManagerProtocol(PubClientProtocol, Protocol):
         end_ns: int,
         final_request_count: int,
         timeout_triggered: bool = False,
+        measurement_start_ns: int | None = None,
+        measurement_end_ns: int | None = None,
     ) -> None: ...
 
 
@@ -129,6 +131,8 @@ class CreditPhaseMessagesMixin(MessageBusClientMixin, CreditPhaseMessagesRequire
         end_ns: int,
         final_request_count: int,
         timeout_triggered: bool = False,
+        measurement_start_ns: int | None = None,
+        measurement_end_ns: int | None = None,
     ) -> None:
         """Publish the phase complete message."""
         self.execute_async(
@@ -140,6 +144,8 @@ class CreditPhaseMessagesMixin(MessageBusClientMixin, CreditPhaseMessagesRequire
                     end_ns=end_ns,
                     timeout_triggered=timeout_triggered,
                     final_request_count=final_request_count,
+                    measurement_start_ns=measurement_start_ns,
+                    measurement_end_ns=measurement_end_ns,
                 )
             )
         )

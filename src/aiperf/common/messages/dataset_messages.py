@@ -75,3 +75,21 @@ class DatasetConfiguredNotification(BaseServiceMessage):
     """Notification sent to notify other services that the dataset has been configured."""
 
     message_type: MessageTypeT = MessageType.DATASET_CONFIGURED_NOTIFICATION
+
+
+class DatasetInfoRequest(BaseServiceMessage):
+    """Request for dataset information (e.g., size for steady-state loop tracking)."""
+
+    message_type: MessageTypeT = MessageType.DATASET_INFO_REQUEST
+
+
+class DatasetInfoResponse(BaseServiceMessage):
+    """Response containing dataset information."""
+
+    message_type: MessageTypeT = MessageType.DATASET_INFO_RESPONSE
+
+    dataset_size: int = Field(
+        ...,
+        ge=1,
+        description="The number of unique conversations in the dataset",
+    )

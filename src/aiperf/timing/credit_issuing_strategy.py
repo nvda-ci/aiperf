@@ -46,6 +46,21 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
 
         self._steady_state_stop_event = asyncio.Event()
         self._steady_state_cancel_sent = False
+        
+        # Steady-state measurement window tracking
+        # For 3-loop steady-state: warmup (a), measurement (b), tail (c)
+        # measurement_start_ns is when the first credit of loop 2 (b1) is issued
+        # measurement_end_ns is max(request_end_ns) for all measurement loop credits
+        self._measurement_start_ns: int | None = None
+        self._measurement_end_ns: int | None = None
+        # Track which credits belong to the measurement loop (second loop)
+        self._measurement_loop_start_credit: int | None = None
+        self._measurement_loop_end_credit: int | None = None
+        # Flag to indicate measurement is complete but we're still in grace period
+        self._measurement_complete: bool = False
+        # Track returned measurement credits and their end times
+        # Key: credit_num, Value: request_end_ns
+        self._measurement_credit_end_times: dict[int, int] = {}
 
         self._setup_phase_configs()
         self._validate_phase_configs()
@@ -98,6 +113,17 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
                     type=CreditPhase.PROFILING,
                     total_expected_requests=total_expected_requests,
                 )
+            )
+        
+        # Setup measurement loop boundaries for steady-state
+        if self.config.steady_state and self.config.dataset_size is not None:
+            dataset_size = self.config.dataset_size
+            # Measurement loop is the second loop (credits dataset_size to 2*dataset_size-1)
+            self._measurement_loop_start_credit = dataset_size
+            self._measurement_loop_end_credit = 2 * dataset_size - 1
+            self.debug(
+                f"Steady-state measurement loop: credits {self._measurement_loop_start_credit} to {self._measurement_loop_end_credit} "
+                f"(dataset_size={dataset_size})"
             )
 
     def _validate_phase_configs(self) -> None:
@@ -307,9 +333,13 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
         phase_stats.completed += 1
         phase_stats.requests_sent += message.requests_sent
 
-        if self._should_trigger_steady_state_cancel(phase_stats):
-            await self._trigger_steady_state_cancel(phase_stats)
-            return
+        # For 3-loop steady-state: track measurement credit returns
+        self._track_measurement_credit_return(phase_stats, message)
+        
+        # Check if ALL measurement credits have returned
+        if self._should_record_measurement_end(phase_stats, message):
+            await self._record_measurement_end(phase_stats)
+            # Don't return - continue processing to allow more credits to be issued
 
         # Check if this phase is complete
         is_phase_complete = False
@@ -349,30 +379,176 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
     def _is_steady_state_profile_phase(self, phase_stats: CreditPhaseStats) -> bool:
         return self.config.steady_state and phase_stats.type == CreditPhase.PROFILING
 
+    def _record_measurement_start_if_needed(
+        self, phase_stats: CreditPhaseStats, credit_num: int
+    ) -> None:
+        """Record measurement start time when the first credit of the measurement loop is issued.
+        
+        For steady-state with 3 loops (warmup, measurement, tail):
+        - Loop 1 (a): credits 0 to dataset_size-1 (warmup)
+        - Loop 2 (b): credits dataset_size to 2*dataset_size-1 (measurement)
+        - Loop 3 (c): credits 2*dataset_size+ (tail)
+        
+        We record measurement_start_ns when credit dataset_size (b1) is issued.
+        """
+        if not self._is_steady_state_profile_phase(phase_stats):
+            return
+        if self._measurement_start_ns is not None:
+            return  # Already recorded
+        if self._measurement_loop_start_credit is None:
+            return
+        
+        if credit_num == self._measurement_loop_start_credit:
+            self._measurement_start_ns = time.time_ns()
+            self.notice(
+                f"Steady-state measurement started at credit {credit_num} "
+                f"(measurement_start_ns={self._measurement_start_ns})"
+            )
+
+    def _track_measurement_credit_return(
+        self, phase_stats: CreditPhaseStats, message: CreditReturnMessage
+    ) -> None:
+        """Track measurement credit returns and their end times.
+        
+        For 3-loop steady-state, we need to track when EACH measurement credit
+        (credits dataset_size to 2*dataset_size-1) completes, along with their
+        actual request end times.
+        """
+        if not self._is_steady_state_profile_phase(phase_stats):
+            return
+        if self._measurement_complete:
+            return  # Already completed
+        if self._measurement_loop_start_credit is None or self._measurement_loop_end_credit is None:
+            return
+        if message.credit_num is None:
+            return
+        
+        # Check if this is a measurement loop credit
+        if self._measurement_loop_start_credit <= message.credit_num <= self._measurement_loop_end_credit:
+            # Use request_end_ns if available, otherwise use current time
+            end_time = message.request_end_ns or time.time_ns()
+            self._measurement_credit_end_times[message.credit_num] = end_time
+            self.debug(
+                f"Tracked measurement credit {message.credit_num} end time: {end_time}"
+            )
+
+    def _should_record_measurement_end(
+        self, phase_stats: CreditPhaseStats, message: CreditReturnMessage
+    ) -> bool:
+        """Check if we should record the measurement end timestamp.
+        
+        For 3-loop steady-state, measurement ends when ALL credits in the 
+        measurement loop (credits dataset_size to 2*dataset_size-1) have completed.
+        The measurement_end_ns is the MAX of all their request_end_ns values.
+        """
+        if not self._is_steady_state_profile_phase(phase_stats):
+            return False
+        if self._measurement_complete:
+            return False  # Already recorded
+        
+        # Use the new 3-loop logic if dataset_size is configured
+        if self._measurement_loop_start_credit is not None and self._measurement_loop_end_credit is not None:
+            # Check if ALL measurement credits have returned
+            expected_credits = set(range(
+                self._measurement_loop_start_credit,
+                self._measurement_loop_end_credit + 1
+            ))
+            returned_credits = set(self._measurement_credit_end_times.keys())
+            return expected_credits == returned_credits
+        
+        # Fallback to old behavior if dataset_size not set
+        if phase_stats.total_expected_requests is None:
+            return False
+        return phase_stats.completed >= phase_stats.total_expected_requests
+
     def _should_trigger_steady_state_cancel(
         self, phase_stats: CreditPhaseStats
     ) -> bool:
+        """Check if we should trigger steady-state cancellation.
+        
+        This is called after the grace period has elapsed following measurement completion.
+        """
         if (
             not self._is_steady_state_profile_phase(phase_stats)
             or self._steady_state_cancel_sent
         ):
             return False
-        if phase_stats.total_expected_requests is None:
-            return False
-        return phase_stats.completed >= phase_stats.total_expected_requests
+        
+        # Only cancel after measurement is complete and grace period elapsed
+        return self._measurement_complete
+
+    async def _record_measurement_end(
+        self, phase_stats: CreditPhaseStats
+    ) -> None:
+        """Record the measurement end timestamp and schedule cancellation after grace period.
+        
+        This is called when ALL credits in the measurement loop have completed.
+        The measurement_end_ns is the MAX of all request_end_ns values, which is
+        when the LAST request from the measurement loop actually finished.
+        
+        We record the timestamp but continue submitting tail requests to keep the
+        server loaded. Cancellation happens after a grace period.
+        """
+        self._measurement_complete = True
+        
+        # measurement_end_ns = max of all measurement credit end times
+        if self._measurement_credit_end_times:
+            self._measurement_end_ns = max(self._measurement_credit_end_times.values())
+            # Find which credit had the latest end time
+            latest_credit = max(
+                self._measurement_credit_end_times.keys(),
+                key=lambda c: self._measurement_credit_end_times[c]
+            )
+        else:
+            # Fallback if no end times tracked
+            self._measurement_end_ns = time.time_ns()
+            latest_credit = None
+        
+        self.notice(
+            f"Steady-state measurement loop complete. All {len(self._measurement_credit_end_times)} measurement credits returned. "
+            f"Latest to finish: credit {latest_credit}. "
+            f"measurement_window=[{self._measurement_start_ns}, {self._measurement_end_ns}]. "
+            f"Continuing to submit tail requests for {self.config.steady_state_grace_period}s grace period..."
+        )
+        
+        # Schedule cancellation after grace period
+        self.execute_async(self._steady_state_grace_period_then_cancel(phase_stats))
+    
+    async def _steady_state_grace_period_then_cancel(
+        self, phase_stats: CreditPhaseStats
+    ) -> None:
+        """Wait for grace period then trigger cancellation."""
+        grace_period = self.config.steady_state_grace_period
+        await asyncio.sleep(grace_period)
+        
+        if not self._steady_state_cancel_sent:
+            await self._trigger_steady_state_cancel(phase_stats)
 
     async def _trigger_steady_state_cancel(
         self, phase_stats: CreditPhaseStats
     ) -> None:
-        """Stop steady-state profiling once the target completion count is reached."""
+        """Stop steady-state profiling after the grace period.
+        
+        This is called after the grace period following measurement completion.
+        At this point, tail requests have been running to keep the server loaded.
+        """
         self._steady_state_cancel_sent = True
         self._steady_state_stop_event.set()
 
         phase_stats.end_ns = time.time_ns()
-        final_request_count = phase_stats.total_expected_requests or 0
+        
+        # Calculate final request count based on measurement loop
+        if self._measurement_loop_end_credit is not None:
+            # Number of credits in the measurement loop
+            final_request_count = (
+                self._measurement_loop_end_credit - (self._measurement_loop_start_credit or 0) + 1
+            )
+        else:
+            final_request_count = phase_stats.total_expected_requests or 0
 
         self.notice(
-            f"Steady-state target reached, cancelling tail requests: {phase_stats}"
+            f"Steady-state grace period complete, cancelling tail requests: {phase_stats}, "
+            f"measurement_window=[{self._measurement_start_ns}, {self._measurement_end_ns}]"
         )
 
         self.execute_async(
@@ -381,6 +557,8 @@ class CreditIssuingStrategy(TaskManagerMixin, ABC):
                 phase_stats.completed,
                 phase_stats.end_ns,
                 final_request_count,
+                measurement_start_ns=self._measurement_start_ns,
+                measurement_end_ns=self._measurement_end_ns,
             )
         )
         self.phase_complete_event.set()

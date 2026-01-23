@@ -209,6 +209,7 @@ class LoadGeneratorDefaults:
     REQUEST_CANCELLATION_DELAY = 0.0
     STEADY_STATE = False
     STEADY_STATE_COUNT_TAIL = False
+    STEADY_STATE_GRACE_PERIOD = 2.0  # seconds to continue submitting after measurement ends
 
 
 @dataclass(frozen=True)

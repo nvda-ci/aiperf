@@ -187,6 +187,8 @@ class MockCreditManager(AIPerfLifecycleMixin):
         end_ns: int,
         final_request_count: int,
         timeout_triggered: bool = False,
+        measurement_start_ns: int | None = None,
+        measurement_end_ns: int | None = None,
     ) -> None:
         """Mock publish_phase_complete method."""
         self.phase_complete_calls.append(
@@ -197,6 +199,8 @@ class MockCreditManager(AIPerfLifecycleMixin):
                 final_request_count=final_request_count,
                 timeout_triggered=timeout_triggered,
                 service_id="test-service",
+                measurement_start_ns=measurement_start_ns,
+                measurement_end_ns=measurement_end_ns,
             )
         )
 

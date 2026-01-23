@@ -67,12 +67,15 @@ class RequestRateStrategy(CreditIssuingStrategy):
             should_cancel = self.cancellation_strategy.should_cancel_request()
             cancel_after_ns = self.cancellation_strategy.get_cancellation_delay_ns()
 
+            credit_num = phase_stats.sent
             await self.credit_manager.drop_credit(
                 credit_phase=phase_stats.type,
-                credit_num=phase_stats.sent,
+                credit_num=credit_num,
                 should_cancel=should_cancel,
                 cancel_after_ns=cancel_after_ns,
             )
+            # Record measurement start time if this is the first credit of the measurement loop
+            self._record_measurement_start_if_needed(phase_stats, credit_num)
             # NOTE: This is incremented here, as the credit_num is used up above, and needs the current value.
             phase_stats.sent += 1
             # Check if we should break out of the loop before we sleep for the next interval.

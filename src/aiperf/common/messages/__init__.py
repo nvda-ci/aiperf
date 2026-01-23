@@ -50,6 +50,8 @@ from aiperf.common.messages.dataset_messages import (
     ConversationTurnRequestMessage,
     ConversationTurnResponseMessage,
     DatasetConfiguredNotification,
+    DatasetInfoRequest,
+    DatasetInfoResponse,
     DatasetTimingRequest,
     DatasetTimingResponse,
 )
@@ -115,6 +117,8 @@ __all__ = [
     "CreditReturnMessage",
     "CreditsCompleteMessage",
     "DatasetConfiguredNotification",
+    "DatasetInfoRequest",
+    "DatasetInfoResponse",
     "DatasetTimingRequest",
     "DatasetTimingResponse",
     "ErrorMessage",

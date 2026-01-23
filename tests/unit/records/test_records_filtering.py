@@ -93,6 +93,10 @@ def create_mock_records_manager_for_cancellation(
     instance.user_config.loadgen.steady_state_count_tail = steady_state_count_tail
     instance.steady_state_cancelled = steady_state_cancelled
     instance.debug = MagicMock()
+    # Set measurement window to None by default (fallback behavior)
+    instance.measurement_start_ns = None
+    instance.measurement_end_ns = None
+    instance.end_time_ns = None
     return instance
 
 
@@ -317,7 +321,7 @@ class TestRecordsManagerFiltering:
         )
 
     def test_ignore_steady_state_cancelled_record_by_default(self):
-        """Steady-state tail cancellations are excluded when count-tail is false."""
+        """Steady-state tail cancellations are excluded when count-tail is false (fallback behavior)."""
         from aiperf.records.records_manager import RecordsManager
 
         instance = create_mock_records_manager_for_cancellation(
@@ -325,6 +329,7 @@ class TestRecordsManagerFiltering:
             steady_state_count_tail=False,
             steady_state_cancelled=True,
         )
+        # No measurement window set - uses fallback behavior
         record_data = create_metric_record_data(
             request_start_ns=START_TIME,
             request_end_ns=START_TIME + int(1.0 * NANOS_PER_SECOND),
@@ -355,6 +360,94 @@ class TestRecordsManagerFiltering:
             RecordsManager._should_ignore_cancelled_record(instance, record_data)
             is False
         )
+
+    def test_steady_state_3loop_includes_records_overlapping_measurement_window(self):
+        """Records overlapping with measurement window are included in 3-loop steady-state."""
+        from aiperf.records.records_manager import RecordsManager
+
+        # Measurement window: 2000 to 4000 ns
+        measurement_start = 2000
+        measurement_end = 4000
+
+        instance = create_mock_records_manager_for_cancellation(
+            steady_state=True,
+            steady_state_count_tail=False,
+            steady_state_cancelled=True,
+        )
+        instance.measurement_start_ns = measurement_start
+        instance.measurement_end_ns = measurement_end
+
+        # Record fully within measurement window - INCLUDE
+        record_within = create_metric_record_data(
+            request_start_ns=2500,
+            request_end_ns=3500,
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_within) is False
+
+        # Record started in warmup but ends during measurement - INCLUDE (overlaps)
+        record_warmup_overlap = create_metric_record_data(
+            request_start_ns=1500,  # Started before measurement
+            request_end_ns=2500,    # Ended during measurement
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_warmup_overlap) is False
+
+        # Record started during measurement but ends in tail - INCLUDE (overlaps)
+        record_tail_overlap = create_metric_record_data(
+            request_start_ns=3500,  # Started during measurement
+            request_end_ns=5000,    # Ended after measurement
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_tail_overlap) is False
+
+        # Record spans entire measurement window - INCLUDE
+        record_spans = create_metric_record_data(
+            request_start_ns=1000,
+            request_end_ns=5000,
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_spans) is False
+
+    def test_steady_state_3loop_excludes_records_outside_measurement_window(self):
+        """Records outside measurement window are excluded in 3-loop steady-state."""
+        from aiperf.records.records_manager import RecordsManager
+
+        # Measurement window: 2000 to 4000 ns
+        measurement_start = 2000
+        measurement_end = 4000
+
+        instance = create_mock_records_manager_for_cancellation(
+            steady_state=True,
+            steady_state_count_tail=False,
+            steady_state_cancelled=True,
+        )
+        instance.measurement_start_ns = measurement_start
+        instance.measurement_end_ns = measurement_end
+
+        # Record fully in warmup (before measurement) - EXCLUDE
+        record_warmup = create_metric_record_data(
+            request_start_ns=500,
+            request_end_ns=1500,
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_warmup) is True
+
+        # Record fully in tail (after measurement) - EXCLUDE
+        record_tail = create_metric_record_data(
+            request_start_ns=4500,
+            request_end_ns=5500,
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_tail) is True
+
+        # Edge case: record ends exactly when measurement starts - EXCLUDE (no overlap)
+        record_edge_before = create_metric_record_data(
+            request_start_ns=1000,
+            request_end_ns=2000,  # Ends exactly at measurement_start
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_edge_before) is True
+
+        # Edge case: record starts exactly when measurement ends - EXCLUDE (no overlap)
+        record_edge_after = create_metric_record_data(
+            request_start_ns=4000,  # Starts exactly at measurement_end
+            request_end_ns=5000,
+        )
+        assert RecordsManager._should_ignore_cancelled_record(instance, record_edge_after) is True
 
     def test_should_include_request_multiple_results_in_request(self):
         """Test filtering with multiple result dictionaries for a single request (all-or-nothing)."""

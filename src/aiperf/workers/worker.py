@@ -155,6 +155,7 @@ class Worker(PullClientMixin, BaseComponentService, ProcessHealthMixin):
             service_id=self.service_id,
             phase=message.phase,
             credit_drop_id=message.request_id,
+            credit_num=message.credit_num,
             delayed_ns=None,  # TODO: set this properly (from record if available?)
             requests_sent=0,
         )
@@ -267,8 +268,12 @@ class Worker(PullClientMixin, BaseComponentService, ProcessHealthMixin):
                     ),
                 )
                 await self._send_inference_result_message(record)
+                # Record the end time for steady-state tracking (use cancellation time)
+                return_message.request_end_ns = time.time_ns()
                 return
             await self._send_inference_result_message(record)
+            # Record the end time for steady-state tracking
+            return_message.request_end_ns = time.time_ns()
 
             if resp_turn := await self._process_response(record):
                 turn_list.append(resp_turn)

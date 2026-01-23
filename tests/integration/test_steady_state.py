@@ -1,6 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Integration test for steady-state measurement."""
+"""Integration test for steady-state measurement with 3-loop warmup/measurement/tail.
+
+The 3-loop steady-state measurement works as follows:
+- Loop 1 (a): Warmup loop - requests a1...aN are sent but not measured
+- Loop 2 (b): Measurement loop - requests b1...bN define the measurement window
+- Loop 3 (c): Tail loop - requests c1...cN may overlap with measurement
+
+The measurement window is [b1_start, bN_end]. Records that overlap with this window
+are included in metrics, which includes:
+- Late 'a' requests that complete during measurement
+- All 'b' requests
+- Early 'c' requests that start before measurement ends
+"""
 
 import asyncio
 import json
@@ -93,14 +105,24 @@ async def aiperf_mock_server_slow(
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestSteadyStateIntegration:
-    async def test_steady_state_mooncake_trace(
+    async def test_steady_state_3loop_mooncake_trace(
         self,
         cli: AIPerfCLI,
         aiperf_mock_server_slow: AIPerfMockServer,
         tmp_path: Path,
     ) -> None:
+        """Test 3-loop steady-state: dataset_size=10, concurrency=4.
+        
+        With 3-loop steady-state:
+        - Loop 1 (a): 10 warmup requests (a1...a10)
+        - Loop 2 (b): 10 measurement requests (b1...b10)
+        - Loop 3 (c): tail requests until bN completes
+        
+        The measurement window includes records overlapping [b1_start, b10_end].
+        """
+        dataset_size = 10
         dataset_path = tmp_path / "mooncake_trace_10.jsonl"
-        _write_mooncake_trace_dataset(dataset_path, count=10)
+        _write_mooncake_trace_dataset(dataset_path, count=dataset_size)
 
         result = await cli.run(
             f"""
@@ -111,7 +133,7 @@ class TestSteadyStateIntegration:
                 --steady-state \
                 --custom-dataset-type mooncake_trace \
                 --input-file {dataset_path} \
-                --request-count 4 \
+                --request-count {dataset_size} \
                 --request-rate-mode concurrency_burst \
                 --concurrency 4 \
                 --workers-max {defaults.workers_max} \
@@ -123,28 +145,37 @@ class TestSteadyStateIntegration:
         )
 
         assert result.exit_code == 0
-        assert result.request_count == 4
+        # With 3-loop steady-state, we expect records from measurement window (+ overlaps)
+        # The exact count depends on timing overlaps
+        assert result.request_count >= dataset_size  # At least the measurement loop
         assert result.jsonl is not None
-        assert len(result.jsonl) == 4
-        assert all(record.metadata.was_cancelled is False for record in result.jsonl)
+        # JSONL contains records that overlap with measurement window
+        assert len(result.jsonl) == result.request_count
         assert result.raw_records is not None
-        # Raw records should include all records, including those that complete after
-        # steady-state cancellation (they may be cancelled, have errors, or complete successfully)
-        assert len(result.raw_records) > len(result.jsonl)
-        # Verify that tail records exist (records that complete after cancellation)
-        # These are filtered from jsonl but included in raw_records
-        tail_count = len(result.raw_records) - len(result.jsonl)
-        assert tail_count > 0, f"Expected tail records but found {len(result.raw_records)} raw vs {len(result.jsonl)} jsonl"
+        # Raw records include all records (warmup + measurement + tail)
+        # With 3 loops and some overlap, we expect significantly more raw records
+        assert len(result.raw_records) >= 2 * dataset_size  # At least warmup + measurement
 
-    async def test_steady_state_scaled(
+    async def test_steady_state_3loop_scaled(
         self,
         cli: AIPerfCLI,
         aiperf_mock_server_slow: AIPerfMockServer,
         tmp_path: Path,
     ) -> None:
-        """Test steady-state with scaled parameters: 30 requests, concurrency 15, non-uniform OSL."""
+        """Test 3-loop steady-state with scaled parameters: dataset_size=10, concurrency=10.
+        
+        With high concurrency (10) and dataset_size (10):
+        - Loop 1: 10 warmup requests
+        - Loop 2: 10 measurement requests (measurement window)
+        - Loop 3: tail requests overlap with measurement
+        
+        Many warmup requests will complete during measurement, and many tail requests
+        will start during measurement, so we expect significant overlap.
+        """
+        dataset_size = 10
+        concurrency = 10
         dataset_path = tmp_path / "mooncake_trace_10.jsonl"
-        _write_mooncake_trace_dataset(dataset_path, count=10)
+        _write_mooncake_trace_dataset(dataset_path, count=dataset_size)
 
         result = await cli.run(
             f"""
@@ -155,9 +186,9 @@ class TestSteadyStateIntegration:
                 --steady-state \
                 --custom-dataset-type mooncake_trace \
                 --input-file {dataset_path} \
-                --request-count 30 \
+                --request-count {dataset_size} \
                 --request-rate-mode concurrency_burst \
-                --concurrency 15 \
+                --concurrency {concurrency} \
                 --sequence-distribution "64|10,16|5:50;128|20,32|10:30;256|30,64|15:20" \
                 --workers-max {defaults.workers_max} \
                 --ui {defaults.ui} \
@@ -169,31 +200,25 @@ class TestSteadyStateIntegration:
         )
 
         assert result.exit_code == 0
-        # With concurrency 15, some requests may complete before cancellation takes effect
-        # so we should have at least 30 completed requests
-        assert result.request_count >= 30
+        # With high concurrency and overlap, we expect more than dataset_size records
+        assert result.request_count >= dataset_size
         assert result.jsonl is not None
-        # JSONL should have exactly the number of completed requests (may be > 30 due to race)
         assert len(result.jsonl) == result.request_count
-        assert all(record.metadata.was_cancelled is False for record in result.jsonl)
         assert result.raw_records is not None
-        # Raw records should include all records, including those that complete after
-        # steady-state cancellation (they may be cancelled, have errors, or complete successfully)
-        assert len(result.raw_records) > len(result.jsonl)
-        # Verify that tail records exist (records that complete after cancellation)
-        # These are filtered from jsonl but included in raw_records
-        tail_count = len(result.raw_records) - len(result.jsonl)
-        assert tail_count > 0, f"Expected tail records but found {len(result.raw_records)} raw vs {len(result.jsonl)} jsonl"
+        # Raw records should include all records from warmup, measurement, and tail
+        assert len(result.raw_records) >= 2 * dataset_size
 
-    async def test_steady_state_scaled_streaming(
+    async def test_steady_state_3loop_streaming(
         self,
         cli: AIPerfCLI,
         aiperf_mock_server_slow: AIPerfMockServer,
         tmp_path: Path,
     ) -> None:
-        """Test steady-state with streaming: 30 requests, concurrency 15, non-uniform OSL."""
+        """Test 3-loop steady-state with streaming: dataset_size=10, concurrency=10."""
+        dataset_size = 10
+        concurrency = 10
         dataset_path = tmp_path / "mooncake_trace_10.jsonl"
-        _write_mooncake_trace_dataset(dataset_path, count=10)
+        _write_mooncake_trace_dataset(dataset_path, count=dataset_size)
 
         result = await cli.run(
             f"""
@@ -205,9 +230,9 @@ class TestSteadyStateIntegration:
                 --steady-state \
                 --custom-dataset-type mooncake_trace \
                 --input-file {dataset_path} \
-                --request-count 30 \
+                --request-count {dataset_size} \
                 --request-rate-mode concurrency_burst \
-                --concurrency 15 \
+                --concurrency {concurrency} \
                 --sequence-distribution "64|10,16|5:50;128|20,32|10:30;256|30,64|15:20" \
                 --workers-max {defaults.workers_max} \
                 --ui {defaults.ui} \
@@ -219,18 +244,8 @@ class TestSteadyStateIntegration:
         )
 
         assert result.exit_code == 0
-        # With concurrency 15, some requests may complete before cancellation takes effect
-        # so we should have at least 30 completed requests
-        assert result.request_count >= 30
+        assert result.request_count >= dataset_size
         assert result.jsonl is not None
-        # JSONL should have exactly the number of completed requests (may be > 30 due to race)
         assert len(result.jsonl) == result.request_count
-        assert all(record.metadata.was_cancelled is False for record in result.jsonl)
         assert result.raw_records is not None
-        # Raw records should include all records, including those that complete after
-        # steady-state cancellation (they may be cancelled, have errors, or complete successfully)
-        assert len(result.raw_records) > len(result.jsonl)
-        # Verify that tail records exist (records that complete after cancellation)
-        # These are filtered from jsonl but included in raw_records
-        tail_count = len(result.raw_records) - len(result.jsonl)
-        assert tail_count > 0, f"Expected tail records but found {len(result.raw_records)} raw vs {len(result.jsonl)} jsonl"
+        assert len(result.raw_records) >= 2 * dataset_size

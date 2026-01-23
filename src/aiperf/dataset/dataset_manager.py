@@ -30,6 +30,8 @@ from aiperf.common.messages import (
     ConversationTurnRequestMessage,
     ConversationTurnResponseMessage,
     DatasetConfiguredNotification,
+    DatasetInfoRequest,
+    DatasetInfoResponse,
     DatasetTimingRequest,
     DatasetTimingResponse,
     ProfileConfigureCommand,
@@ -337,6 +339,26 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             service_id=self.service_id,
             request_id=message.request_id,
             turn=turn,
+        )
+
+    @on_request(MessageType.DATASET_INFO_REQUEST)
+    async def _handle_dataset_info_request(
+        self, message: DatasetInfoRequest
+    ) -> DatasetInfoResponse:
+        """Handle a dataset info request to return the dataset size."""
+        self.debug(lambda: f"Handling dataset info request: {message}")
+
+        await self._wait_for_dataset_configuration()
+
+        if not self.dataset:
+            raise self._service_error(
+                "Dataset is empty and must be configured before handling info requests.",
+            )
+
+        return DatasetInfoResponse(
+            service_id=self.service_id,
+            request_id=message.request_id,
+            dataset_size=len(self.dataset),
         )
 
     @on_request(MessageType.DATASET_TIMING_REQUEST)

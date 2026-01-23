@@ -21,6 +21,7 @@ class TimingManagerConfig(AIPerfBaseModel):
     request_count: int = LoadGeneratorDefaults.REQUEST_COUNT
     steady_state: bool = LoadGeneratorDefaults.STEADY_STATE
     steady_state_count_tail: bool = LoadGeneratorDefaults.STEADY_STATE_COUNT_TAIL
+    steady_state_grace_period: float = LoadGeneratorDefaults.STEADY_STATE_GRACE_PERIOD
     warmup_request_count: int = LoadGeneratorDefaults.WARMUP_REQUEST_COUNT
     benchmark_duration: float | None = LoadGeneratorDefaults.BENCHMARK_DURATION
     benchmark_grace_period: float = LoadGeneratorDefaults.BENCHMARK_GRACE_PERIOD
@@ -31,6 +32,7 @@ class TimingManagerConfig(AIPerfBaseModel):
     request_cancellation_rate: float = LoadGeneratorDefaults.REQUEST_CANCELLATION_RATE
     request_cancellation_delay: float = LoadGeneratorDefaults.REQUEST_CANCELLATION_DELAY
     num_sessions: int | None = ConversationDefaults.NUM
+    dataset_size: int | None = None  # Set dynamically for steady-state loop tracking
 
     @classmethod
     def from_user_config(cls, user_config: UserConfig) -> "TimingManagerConfig":
@@ -44,6 +46,7 @@ class TimingManagerConfig(AIPerfBaseModel):
             request_count=user_config.get_effective_request_count(),
             steady_state=user_config.loadgen.steady_state,
             steady_state_count_tail=user_config.loadgen.steady_state_count_tail,
+            steady_state_grace_period=user_config.loadgen.steady_state_grace_period,
             warmup_request_count=user_config.loadgen.warmup_request_count,
             benchmark_duration=user_config.loadgen.benchmark_duration,
             benchmark_grace_period=user_config.loadgen.benchmark_grace_period,

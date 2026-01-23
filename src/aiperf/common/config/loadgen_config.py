@@ -132,6 +132,22 @@ class LoadGeneratorConfig(BaseConfig):
         ),
     ] = LoadGeneratorDefaults.STEADY_STATE_COUNT_TAIL
 
+    steady_state_grace_period: Annotated[
+        float,
+        Field(
+            ge=0.0,
+            description=(
+                "Grace period in seconds to continue submitting requests after measurement "
+                "loop completes in steady-state mode. This keeps the server loaded while "
+                "the final measurement requests complete."
+            ),
+        ),
+        CLIParameter(
+            name=("--steady-state-grace-period",),
+            group=_CLI_GROUP,
+        ),
+    ] = LoadGeneratorDefaults.STEADY_STATE_GRACE_PERIOD
+
     warmup_request_count: Annotated[
         int,
         Field(

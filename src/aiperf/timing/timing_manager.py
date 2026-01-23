@@ -25,6 +25,8 @@ from aiperf.common.messages import (
     CommandMessage,
     CreditDropMessage,
     CreditReturnMessage,
+    DatasetInfoRequest,
+    DatasetInfoResponse,
     DatasetTimingRequest,
     DatasetTimingResponse,
     ProfileCancelCommand,
@@ -116,6 +118,19 @@ class TimingManager(PullClientMixin, BaseComponentService, CreditPhaseMessagesMi
                 )
             )
         else:
+            # For steady-state mode, we need to know the dataset size for loop tracking
+            if self.config.steady_state:
+                dataset_info_response: DatasetInfoResponse = (
+                    await self.dataset_request_client.request(
+                        message=DatasetInfoRequest(service_id=self.service_id),
+                        timeout=Environment.DATASET.CONFIGURATION_TIMEOUT,
+                    )
+                )
+                self.config.dataset_size = dataset_info_response.dataset_size
+                self.info(
+                    f"Steady-state mode enabled with dataset size: {self.config.dataset_size}"
+                )
+
             self.info(f"Using {self.config.timing_mode.title()} strategy")
             self._credit_issuing_strategy = (
                 CreditIssuingStrategyFactory.create_instance(

@@ -65,6 +65,11 @@ class CreditReturnMessage(BaseServiceMessage):
         ...,
         description="ID of the credit drop, that defines the X-Correlation-ID header.",
     )
+    credit_num: int | None = Field(
+        default=None,
+        ge=0,
+        description="The sequential credit number from the original credit drop. Used for steady-state loop tracking.",
+    )
     delayed_ns: int | None = Field(
         default=None,
         ge=1,
@@ -75,6 +80,10 @@ class CreditReturnMessage(BaseServiceMessage):
         ...,
         ge=0,
         description="The number of requests that were sent for this credit drop. This can be more than one in multi turn conversations.",
+    )
+    request_end_ns: int | None = Field(
+        default=None,
+        description="The timestamp when the request completed (last response received) in nanoseconds. Used for steady-state measurement window tracking.",
     )
 
     @property
@@ -160,6 +169,14 @@ class CreditPhaseCompleteMessage(BaseServiceMessage):
         ...,
         ge=0,
         description="The total number of requests sent.",
+    )
+    measurement_start_ns: int | None = Field(
+        default=None,
+        description="For steady-state: when the measurement window started (first credit of second loop issued).",
+    )
+    measurement_end_ns: int | None = Field(
+        default=None,
+        description="For steady-state: when the measurement window ended (last credit of second loop completed).",
     )
 
 

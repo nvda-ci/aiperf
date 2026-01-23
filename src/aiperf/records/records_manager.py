@@ -114,6 +114,12 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self.steady_state_cancelled: bool = False
         self.timeout_triggered: bool = False
         self.expected_duration_sec: float | None = None
+        # Steady-state measurement window (for 3-loop filtering)
+        self.measurement_start_ns: int | None = None
+        self.measurement_end_ns: int | None = None
+        # Buffer for records awaiting measurement window (for steady-state)
+        self._pending_steady_state_records: list[MetricRecordsMessage] = []
+        self._measurement_window_ready: bool = False
         #########################################################
 
         self._completion_checker = PhaseCompletionChecker()
@@ -190,6 +196,20 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             )
             return
 
+        # In steady-state mode, buffer records until measurement window is known
+        # This ensures event-level filtering can be applied correctly
+        if self.user_config.loadgen.steady_state and not self._measurement_window_ready:
+            self._pending_steady_state_records.append(message)
+            self.debug(
+                f"Buffered steady-state record (waiting for measurement window): "
+                f"{len(self._pending_steady_state_records)} records buffered"
+            )
+            return
+
+        await self._process_metric_record(message)
+
+    async def _process_metric_record(self, message: MetricRecordsMessage) -> None:
+        """Process a single metric record message."""
         record_data = message.to_data()
 
         if self._should_ignore_cancelled_record(record_data):
@@ -199,7 +219,9 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         should_include_request = self._should_include_request_by_duration(record_data)
 
         if should_include_request:
-            await self._send_results_to_results_processors(record_data)
+            # Apply event-level filtering for steady-state measurement window
+            filtered_record_data = self._filter_metrics_by_measurement_window(record_data)
+            await self._send_results_to_results_processors(filtered_record_data)
 
         worker_id = message.metadata.worker_id
 
@@ -232,6 +254,23 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 )
 
         await self._check_if_all_records_received()
+
+    async def _process_buffered_steady_state_records(self) -> None:
+        """Process all buffered steady-state records after measurement window is known."""
+        buffered_count = len(self._pending_steady_state_records)
+        if buffered_count == 0:
+            return
+        
+        self.info(
+            f"Processing {buffered_count} buffered steady-state records with "
+            f"measurement window [{self.measurement_start_ns}, {self.measurement_end_ns}]"
+        )
+        
+        for message in self._pending_steady_state_records:
+            await self._process_metric_record(message)
+        
+        self._pending_steady_state_records.clear()
+        self.info(f"Finished processing {buffered_count} buffered records")
 
     @on_pull_message(MessageType.TELEMETRY_RECORDS)
     async def _on_telemetry_records(self, message: TelemetryRecordsMessage) -> None:
@@ -304,11 +343,15 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         return True
 
     def _should_ignore_cancelled_record(self, record_data: MetricRecordsData) -> bool:
-        """Ignore steady-state tail cancellations unless explicitly requested.
+        """Ignore steady-state records completely outside the measurement window.
         
-        Filters out records that complete after steady-state cancellation, including:
-        - Records explicitly cancelled (was_cancelled=True)
-        - Records that fail with errors after cancellation (e.g., ServerDisconnectedError)
+        For 3-loop steady-state (warmup, measurement, tail):
+        - Include records that overlap with the measurement window
+        - Exclude records that were cancelled or completed after measurement window
+        - Exclude records from the warmup loop that don't overlap with measurement
+        
+        Note: Records that overlap are included, but their individual metrics (TTFT, ICL)
+        are filtered at the event level by _filter_metrics_by_measurement_window().
         """
         if not self.user_config.loadgen.steady_state:
             return False
@@ -317,6 +360,31 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         if not self.steady_state_cancelled:
             return False
         
+        # If we have measurement window timestamps, use 3-loop filtering
+        if self.measurement_start_ns is not None and self.measurement_end_ns is not None:
+            request_start = record_data.metadata.request_start_ns
+            request_end = record_data.metadata.request_end_ns
+            
+            # Check if record overlaps with measurement window
+            # A record overlaps if it started before measurement ended AND ended after measurement started
+            overlaps_with_measurement = (
+                request_start < self.measurement_end_ns 
+                and request_end > self.measurement_start_ns
+            )
+            
+            if not overlaps_with_measurement:
+                self.debug(
+                    f"Filtering steady-state request {record_data.metadata.x_correlation_id} "
+                    f"(outside measurement window: request [{request_start}, {request_end}], "
+                    f"window [{self.measurement_start_ns}, {self.measurement_end_ns}])"
+                )
+                return True
+            
+            # Record overlaps with measurement window - include it even if cancelled
+            # (cancelled records that started during measurement should be counted)
+            return False
+        
+        # Fallback to old behavior if measurement window not set
         # Filter records that were explicitly cancelled
         if record_data.metadata.was_cancelled:
             self.debug(
@@ -336,6 +404,144 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 return True
         
         return False
+
+    def _filter_metrics_by_measurement_window(
+        self, record_data: MetricRecordsData
+    ) -> MetricRecordsData:
+        """Filter individual metric events based on measurement window timestamps.
+        
+        For 3-loop steady-state, we only count TTFT/ITL events that occur within
+        the measurement window [measurement_start_ns, measurement_end_ns].
+        
+        This enables accurate steady-state measurement:
+        - A late warmup request might have some ITLs before and some after window start
+        - A tail request might have some ITLs before and some after window end
+        - Only the ITLs that occur WITHIN the window are counted
+        
+        Args:
+            record_data: The metric records data with computed metrics
+            
+        Returns:
+            Modified MetricRecordsData with filtered metrics
+        """
+        # Only apply event-level filtering in steady-state mode with measurement window
+        if not self.user_config.loadgen.steady_state:
+            return record_data
+        if self.measurement_start_ns is None or self.measurement_end_ns is None:
+            return record_data
+        
+        request_start_ns = record_data.metadata.request_start_ns
+        metrics = dict(record_data.metrics)  # Make a mutable copy
+        
+        # Filter TTFT: only count if first token time is within window
+        ttft_tag = "time_to_first_token"
+        ttft_ns = record_data.metrics.get(ttft_tag)  # Store original for later calculations
+        first_token_time_ns = None
+        
+        if ttft_ns is not None:
+            first_token_time_ns = request_start_ns + ttft_ns
+            
+            if not (self.measurement_start_ns <= first_token_time_ns <= self.measurement_end_ns):
+                # TTFT event is outside measurement window - remove it
+                if ttft_tag in metrics:
+                    del metrics[ttft_tag]
+                self.debug(
+                    f"Filtered TTFT for {record_data.metadata.x_correlation_id} "
+                    f"(first_token_time={first_token_time_ns} outside window)"
+                )
+        
+        # Filter TTST: only count if second token time is within window
+        ttst_tag = "time_to_second_token"
+        if ttst_tag in metrics and first_token_time_ns is not None:
+            ttst_ns = metrics[ttst_tag]
+            second_token_time_ns = first_token_time_ns + ttst_ns
+            
+            if not (self.measurement_start_ns <= second_token_time_ns <= self.measurement_end_ns):
+                del metrics[ttst_tag]
+                self.debug(
+                    f"Filtered TTST for {record_data.metadata.x_correlation_id} "
+                    f"(second_token_time={second_token_time_ns} outside window)"
+                )
+        
+        # Filter ICL: only count individual latencies where observation time is in window
+        # Also track tokens_in_window for accurate OSL filtering
+        icl_tag = "inter_chunk_latency"
+        tokens_in_window = 0
+        
+        # Count first token if TTFT is in window
+        if ttft_tag in metrics:
+            tokens_in_window += 1
+        
+        if icl_tag in metrics and first_token_time_ns is not None:
+            icl_list = metrics[icl_tag]
+            
+            if isinstance(icl_list, list) and len(icl_list) > 0:
+                # Compute absolute timestamp for each chunk
+                # chunk_times[0] = first token time
+                # chunk_times[i] = chunk_times[i-1] + icl[i-1] for i > 0
+                filtered_icl = []
+                current_time_ns = first_token_time_ns
+                
+                for icl_ns in icl_list:
+                    # The ICL is observed when the second token of that pair arrives
+                    observation_time_ns = current_time_ns + icl_ns
+                    
+                    if self.measurement_start_ns <= observation_time_ns <= self.measurement_end_ns:
+                        filtered_icl.append(icl_ns)
+                        tokens_in_window += 1
+                    
+                    current_time_ns = observation_time_ns
+                
+                if len(filtered_icl) != len(icl_list):
+                    self.debug(
+                        f"Filtered ICL for {record_data.metadata.x_correlation_id}: "
+                        f"{len(filtered_icl)}/{len(icl_list)} values within window"
+                    )
+                
+                if filtered_icl:
+                    metrics[icl_tag] = filtered_icl
+                else:
+                    del metrics[icl_tag]
+        
+        # Filter OSL: only count tokens that were output within the measurement window
+        osl_tag = "output_sequence_length"
+        if osl_tag in metrics:
+            original_osl = metrics[osl_tag]
+            if tokens_in_window > 0:
+                metrics[osl_tag] = tokens_in_window
+                if tokens_in_window != original_osl:
+                    self.debug(
+                        f"Filtered OSL for {record_data.metadata.x_correlation_id}: "
+                        f"{tokens_in_window}/{original_osl} tokens within window"
+                    )
+            else:
+                del metrics[osl_tag]
+        
+        # Also filter reasoning_token_count to match (they're typically the same for non-reasoning models)
+        reasoning_tag = "reasoning_token_count"
+        if reasoning_tag in metrics:
+            if tokens_in_window > 0:
+                metrics[reasoning_tag] = tokens_in_window
+            else:
+                del metrics[reasoning_tag]
+        
+        # Set timestamp metrics to measurement window boundaries for accurate duration calculation
+        # This ensures benchmark_duration = measurement_end - measurement_start
+        # We set all records to the same values so the aggregate min/max match the window
+        min_ts_tag = "min_request_timestamp"
+        if min_ts_tag in metrics:
+            metrics[min_ts_tag] = self.measurement_start_ns
+        
+        max_ts_tag = "max_response_timestamp"
+        if max_ts_tag in metrics:
+            metrics[max_ts_tag] = self.measurement_end_ns
+        
+        # Return modified record data
+        return MetricRecordsData(
+            metadata=record_data.metadata,
+            metrics=metrics,
+            error=record_data.error,
+        )
 
     async def _check_if_all_records_received(self) -> None:
         """Check if all records have been received, and if so, publish a message and process the records."""
@@ -509,11 +715,28 @@ class RecordsManager(PullClientMixin, BaseComponentService):
             self.final_request_count = message.final_request_count
             self.end_time_ns = message.end_ns
             self.timeout_triggered = message.timeout_triggered
+            # Store measurement window for steady-state filtering
+            self.measurement_start_ns = message.measurement_start_ns
+            self.measurement_end_ns = message.measurement_end_ns
+
+            if self.measurement_start_ns and self.measurement_end_ns:
+                self.info(
+                    f"Steady-state measurement window: [{self.measurement_start_ns}, {self.measurement_end_ns}]"
+                )
+                # Set flags to enable proper filtering of buffered records
+                self._measurement_window_ready = True
+                # Mark as cancelled so filtering logic knows to apply measurement window filter
+                self.steady_state_cancelled = True
 
             self.notice(
                 f"All requests have completed, please wait for the results to be processed "
                 f"(currently {self.processing_stats.total_records:,} of {self.final_request_count:,} records processed)..."
             )
+        
+        # Process any buffered steady-state records now that we have the measurement window
+        if self._measurement_window_ready and self._pending_steady_state_records:
+            await self._process_buffered_steady_state_records()
+        
         # This check is to prevent a race condition where the timing manager processes
         # all records before we have the final request count set.
         await self._check_if_all_records_received()
