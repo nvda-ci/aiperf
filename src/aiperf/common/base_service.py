@@ -36,20 +36,20 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
         """The type of service this class implements.
 
         This is derived from _registered_name which is set when the class is
-        loaded via plugin_registry. Falls back to reverse lookup if needed.
+        loaded via plugins. Falls back to reverse lookup if needed.
         """
         cls = self.__class__
         # Check class-level cache first
         if cls._service_type_cache is not None:
             return cls._service_type_cache
 
-        # Try _registered_name (set when loaded via plugin_registry.get())
+        # Try _registered_name (set when loaded via plugins.get())
         registered_name = getattr(cls, "_registered_name", None)
         if not registered_name:
             # Fallback: reverse lookup in the registry for direct instantiation
-            from aiperf.plugin import plugin_registry
+            from aiperf.plugin import plugins
 
-            registered_name = plugin_registry.find_registered_name("service", cls)
+            registered_name = plugins.find_registered_name("service", cls)
 
         if registered_name:
             cls._service_type_cache = ServiceType(registered_name)
@@ -57,7 +57,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
 
         raise AttributeError(
             f"Cannot determine service_type for {cls.__name__}. "
-            f"Class must be registered in plugins.yaml or loaded via plugin_registry."
+            f"Class must be registered in plugins.yaml or loaded via plugins."
         )
 
     def __init__(

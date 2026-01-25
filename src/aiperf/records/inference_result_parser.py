@@ -17,7 +17,7 @@ from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.record_models import ReasoningResponseData, TokenCounts
 from aiperf.common.protocols import EndpointProtocol
 from aiperf.common.tokenizer import Tokenizer
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 # TODO: Should we create non-tokenizer based parsers?
@@ -39,9 +39,7 @@ class InferenceResultParser(CommunicationMixin):
         self.model_endpoint: ModelEndpointInfo = ModelEndpointInfo.from_user_config(
             user_config
         )
-        EndpointClass = plugin_registry.get_class(
-            "endpoint", self.model_endpoint.endpoint.type
-        )
+        EndpointClass = plugins.get_class("endpoint", self.model_endpoint.endpoint.type)
         self.endpoint: EndpointProtocol = EndpointClass(
             model_endpoint=self.model_endpoint
         )

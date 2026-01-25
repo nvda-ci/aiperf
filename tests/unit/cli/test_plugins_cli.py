@@ -15,7 +15,6 @@ from aiperf.cli_commands.plugins_cli import (
     show_packages,
     show_type_details,
 )
-from aiperf.plugin import plugin_registry
 
 
 @pytest.fixture
@@ -28,8 +27,8 @@ def mock_console() -> MagicMock:
 @pytest.fixture(autouse=True)
 def setup_registry() -> None:
     """Setup registry for each test."""
-    plugin_registry.reset()
-    _ = plugin_registry.list_categories()
+    plugins.reset()
+    _ = plugins.list_categories()
 
 
 class TestHelperFunctions:
@@ -43,7 +42,7 @@ class TestHelperFunctions:
 
     def test_ensure_registry_loaded(self) -> None:
         """Test ensuring registry is loaded."""
-        plugin_registry.reset()
+        plugins.reset()
         ensure_registry_loaded()
         assert len(get_all_categories()) > 0
 
@@ -81,7 +80,7 @@ class TestShowTypeDetails:
         """Test showing details for valid type."""
         categories = get_all_categories()
         if categories:
-            types = plugin_registry.list_types(categories[0])
+            types = plugins.list_types(categories[0])
             if types:
                 show_type_details(categories[0], types[0].type_name)
                 assert mock_console.print.call_count >= 1
@@ -126,7 +125,7 @@ class TestMainCommand:
         """Test that category+type shows details."""
         categories = get_all_categories()
         if categories:
-            types = plugin_registry.list_types(categories[0])
+            types = plugins.list_types(categories[0])
             if types:
                 plugins(
                     category=categories[0],
@@ -163,7 +162,7 @@ class TestIntegration:
             mock_console.reset_mock()
 
             # 3. Pick a type
-            types = plugin_registry.list_types(categories[0])
+            types = plugins.list_types(categories[0])
             if types:
                 plugins(
                     category=categories[0],

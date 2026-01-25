@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from aiperf.common.exceptions import PluginNotFoundError
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     ArrivalPattern,
     TimingMode,
@@ -108,16 +108,14 @@ def mk_ramp_cfg(rtype, start=1.0, target=10.0, dur=5.0, exp=None, step=None):
 
 
 def create_interval_generator(config: IntervalGeneratorConfig):
-    """Create interval generator using plugin_registry."""
-    GeneratorClass = plugin_registry.get_class(
-        "arrival_pattern", config.arrival_pattern
-    )
+    """Create interval generator using plugins."""
+    GeneratorClass = plugins.get_class("arrival_pattern", config.arrival_pattern)
     return GeneratorClass(config=config)
 
 
 def create_timing_strategy(timing_mode, *, config, **deps):
-    """Create timing strategy using plugin_registry."""
-    StrategyClass = plugin_registry.get_class("timing_strategy", timing_mode)
+    """Create timing strategy using plugins."""
+    StrategyClass = plugins.get_class("timing_strategy", timing_mode)
     return StrategyClass(config=config, **deps)
 
 
@@ -162,7 +160,7 @@ class TestIntervalGeneratorFactory:
     )
     @pytest.mark.parametrize("bad_rate", [0.0, -1.0])
     def test_rate_positive(self, pat, bad_rate):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             create_interval_generator(mk_int_cfg(pat, rate=bad_rate))
 
     def test_constant_rate_update(self):
@@ -206,18 +204,18 @@ class TestIntervalGeneratorFactory:
 class TestRampStrategyFactory:
     def test_creates_linear(self):
         cfg = mk_ramp_cfg(RampType.LINEAR)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == 1.0 and s.target == 10.0
 
     def test_creates_exponential(self):
         cfg = mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == 1.0 and s.target == 10.0
 
     @pytest.mark.parametrize("start,target,dir", [(1.0, 10.0, "inc"), (10.0, 1.0, "dec"), (5.0, 5.0, "const")])  # fmt: skip
     def test_linear_directions(self, start, target, dir):
         cfg = mk_ramp_cfg(RampType.LINEAR, start=start, target=target)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == start and s.target == target
         r = s.next_step(start, 0.0)
         if dir == "const":
@@ -230,7 +228,7 @@ class TestRampStrategyFactory:
 
     def test_linear_discrete_step(self):
         cfg = mk_ramp_cfg(RampType.LINEAR)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         r = s.next_step(1.0, 0.0)
         assert r is not None
         d, nv = r
@@ -238,20 +236,20 @@ class TestRampStrategyFactory:
 
     def test_linear_custom_step(self):
         cfg = mk_ramp_cfg(RampType.LINEAR, step=3.0)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         r = s.next_step(1.0, 0.0)
         assert r is not None and r[1] == 4.0
 
     def test_linear_value_at(self):
         cfg = mk_ramp_cfg(RampType.LINEAR)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.value_at(0.0) == pytest.approx(1.0)
         assert s.value_at(2.5) == pytest.approx(5.5)
         assert s.value_at(5.0) is None
 
     def test_exponential_ease_in(self):
         cfg = mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.value_at(2.5) == pytest.approx(3.25)
 
     @pytest.mark.parametrize("bad_exp", [1.0, 0.5, 0.0, -1.0])
@@ -261,7 +259,7 @@ class TestRampStrategyFactory:
 
     def test_ramp_completion(self):
         cfg = mk_ramp_cfg(RampType.LINEAR)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.next_step(10.0, 0.0) is None
         assert s.value_at(10.0) is None
 
@@ -304,19 +302,19 @@ class TestTimingStrategyFactory:
 
 class TestFactoryRegistry:
     def test_interval_all_patterns(self):
-        impls = plugin_registry.list_types("arrival_pattern")
+        impls = plugins.list_types("arrival_pattern")
         registered_names = [impl.impl_name for impl in impls]
         for p in ArrivalPattern:
             assert p.value in registered_names
 
     def test_ramp_all_types(self):
-        impls = plugin_registry.list_types("ramp")
+        impls = plugins.list_types("ramp")
         registered_names = [impl.impl_name for impl in impls]
         for t in RampType:
             assert t.value in registered_names
 
     def test_timing_all_modes(self):
-        impls = plugin_registry.list_types("timing_strategy")
+        impls = plugins.list_types("timing_strategy")
         registered_names = [impl.impl_name for impl in impls]
         for m in TimingMode:
             assert m.value in registered_names
@@ -338,7 +336,7 @@ class TestFactoryIntegration:
     @pytest.mark.parametrize("rtype", [RampType.LINEAR, RampType.EXPONENTIAL])
     def test_ramp_reaches_target(self, rtype):
         cfg = mk_ramp_cfg(rtype, exp=2.0 if rtype == RampType.EXPONENTIAL else None)
-        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
+        s = plugins.get_class("ramp", cfg.ramp_type)(config=cfg)
         cur, elapsed, steps = s.start, 0.0, 0
         while steps < 1000:
             r = s.next_step(cur, elapsed)

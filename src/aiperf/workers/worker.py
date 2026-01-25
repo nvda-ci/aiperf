@@ -61,7 +61,7 @@ from aiperf.credit.messages import (
     WorkerShutdown,
 )
 from aiperf.credit.structs import Credit, CreditContext
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.workers.inference_client import InferenceClient
 from aiperf.workers.session_manager import UserSession, UserSessionManager
 
@@ -229,7 +229,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
         the discriminated union pattern for type-safe routing. This allows new
         storage backends (S3, Redis, etc.) to work without modifying Worker code.
         """
-        DatasetClientClass = plugin_registry.get_class(
+        DatasetClientClass = plugins.get_class(
             "dataset_client_store", msg.client_metadata.client_type
         )
         self._dataset_client = DatasetClientClass(client_metadata=msg.client_metadata)

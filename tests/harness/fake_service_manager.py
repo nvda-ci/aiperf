@@ -27,7 +27,7 @@ from aiperf.common.models import ServiceRunInfo
 from aiperf.common.protocols import ServiceManagerProtocol, ServiceProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import ServiceRunType
 from tests.harness.fake_communication import FakeCommunication
 
@@ -63,7 +63,7 @@ class FakeServiceManager(BaseServiceManager):
         self, service_type: ServiceTypeT, num_replicas: int = 1
     ) -> None:
         """Run a service with the given number of replicas in the current process."""
-        service_class = plugin_registry.get_class("service", service_type)
+        service_class = plugins.get_class("service", service_type)
         comm_backend = self.service_config.comm_config.comm_backend
 
         for _ in range(num_replicas):
@@ -75,7 +75,7 @@ class FakeServiceManager(BaseServiceManager):
 
             from aiperf.common.singleton import SingletonMeta
 
-            comm_class = plugin_registry.get_class("communication", comm_backend)
+            comm_class = plugins.get_class("communication", comm_backend)
             SingletonMeta._instances.pop((comm_class, os.getpid()), None)
 
             # Deep copy configs to simulate separate process behavior
@@ -223,7 +223,7 @@ class FakeServiceManager(BaseServiceManager):
 # =============================================================================
 
 # Register FakeServiceManager for multiprocessing run type at max priority
-plugin_registry.register(
+plugins.register(
     "service_manager",
     ServiceRunType.MULTIPROCESSING,
     FakeServiceManager,

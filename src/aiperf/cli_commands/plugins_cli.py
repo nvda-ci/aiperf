@@ -21,7 +21,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins as plugin_registry
 
 # ==============================================================================
 # CLI Application Setup

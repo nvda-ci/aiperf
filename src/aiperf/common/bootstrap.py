@@ -101,11 +101,11 @@ def bootstrap_and_run_service(
 
         try:
             # 1. Initialize plugin registry (loads built-in + discovers plugins automatically)
-            from aiperf.plugin import plugin_registry
+            from aiperf.plugin import plugins
 
             # Check for external plugins
-            all_plugins = plugin_registry.list_packages()
-            builtin_plugins = plugin_registry.list_packages(builtin_only=True)
+            all_plugins = plugins.list_packages()
+            builtin_plugins = plugins.list_packages(builtin_only=True)
             external_plugins = [p for p in all_plugins if p not in builtin_plugins]
 
             if external_plugins:

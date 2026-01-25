@@ -211,7 +211,7 @@ class TestPhaseRunnerLifecycle:
             return strategy
 
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=mock_class,
         ) as f:
             r._progress.all_credits_sent_event.set()
@@ -237,7 +237,7 @@ class TestPhaseRunnerLifecycle:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         strategy = MockStrategy()
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=lambda **kwargs: strategy,
         ):
             r._progress.all_credits_sent_event.set()
@@ -258,7 +258,7 @@ class TestPhaseRunnerLifecycle:
         c = cfg(conc=10)
         r = make_runner(c, conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -279,7 +279,7 @@ class TestPhaseRunnerLifecycle:
     ) -> None:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -299,7 +299,7 @@ class TestPhaseRunnerLifecycle:
     ) -> None:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -325,7 +325,7 @@ class TestRamperCreation:
             cfg(conc=10, rate=100.0), conv_src, pub, router, conc, cancel, cb
         )
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -346,7 +346,7 @@ class TestRamperCreation:
             cfg(conc=10, conc_ramp=5.0), conv_src, pub, router, conc, cancel, cb
         )
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -373,7 +373,7 @@ class TestRamperCreation:
             cb,
         )
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -394,7 +394,7 @@ class TestRamperCreation:
             cfg(rate=100.0, rate_ramp=10.0), conv_src, pub, router, conc, cancel, cb
         )
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -557,7 +557,7 @@ class TestSeamlessMode:
     ) -> None:
         r = make_runner(cfg(seamless=True), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -575,7 +575,7 @@ class TestSeamlessMode:
     ) -> None:
         r = make_runner(cfg(seamless=True), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -603,7 +603,7 @@ class TestPhaseTypes:
     ) -> None:
         r = make_runner(cfg(phase=phase), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -624,7 +624,7 @@ class TestEdgeCases:
     ) -> None:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
@@ -648,7 +648,7 @@ class TestEdgeCases:
         strategy = MagicMock()
         strategy.setup_phase = AsyncMock(side_effect=RuntimeError("Test error"))
         with patch(
-            "aiperf.timing.phase.runner.plugin_registry.get_class",
+            "aiperf.timing.phase.runner.plugins.get_class",
             return_value=lambda **kwargs: strategy,
         ):
             with pytest.raises(RuntimeError):

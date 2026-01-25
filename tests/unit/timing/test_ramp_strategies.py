@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.timing.ramping import (
     BaseRampStrategy as RampStrategy,
 )
@@ -395,7 +395,7 @@ class TestEdgeCasesAndFactory:
         ],
     )
     def test_registry(self, config: RampConfig, cls: type) -> None:
-        s = plugin_registry.get_class("ramp", config.ramp_type)(config=config)
+        s = plugins.get_class("ramp", config.ramp_type)(config=config)
         assert isinstance(s, cls)
         if config.ramp_type != RampType.EXPONENTIAL:
             assert s.start == 1 and s.target == 100

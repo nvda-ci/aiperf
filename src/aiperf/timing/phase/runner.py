@@ -17,7 +17,7 @@ from aiperf.common.environment import Environment
 from aiperf.common.loop_scheduler import LoopScheduler
 from aiperf.common.mixins import TaskManagerMixin
 from aiperf.credit.issuer import CreditIssuer
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import TimingMode
 from aiperf.timing.phase.lifecycle import PhaseLifecycle
 from aiperf.timing.phase.progress_tracker import PhaseProgressTracker
@@ -194,9 +194,7 @@ class PhaseRunner(TaskManagerMixin):
         Returns:
             CreditPhaseStats snapshot of final phase state.
         """
-        StrategyClass = plugin_registry.get_class(
-            "timing_strategy", self._config.timing_mode
-        )
+        StrategyClass = plugins.get_class("timing_strategy", self._config.timing_mode)
         strategy: TimingStrategyProtocol = StrategyClass(
             config=self._config,
             conversation_source=self._conversation_source,

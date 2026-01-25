@@ -4,11 +4,11 @@
 """Plugin registry singleton with lazy loading and priority-based conflict resolution.
 
 Usage:
-    from aiperf.plugin import plugin_registry
+    from aiperf.plugin import plugins
     from aiperf.plugin.enums import PluginCategory
 
-    EndpointClass = plugin_registry.get_class(PluginCategory.ENDPOINT, 'openai')
-    for impl in plugin_registry.list_types(PluginCategory.ENDPOINT):
+    EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
+    for impl in plugins.list_types(PluginCategory.ENDPOINT):
         print(f"{impl.type_name}: {impl.description}")
 
 Conflict resolution: higher priority wins; equal priority: external beats built-in.
@@ -17,7 +17,7 @@ Conflict resolution: higher priority wins; equal priority: external beats built-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     from aiperf.plugin.enums import PluginCategory
@@ -28,19 +28,15 @@ from aiperf.plugin.types import PackageMetadata, TypeEntry
 
 _logger = AIPerfLogger(__name__)
 
-# ==============================================================================
-# Constants
-# ==============================================================================
-
 
 # ==============================================================================
 # Module-Level Singleton
 # ==============================================================================
 # This pattern follows the random_generator module design.
 # Usage:
-#   from aiperf.plugin import plugin_registry
+#   from aiperf.plugin import plugins
 #   from aiperf.plugin.enums import PluginCategory
-#   EndpointClass = plugin_registry.get_class(PluginCategory.ENDPOINT, 'openai')
+#   EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
 # ==============================================================================
 
 # Create singleton instance at module load
@@ -48,9 +44,178 @@ _registry = PluginRegistry()
 
 
 # ==============================================================================
-# Public API: Module-Level Functions
+# Generated Type Overloads (AUTO-GENERATED - DO NOT EDIT)
 # ==============================================================================
-# Type stubs with get_class() overloads are in plugin_registry.pyi
+# Run `python tools/generate_plugin_overloads.py` to regenerate.
+# ==============================================================================
+
+if TYPE_CHECKING:
+    # <generated-imports>
+    from typing import Literal
+
+    from aiperf.common.protocols import (
+        AIPerfUIProtocol,
+        CommunicationClientProtocol,
+        CommunicationProtocol,
+        ConsoleExporterProtocol,
+        CustomDatasetLoaderProtocol,
+        DataExporterProtocol,
+        DatasetBackingStoreProtocol,
+        DatasetClientStoreProtocol,
+        DatasetSamplingStrategyProtocol,
+        EndpointProtocol,
+        RecordProcessorProtocol,
+        ServiceManagerProtocol,
+        ServiceProtocol,
+        TransportProtocol,
+    )
+    from aiperf.dataset.composer import BaseDatasetComposer
+    from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerProtocol
+    from aiperf.post_processors import BaseMetricsProcessor
+    from aiperf.timing.intervals import IntervalGeneratorProtocol
+    from aiperf.timing.ramping import RampStrategyProtocol
+    from aiperf.timing.strategies.core import TimingStrategyProtocol
+    from aiperf.zmq import BaseZMQProxy
+    # </generated-imports>
+
+
+# <generated-overloads>
+@overload
+def get_class(
+    category: Literal[PluginCategory.TIMING_STRATEGY], name_or_class_path: str
+) -> type[TimingStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.ARRIVAL_PATTERN], name_or_class_path: str
+) -> type[IntervalGeneratorProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.RAMP], name_or_class_path: str
+) -> type[RampStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.DATASET_BACKING_STORE], name_or_class_path: str
+) -> type[DatasetBackingStoreProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.DATASET_CLIENT_STORE], name_or_class_path: str
+) -> type[DatasetClientStoreProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.DATASET_SAMPLER], name_or_class_path: str
+) -> type[DatasetSamplingStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.DATASET_COMPOSER], name_or_class_path: str
+) -> type[BaseDatasetComposer]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.CUSTOM_DATASET_LOADER], name_or_class_path: str
+) -> type[CustomDatasetLoaderProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.ENDPOINT], name_or_class_path: str
+) -> type[EndpointProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.TRANSPORT], name_or_class_path: str
+) -> type[TransportProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.RECORD_PROCESSOR], name_or_class_path: str
+) -> type[RecordProcessorProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.RESULTS_PROCESSOR], name_or_class_path: str
+) -> type[BaseMetricsProcessor]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.DATA_EXPORTER], name_or_class_path: str
+) -> type[DataExporterProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.CONSOLE_EXPORTER], name_or_class_path: str
+) -> type[ConsoleExporterProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.UI], name_or_class_path: str
+) -> type[AIPerfUIProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.SERVICE], name_or_class_path: str
+) -> type[ServiceProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.SERVICE_MANAGER], name_or_class_path: str
+) -> type[ServiceManagerProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.COMMUNICATION], name_or_class_path: str
+) -> type[CommunicationProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.COMMUNICATION_CLIENT], name_or_class_path: str
+) -> type[CommunicationClientProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.ZMQ_PROXY], name_or_class_path: str
+) -> type[BaseZMQProxy]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginCategory.PLOT], name_or_class_path: str
+) -> type[PlotTypeHandlerProtocol]: ...
+
+
+# Fallback for unknown categories
+@overload
+def get_class(category: PluginCategory, name_or_class_path: str) -> type: ...
+
+
+# </generated-overloads>
+
+
+# ==============================================================================
+# Public API: Module-Level Functions
 # ==============================================================================
 
 
@@ -71,9 +236,9 @@ def get_class(category: PluginCategory, name_or_class_path: str) -> type:
         ValueError: If using class path and category doesn't match.
 
     Example:
-        >>> from aiperf.plugin import plugin_registry
+        >>> from aiperf.plugin import plugins
         >>> from aiperf.plugin.enums import PluginCategory
-        >>> EndpointClass = plugin_registry.get_class(PluginCategory.ENDPOINT, 'chat')
+        >>> EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'chat')
     """
     return _registry.get_class(category, name_or_class_path)
 
@@ -89,7 +254,7 @@ def list_types(category: PluginCategory) -> list[TypeEntry]:
         Returns empty list if category doesn't exist.
 
     Example:
-        >>> for impl in plugin_registry.list_types(PluginCategory.ENDPOINT):
+        >>> for impl in plugins.list_types(PluginCategory.ENDPOINT):
         ...     print(f"{impl.type_name}: {impl.description}")
     """
     return _registry.list_types(category)
@@ -109,7 +274,7 @@ def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
         Empty dict means all types are valid.
 
     Example:
-        >>> errors = plugin_registry.validate_all(check_class=True)
+        >>> errors = plugins.validate_all(check_class=True)
         >>> if errors:
         ...     for category, type_errors in errors.items():
         ...         for type_name, error in type_errors:
@@ -133,7 +298,7 @@ def find_registered_name(category: str, cls: type) -> str | None:
 
     Example:
         >>> from aiperf.endpoints import ChatEndpoint
-        >>> name = plugin_registry.find_registered_name('endpoint', ChatEndpoint)
+        >>> name = plugins.find_registered_name('endpoint', ChatEndpoint)
         >>> print(name)  # 'chat'
     """
     return _registry.find_registered_name(category, cls)
@@ -154,7 +319,7 @@ def load_registry(registry_path: str | Path) -> None:
         RuntimeError: If the file cannot be read.
 
     Example:
-        >>> plugin_registry.load_registry('/path/to/custom/plugins.yaml')
+        >>> plugins.load_registry('/path/to/custom/plugins.yaml')
     """
     _registry.load_registry(registry_path)
 
@@ -169,9 +334,9 @@ def list_packages(builtin_only: bool = False) -> list[str]:
         List of package names that have been loaded into the registry.
 
     Example:
-        >>> plugin_registry.list_packages()
+        >>> plugins.list_packages()
         ['aiperf', 'my-custom-plugin']
-        >>> plugin_registry.list_packages(builtin_only=True)
+        >>> plugins.list_packages(builtin_only=True)
         ['aiperf']
     """
     return _registry.list_packages(builtin_only)
@@ -190,7 +355,7 @@ def get_package_metadata(package_name: str) -> PackageMetadata:
         KeyError: If the package has not been loaded.
 
     Example:
-        >>> meta = plugin_registry.get_package_metadata('aiperf')
+        >>> meta = plugins.get_package_metadata('aiperf')
         >>> print(meta['version'])
     """
     if package_name not in _registry._loaded_plugins:
@@ -205,7 +370,7 @@ def list_categories() -> list[str]:
         Sorted list of category names (e.g., ['endpoint', 'transport', ...]).
 
     Example:
-        >>> categories = plugin_registry.list_categories()
+        >>> categories = plugins.list_categories()
         >>> print(categories)
         ['arrival_pattern', 'communication', 'endpoint', ...]
     """
@@ -250,7 +415,7 @@ def register(
     Example:
         >>> class MyCustomEndpoint:
         ...     pass
-        >>> plugin_registry.register('endpoint', 'custom', MyCustomEndpoint, priority=10)
+        >>> plugins.register('endpoint', 'custom', MyCustomEndpoint, priority=10)
     """
     # Convert enum to string if needed
     name = type_name.value if hasattr(type_name, "value") else str(type_name)
@@ -297,7 +462,7 @@ def create_enum(category: str, enum_name: str) -> type:
         KeyError: If no types are registered for the category.
 
     Example:
-        >>> EndpointEnum = plugin_registry.create_enum('endpoint', 'EndpointType')
+        >>> EndpointEnum = plugins.create_enum('endpoint', 'EndpointType')
         >>> print(EndpointEnum.CHAT)  # 'chat'
     """
     from aiperf.common.enums import create_enum as _create_enum
@@ -334,7 +499,7 @@ def detect_type_from_url(category: str, url: str) -> str:
         ValueError: If no type supports the URL scheme.
 
     Example:
-        >>> transport = plugin_registry.detect_type_from_url('transport', 'https://api.example.com')
+        >>> transport = plugins.detect_type_from_url('transport', 'https://api.example.com')
         >>> print(transport)  # 'http'
     """
     from urllib.parse import urlparse

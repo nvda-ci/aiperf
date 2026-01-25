@@ -12,7 +12,7 @@ from aiperf.common.constants import MILLIS_PER_SECOND, NANOS_PER_SECOND
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.utils import yield_to_event_loop
 from aiperf.credit.structs import Credit, TurnToSend
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.timing.intervals import IntervalGeneratorConfig
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ class RequestRateStrategy(AIPerfLoggerMixin):
             f"Creating interval generator: pattern={interval_config.arrival_pattern}, "
             f"rate={interval_config.request_rate}, smoothness={interval_config.arrival_smoothness}"
         )
-        RateGeneratorClass = plugin_registry.get_class(
+        RateGeneratorClass = plugins.get_class(
             "arrival_pattern", interval_config.arrival_pattern
         )
         self._rate_generator = RateGeneratorClass(config=interval_config)

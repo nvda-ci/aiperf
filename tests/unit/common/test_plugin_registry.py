@@ -11,13 +11,12 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 import yaml
 
-from aiperf.plugin import plugin_registry
-from aiperf.plugin.plugin_registry import (
-    DEFAULT_SCHEMA_VERSION,
-    SUPPORTED_SCHEMA_VERSIONS,
+from aiperf.plugin import plugins
+from aiperf.plugin._plugin_registry import PluginRegistry
+from aiperf.plugin.constants import DEFAULT_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
+from aiperf.plugin.types import (
     PackageMetadata,
     PluginError,
-    PluginRegistry,
     TypeEntry,
     TypeNotFoundError,
 )
@@ -79,7 +78,7 @@ def registry() -> Generator[PluginRegistry, None, None]:
     reg._class_to_name.clear()
     yield reg
     # Restore registry to normal state with builtins loaded
-    plugin_registry.reset()
+    plugins.reset()
 
 
 @pytest.fixture
@@ -455,9 +454,7 @@ class TestPluginRegistryBasics:
         mock_ep.name = "test-plugin"
         mock_ep.load.return_value = str(temp_registry_file)
 
-        with patch(
-            "aiperf.plugin.plugin_registry.entry_points", return_value=[mock_ep]
-        ):
+        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
             registry.discover_plugins()
 
         assert "test-plugin" in registry._loaded_plugins
@@ -469,9 +466,7 @@ class TestPluginRegistryBasics:
         mock_ep.name = "bad-plugin"
         mock_ep.load.side_effect = ImportError("Bad plugin")
 
-        with patch(
-            "aiperf.plugin.plugin_registry.entry_points", return_value=[mock_ep]
-        ):
+        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
             # Should not raise
             registry.discover_plugins()
 
@@ -486,9 +481,7 @@ class TestPluginRegistryBasics:
         mock_ep.name = "invalid-plugin"
         mock_ep.load.return_value = 12345  # Invalid - not str or Path
 
-        with patch(
-            "aiperf.plugin.plugin_registry.entry_points", return_value=[mock_ep]
-        ):
+        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
             registry.discover_plugins()
 
         assert "invalid-plugin" not in registry._loaded_plugins
@@ -1301,12 +1294,12 @@ class TestGlobalRegistry:
     @pytest.fixture(autouse=True)
     def reset_singleton(self):
         """Reset the global singleton before and after each test."""
-        plugin_registry.reset()
+        plugins.reset()
         yield
-        plugin_registry.reset()
+        plugins.reset()
 
     def test_module_level_reset(self):
-        """Test that plugin_registry.reset() clears custom types."""
+        """Test that plugins.reset() clears custom types."""
         # Load a custom type
         registry_data = {
             "plugin": {"name": "test", "version": "1.0.0"},
@@ -1322,22 +1315,20 @@ class TestGlobalRegistry:
             yaml.dump(registry_data, f)
             path = Path(f.name)
 
-        plugin_registry._registry.load_registry(path)
+        plugins._registry.load_registry(path)
         # Verify custom type was loaded
-        assert "custom_test_type_xyz" in plugin_registry._registry._types.get(
-            "endpoint", {}
-        )
+        assert "custom_test_type_xyz" in plugins._registry._types.get("endpoint", {})
 
         # Now reset
-        plugin_registry.reset()
+        plugins.reset()
 
         # After reset, custom type should be gone (builtins are reloaded)
-        assert "custom_test_type_xyz" not in plugin_registry._registry._types.get(
+        assert "custom_test_type_xyz" not in plugins._registry._types.get(
             "endpoint", {}
         )
 
     def test_module_level_get_class(self):
-        """Test that plugin_registry.get_class() works at module level."""
+        """Test that plugins.get_class() works at module level."""
         # Register a test type first
         registry_data = {
             "plugin": {"name": "test", "version": "1.0.0"},
@@ -1353,7 +1344,7 @@ class TestGlobalRegistry:
             yaml.dump(registry_data, f)
             path = Path(f.name)
 
-        plugin_registry._registry.load_registry(path)
+        plugins._registry.load_registry(path)
 
         # Now test module-level get_class (it should work)
         with patch("importlib.import_module") as mock_import:
@@ -1361,11 +1352,11 @@ class TestGlobalRegistry:
             mock_module.TestClass = type("TestClass", (), {})
             mock_import.return_value = mock_module
 
-            cls = plugin_registry.get_class("endpoint", "test_type")
+            cls = plugins.get_class("endpoint", "test_type")
             assert cls is not None
 
     def test_module_level_list_types(self):
-        """Test that plugin_registry.list_types() works at module level."""
+        """Test that plugins.list_types() works at module level."""
         registry_data = {
             "plugin": {"name": "test", "version": "1.0.0"},
             "endpoint": {
@@ -1377,10 +1368,10 @@ class TestGlobalRegistry:
             yaml.dump(registry_data, f)
             path = Path(f.name)
 
-        plugin_registry._registry.load_registry(path)
+        plugins._registry.load_registry(path)
 
         # Test module-level list_types
-        lazy_types = plugin_registry.list_types("endpoint")
+        lazy_types = plugins.list_types("endpoint")
         assert len(lazy_types) > 0
 
 
@@ -1395,13 +1386,13 @@ class TestModuleLevelFunctions:
     @pytest.fixture(autouse=True)
     def reset_singleton(self):
         """Reset the global singleton before and after each test."""
-        plugin_registry.reset()
+        plugins.reset()
         yield
-        plugin_registry.reset()
+        plugins.reset()
 
     def test_list_categories(self):
         """Test list_categories returns all category names."""
-        categories = plugin_registry.list_categories()
+        categories = plugins.list_categories()
 
         # Should have core categories from builtins
         assert "endpoint" in categories
@@ -1411,7 +1402,7 @@ class TestModuleLevelFunctions:
 
     def test_get_package_metadata(self):
         """Test get_package_metadata returns metadata for loaded plugin."""
-        metadata = plugin_registry.get_package_metadata("aiperf")
+        metadata = plugins.get_package_metadata("aiperf")
 
         assert isinstance(metadata, dict)
         assert metadata.get("builtin") is True
@@ -1419,7 +1410,7 @@ class TestModuleLevelFunctions:
     def test_get_package_metadata_not_found(self):
         """Test get_package_metadata raises KeyError for unknown package."""
         with pytest.raises(KeyError, match="not found"):
-            plugin_registry.get_package_metadata("nonexistent_package_xyz")
+            plugins.get_package_metadata("nonexistent_package_xyz")
 
     def test_register_dynamic_class(self):
         """Test register() for dynamic class registration."""
@@ -1429,7 +1420,7 @@ class TestModuleLevelFunctions:
 
             pass
 
-        plugin_registry.register(
+        plugins.register(
             category="endpoint",
             type_name="dynamic_endpoint",
             cls=DynamicEndpoint,
@@ -1438,7 +1429,7 @@ class TestModuleLevelFunctions:
         )
 
         # Should be retrievable
-        retrieved_cls = plugin_registry.get_class("endpoint", "dynamic_endpoint")
+        retrieved_cls = plugins.get_class("endpoint", "dynamic_endpoint")
         assert retrieved_cls is DynamicEndpoint
 
     def test_register_with_enum_type_name(self):
@@ -1451,14 +1442,14 @@ class TestModuleLevelFunctions:
         class CustomClass:
             pass
 
-        plugin_registry.register(
+        plugins.register(
             category="endpoint",
             type_name=TestType.CUSTOM,
             cls=CustomClass,
         )
 
         # Should be retrievable by enum value
-        retrieved_cls = plugin_registry.get_class("endpoint", "custom_type")
+        retrieved_cls = plugins.get_class("endpoint", "custom_type")
         assert retrieved_cls is CustomClass
 
     def test_register_priority_conflict_resolution(self):
@@ -1471,7 +1462,7 @@ class TestModuleLevelFunctions:
             pass
 
         # Register low priority first
-        plugin_registry.register(
+        plugins.register(
             category="endpoint",
             type_name="conflict_type",
             cls=LowPriorityClass,
@@ -1479,7 +1470,7 @@ class TestModuleLevelFunctions:
         )
 
         # Register high priority second
-        plugin_registry.register(
+        plugins.register(
             category="endpoint",
             type_name="conflict_type",
             cls=HighPriorityClass,
@@ -1487,7 +1478,7 @@ class TestModuleLevelFunctions:
         )
 
         # High priority should win
-        retrieved_cls = plugin_registry.get_class("endpoint", "conflict_type")
+        retrieved_cls = plugins.get_class("endpoint", "conflict_type")
         assert retrieved_cls is HighPriorityClass
 
     def test_load_registry_module_level(self):
@@ -1503,14 +1494,14 @@ class TestModuleLevelFunctions:
             yaml.dump(yaml_content, f)
             path = Path(f.name)
 
-        plugin_registry.load_registry(path)
+        plugins.load_registry(path)
 
-        assert "module-level-test" in plugin_registry.list_packages()
+        assert "module-level-test" in plugins.list_packages()
 
     def test_validate_all_module_level(self):
         """Test validate_all at module level."""
         # Should not raise
-        errors = plugin_registry.validate_all(check_class=False)
+        errors = plugins.validate_all(check_class=False)
 
         # Builtins should all be valid
         # (errors dict will be empty or contain only categories with issues)
@@ -1523,9 +1514,9 @@ class TestModuleLevelFunctions:
         class KnownClass:
             pass
 
-        plugin_registry.register("endpoint", "known_type", KnownClass)
+        plugins.register("endpoint", "known_type", KnownClass)
 
-        name = plugin_registry.find_registered_name("endpoint", KnownClass)
+        name = plugins.find_registered_name("endpoint", KnownClass)
         assert name == "known_type"
 
 
@@ -1540,14 +1531,14 @@ class TestCreateEnum:
     @pytest.fixture(autouse=True)
     def reset_singleton(self):
         """Reset the global singleton before and after each test."""
-        plugin_registry.reset()
+        plugins.reset()
         yield
-        plugin_registry.reset()
+        plugins.reset()
 
     def test_create_enum_from_category(self):
         """Test creating enum from registered types."""
         # Use a known category with types
-        EndpointEnum = plugin_registry.create_enum("endpoint", "EndpointEnum")
+        EndpointEnum = plugins.create_enum("endpoint", "EndpointEnum")
 
         # Should have members for each registered type
         assert hasattr(EndpointEnum, "CHAT")
@@ -1556,7 +1547,7 @@ class TestCreateEnum:
     def test_create_enum_empty_category(self):
         """Test create_enum raises for empty category."""
         with pytest.raises(KeyError, match="No types registered"):
-            plugin_registry.create_enum("nonexistent_category", "EmptyEnum")
+            plugins.create_enum("nonexistent_category", "EmptyEnum")
 
     def test_create_enum_hyphen_to_underscore(self):
         """Test create_enum converts hyphens to underscores."""
@@ -1565,9 +1556,9 @@ class TestCreateEnum:
         class HyphenClass:
             pass
 
-        plugin_registry.register("endpoint", "my-hyphen-type", HyphenClass)
+        plugins.register("endpoint", "my-hyphen-type", HyphenClass)
 
-        EnumWithHyphens = plugin_registry.create_enum("endpoint", "EnumWithHyphens")
+        EnumWithHyphens = plugins.create_enum("endpoint", "EnumWithHyphens")
 
         # Hyphen should be converted to underscore and uppercased
         assert hasattr(EnumWithHyphens, "MY_HYPHEN_TYPE")
@@ -1585,20 +1576,20 @@ class TestDetectTypeFromUrl:
     @pytest.fixture(autouse=True)
     def reset_singleton(self):
         """Reset the global singleton before and after each test."""
-        plugin_registry.reset()
+        plugins.reset()
         yield
-        plugin_registry.reset()
+        plugins.reset()
 
     def test_detect_type_no_matching_scheme(self):
         """Test that ValueError is raised when no type matches scheme."""
         with pytest.raises(ValueError, match="No .* type found for URL scheme"):
-            plugin_registry.detect_type_from_url("endpoint", "ftp://example.com")
+            plugins.detect_type_from_url("endpoint", "ftp://example.com")
 
     def test_detect_type_handles_url_without_scheme(self):
         """Test URL without scheme is handled (defaults to http)."""
         # localhost:8000 without scheme should be parsed as http
         with pytest.raises(ValueError, match="No .* type found for URL scheme 'http'"):
-            plugin_registry.detect_type_from_url("endpoint", "localhost:8000")
+            plugins.detect_type_from_url("endpoint", "localhost:8000")
 
     def test_detect_type_with_metadata_url_schemes(self):
         """Test detection with class that has metadata.url_schemes."""
@@ -1608,9 +1599,9 @@ class TestDetectTypeFromUrl:
             def metadata():
                 return MagicMock(url_schemes=["custom-scheme"])
 
-        plugin_registry.register("endpoint", "custom_endpoint", EndpointWithSchemes)
+        plugins.register("endpoint", "custom_endpoint", EndpointWithSchemes)
 
-        detected = plugin_registry.detect_type_from_url(
+        detected = plugins.detect_type_from_url(
             "endpoint", "custom-scheme://example.com"
         )
         assert detected == "custom_endpoint"
@@ -1629,11 +1620,11 @@ class TestDetectTypeFromUrl:
             yaml.dump(yaml_content, f)
             path = Path(f.name)
 
-        plugin_registry.load_registry(path)
+        plugins.load_registry(path)
 
         # Should not crash, just skip broken types
         with pytest.raises(ValueError, match="No .* type found"):
-            plugin_registry.detect_type_from_url("endpoint", "xyz://example.com")
+            plugins.detect_type_from_url("endpoint", "xyz://example.com")
 
 
 # ==============================================================================
@@ -1820,23 +1811,23 @@ class TestEdgeCases:
 
     def test_register_creates_category_if_missing(self):
         """Test that register() creates category if it doesn't exist."""
-        plugin_registry.reset()
+        plugins.reset()
 
         class NewCategoryClass:
             pass
 
-        plugin_registry.register(
+        plugins.register(
             category="brand_new_category",
             type_name="new_type",
             cls=NewCategoryClass,
         )
 
         # Category should now exist
-        assert "brand_new_category" in plugin_registry.list_categories()
-        cls = plugin_registry.get_class("brand_new_category", "new_type")
+        assert "brand_new_category" in plugins.list_categories()
+        cls = plugins.get_class("brand_new_category", "new_type")
         assert cls is NewCategoryClass
 
-        plugin_registry.reset()
+        plugins.reset()
 
     def test_type_entry_frozen_dataclass(self):
         """Test that TypeEntry is frozen (immutable)."""
@@ -1889,9 +1880,7 @@ class TestEdgeCases:
         mock_ep.name = "path-plugin"
         mock_ep.load.return_value = path  # Return Path object
 
-        with patch(
-            "aiperf.plugin.plugin_registry.entry_points", return_value=[mock_ep]
-        ):
+        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
             registry.discover_plugins()
 
         assert "path-plugin" in registry._loaded_plugins

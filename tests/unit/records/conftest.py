@@ -98,7 +98,7 @@ def inference_result_parser(user_config):
         patch(
             "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config"
         ),
-        patch("aiperf.records.inference_result_parser.plugin_registry.get_class"),
+        patch("aiperf.records.inference_result_parser.plugins.get_class"),
     ):
         parser = InferenceResultParser(
             service_config=ServiceConfig(),

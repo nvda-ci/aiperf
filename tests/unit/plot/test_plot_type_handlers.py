@@ -15,7 +15,7 @@ import pytest
 
 from aiperf.plot.core.plot_specs import PlotSpec, PlotType
 from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerProtocol
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 @pytest.fixture
@@ -140,25 +140,25 @@ class TestPlotTypeHandlerRegistry:
 
     def test_plot_types_are_registered(self):
         """Test that plot types are registered in the plugin registry."""
-        impls = plugin_registry.list_types("plot")
+        impls = plugins.list_types("plot")
         assert len(impls) > 0
 
     @pytest.mark.parametrize("plot_type", [PlotType.SCATTER, PlotType.TIMESLICE, PlotType.HISTOGRAM, PlotType.AREA])  # fmt: skip
     def test_common_plot_types_registered(self, plot_type: PlotType):
         """Test that common plot types are registered."""
-        impls = plugin_registry.list_types("plot")
+        impls = plugins.list_types("plot")
         registered_names = [impl.impl_name for impl in impls]
         assert plot_type.value in registered_names
 
     def test_get_class_returns_handler(self, mock_plot_generator):
         """Test that get_class returns a valid handler class."""
-        HandlerClass = plugin_registry.get_class("plot", PlotType.SCATTER.value)
+        HandlerClass = plugins.get_class("plot", PlotType.SCATTER.value)
         handler = HandlerClass(plot_generator=mock_plot_generator)
         assert isinstance(handler, PlotTypeHandlerProtocol)
 
     def test_created_handler_has_required_methods(self, mock_plot_generator):
         """Test that created handler has required protocol methods."""
-        HandlerClass = plugin_registry.get_class("plot", PlotType.SCATTER.value)
+        HandlerClass = plugins.get_class("plot", PlotType.SCATTER.value)
         handler = HandlerClass(plot_generator=mock_plot_generator)
         assert hasattr(handler, "can_handle")
         assert hasattr(handler, "create_plot")

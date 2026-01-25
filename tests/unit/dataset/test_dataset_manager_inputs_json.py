@@ -13,7 +13,7 @@ import pytest
 
 from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.models import InputsFile, SessionPayloads
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 def _validate_chat_payload_structure(payload: dict) -> None:
@@ -157,9 +157,9 @@ class TestDatasetManagerInputsJsonGeneration:
         populated_dataset_manager,
         caplog,
     ):
-        """Test error handling when plugin_registry.get_class fails."""
+        """Test error handling when plugins.get_class fails."""
         with patch.object(
-            plugin_registry,
+            plugins,
             "get_class",
             side_effect=Exception("Factory error"),
         ):
@@ -202,7 +202,7 @@ class TestDatasetManagerInputsJsonGeneration:
         mock_converter.get_endpoint_params = Mock(return_value={})
 
         with patch.object(
-            plugin_registry,
+            plugins,
             "get_class",
             return_value=lambda **kwargs: mock_converter,
         ):

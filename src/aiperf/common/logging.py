@@ -18,7 +18,7 @@ from aiperf.common.aiperf_logger import _DEBUG, _TRACE, AIPerfLogger
 from aiperf.common.config import ServiceConfig, ServiceDefaults, UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.environment import Environment
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import PluginCategory, ServiceType, UIType
 
 _logger = AIPerfLogger(__name__)
@@ -89,7 +89,7 @@ def _is_service_in_types(service_id: str, service_types: set[ServiceType]) -> bo
 
         # Check if the provided logger name is the same as the service's class name
         if (
-            plugin_registry.get_class(PluginCategory.SERVICE, service_type).__name__
+            plugins.get_class(PluginCategory.SERVICE, service_type).__name__
             == service_id
         ):
             return True

@@ -1,32 +1,47 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Generate plugin_registry.pyi type stub from categories.yaml.
+"""Generate get_class() overloads directly in plugins.py from categories.yaml.
 
-This script reads the plugin category definitions from categories.yaml and generates
-a complete type stub file with get_class() overloads and all public API stubs.
+This script reads the plugin category definitions from categories.yaml and injects
+type overloads directly into plugins.py between marker comments.
 
 Usage:
-    python tools/generate_plugin_overloads.py [--check] [--output FILE]
+    python tools/generate_plugin_overloads.py [--check]
 
 Options:
-    --check     Check if the current stubs are up-to-date (exit 1 if not)
-    --output    Write to specified file instead of default (plugin_registry.pyi)
+    --check     Check if the overloads are up-to-date (exit 1 if not)
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import yaml
 
-# Paths relative to repo root
+# =============================================================================
+# Paths
+# =============================================================================
+
 REPO_ROOT = Path(__file__).parent.parent
-CATEGORIES_YAML = REPO_ROOT / "src" / "aiperf" / "plugin" / "categories.yaml"
-PLUGIN_REGISTRY_PYI = REPO_ROOT / "src" / "aiperf" / "plugin" / "plugin_registry.pyi"
+PLUGIN_DIR = REPO_ROOT / "src" / "aiperf" / "plugin"
+CATEGORIES_YAML = PLUGIN_DIR / "categories.yaml"
+PLUGINS_PY = PLUGIN_DIR / "plugins.py"
+
+# Markers in plugins.py
+IMPORTS_START = "    # <generated-imports>"
+IMPORTS_END = "    # </generated-imports>"
+OVERLOADS_START = "# <generated-overloads>"
+OVERLOADS_END = "# </generated-overloads>"
+
+
+# =============================================================================
+# YAML Loading
+# =============================================================================
 
 
 def load_categories(yaml_path: Path) -> dict:
@@ -52,10 +67,18 @@ def parse_class_path(class_path: str) -> tuple[str, str]:
     return module_path, class_name
 
 
+# =============================================================================
+# Code Generation Helpers
+# =============================================================================
+
+
 def generate_imports(categories: dict) -> str:
-    """Generate import statements grouped by module."""
+    """Generate import statements for protocols (under TYPE_CHECKING)."""
     # Group protocols by their import module
     imports_by_module: dict[str, list[str]] = defaultdict(list)
+
+    # Always include Literal (stdlib) - PluginCategory is imported separately
+    imports_by_module["typing"].append("Literal")
 
     for category_data in categories.values():
         protocol_path = category_data.get("protocol", "")
@@ -69,27 +92,29 @@ def generate_imports(categories: dict) -> str:
     for module in imports_by_module:
         imports_by_module[module] = sorted(set(imports_by_module[module]))
 
-    # Generate import lines
+    # Generate import lines - stdlib first, then third-party/local sorted
     lines = []
 
-    # Standard library imports
-    lines.append("from pathlib import Path")
-    lines.append("from typing import Any, Final, Literal, TypedDict, overload")
-    lines.append("")
+    # Stdlib imports first
+    stdlib_modules = ["typing"]
+    for module_path in stdlib_modules:
+        if module_path in imports_by_module:
+            class_names = imports_by_module.pop(module_path)
+            lines.append(f"    from {module_path} import {', '.join(class_names)}")
 
-    # Protocol imports grouped by module, sorted
+    if lines:
+        lines.append("")
+
+    # Local imports sorted by module path
     for module_path in sorted(imports_by_module.keys()):
         class_names = imports_by_module[module_path]
         if len(class_names) == 1:
-            lines.append(f"from {module_path} import {class_names[0]}")
+            lines.append(f"    from {module_path} import {class_names[0]}")
         else:
-            lines.append(f"from {module_path} import (")
+            lines.append(f"    from {module_path} import (")
             for name in class_names:
-                lines.append(f"    {name},")
-            lines.append(")")
-
-    # Always import PluginCategory from enums
-    lines.append("from aiperf.plugin.enums import PluginCategory")
+                lines.append(f"        {name},")
+            lines.append("    )")
 
     return "\n".join(lines)
 
@@ -100,10 +125,6 @@ def generate_overloads(categories: dict) -> str:
 
     for category_name, category_data in categories.items():
         protocol_path = category_data.get("protocol", "")
-        description = (
-            category_data.get("description", "").strip().split("\n")[0]
-        )  # First line only
-
         # Convert category_name to enum member (e.g., timing_strategy -> TIMING_STRATEGY)
         enum_member = category_name.upper()
 
@@ -114,17 +135,14 @@ def generate_overloads(categories: dict) -> str:
         else:
             return_type = "type"
 
-        # Generate comment from first line of description
-        if description:
-            lines.append(f"# {description}")
-
-        # Generate overload
+        # Generate overload with docstring
         lines.append("@overload")
         lines.append("def get_class(")
         lines.append(
             f"    category: Literal[PluginCategory.{enum_member}], name_or_class_path: str"
         )
         lines.append(f") -> {return_type}: ...")
+        lines.append("")
         lines.append("")
 
     # Add fallback overload
@@ -133,226 +151,70 @@ def generate_overloads(categories: dict) -> str:
     lines.append(
         "def get_class(category: PluginCategory, name_or_class_path: str) -> type: ..."
     )
+    lines.append("")
+    lines.append("")
 
     return "\n".join(lines)
 
 
-def generate_full_stub(categories: dict) -> str:
-    """Generate the complete .pyi stub file."""
-    lines = [
-        "# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.",
-        "# SPDX-License-Identifier: Apache-2.0",
-        '"""',
-        "Type stubs for plugin_registry module.",
-        "",
-        "This file is AUTO-GENERATED from categories.yaml.",
-        "Run `python tools/generate_plugin_overloads.py` to regenerate.",
-        "",
-        "These stubs provide IDE autocomplete and type checking for the",
-        "get_class() function with category-specific return types.",
-        '"""',
-        "",
-        "from __future__ import annotations",
-        "",
-        generate_imports(categories),
-        "",
-        "# ==============================================================================",
-        "# Constants",
-        "# ==============================================================================",
-        "",
-        "SUPPORTED_SCHEMA_VERSIONS: Final[tuple[str, ...]]",
-        "DEFAULT_SCHEMA_VERSION: Final[str]",
-        "DEFAULT_ENTRY_POINT_GROUP: Final[str]",
-        "",
-        "# ==============================================================================",
-        "# Type Definitions",
-        "# ==============================================================================",
-        "",
-        "class PackageMetadata(TypedDict, total=False):",
-        '    """Package metadata from YAML manifest."""',
-        "",
-        "    name: str",
-        "    version: str",
-        "    description: str",
-        "    author: str",
-        "    license: str",
-        "    homepage: str",
-        "    builtin: bool",
-        "",
-        "",
-        "class ManifestData(TypedDict, total=False):",
-        '    """YAML manifest structure."""',
-        "",
-        "    schema_version: str",
-        "    plugin: dict[str, Any]",
-        "",
-        "",
-        "# ==============================================================================",
-        "# Custom Exceptions",
-        "# ==============================================================================",
-        "",
-        "",
-        "class PluginError(Exception):",
-        '    """Base exception for plugin system errors."""',
-        "",
-        "",
-        "class TypeNotFoundError(PluginError):",
-        '    """Type not found in category. Includes available types in error message."""',
-        "",
-        "    category: str",
-        "    type_name: str",
-        "    available: list[str]",
-        "",
-        "    def __init__(self, category: str, type_name: str, available: list[str]) -> None: ...",
-        "",
-        "",
-        "# ==============================================================================",
-        "# TypeEntry Dataclass",
-        "# ==============================================================================",
-        "",
-        "",
-        "class TypeEntry:",
-        '    """Lazy-loading type entry with metadata. Call load() to import the class."""',
-        "",
-        "    category: str",
-        "    type_name: str",
-        "    package_name: str",
-        "    class_path: str",
-        "    priority: int",
-        "    description: str",
-        "    metadata: PackageMetadata",
-        "    loaded_class: type | None",
-        "    is_builtin: bool",
-        "",
-        "    def __init__(",
-        "        self,",
-        "        category: str,",
-        "        type_name: str,",
-        "        package_name: str,",
-        "        class_path: str,",
-        "        priority: int = ...,",
-        "        description: str = ...,",
-        "        metadata: PackageMetadata = ...,",
-        "        loaded_class: type | None = ...,",
-        "        is_builtin: bool = ...,",
-        "    ) -> None: ...",
-        "    def load(self) -> type: ...",
-        "    def validate(self, check_class: bool = ...) -> tuple[bool, str | None]: ...",
-        "",
-        "",
-        "# ==============================================================================",
-        "# PluginRegistry Class",
-        "# ==============================================================================",
-        "",
-        "",
-        "class PluginRegistry:",
-        '    """Plugin registry singleton with discovery and lazy loading."""',
-        "",
-        "    def __init__(self) -> None: ...",
-        "    def load_registry(self, registry_path: Path | str) -> None: ...",
-        "    def discover_plugins(self, entry_point_group: str = ...) -> None: ...",
-        "    def get_class(self, category: str, name_or_class_path: str) -> type: ...",
-        "    def list_types(self, category: str) -> list[TypeEntry]: ...",
-        "    def validate_all(",
-        "        self, check_class: bool = ...",
-        "    ) -> dict[str, list[tuple[str, str]]]: ...",
-        "    def list_packages(self, builtin_only: bool = ...) -> list[str]: ...",
-        "    def find_registered_name(self, category: str, cls: type) -> str | None: ...",
-        "",
-        "",
-        "# ==============================================================================",
-        "# get_class() Overloads",
-        "# ==============================================================================",
-        "",
-        generate_overloads(categories),
-        "",
-        "",
-        "# ==============================================================================",
-        "# Module-Level Functions",
-        "# ==============================================================================",
-        "",
-        "",
-        "def get_class(category: PluginCategory, name_or_class_path: str) -> type:",
-        '    """Get type class by name or fully qualified class path (lazy-loaded, cached)."""',
-        "    ...",
-        "",
-        "",
-        "def list_types(category: PluginCategory) -> list[TypeEntry]:",
-        '    """List all TypeEntry objects for a category (sorted alphabetically)."""',
-        "    ...",
-        "",
-        "",
-        "def validate_all(check_class: bool = ...) -> dict[str, list[tuple[str, str]]]:",
-        '    """Validate all registered types without loading. Returns {category: [(type, error)]}."""',
-        "    ...",
-        "",
-        "",
-        "def find_registered_name(category: str, cls: type) -> str | None:",
-        '    """Reverse lookup: find registered name for a class, or None if not found."""',
-        "    ...",
-        "",
-        "",
-        "def load_registry(registry_path: str | Path) -> None:",
-        '    """Load plugin types from a YAML registry manifest."""',
-        "    ...",
-        "",
-        "",
-        "def list_packages(builtin_only: bool = ...) -> list[str]:",
-        '    """List all loaded plugin package names."""',
-        "    ...",
-        "",
-        "",
-        "def get_package_metadata(package_name: str) -> PackageMetadata:",
-        '    """Get metadata for a loaded plugin package. Raises KeyError if not found."""',
-        "    ...",
-        "",
-        "",
-        "def list_categories() -> list[str]:",
-        '    """List all registered category names (sorted alphabetically)."""',
-        "    ...",
-        "",
-        "",
-        "def reset() -> None:",
-        '    """Reset registry to empty state and reload built-in plugins (for testing)."""',
-        "    ...",
-        "",
-        "",
-        "def register(",
-        "    category: str,",
-        "    type_name: str,",
-        "    cls: type,",
-        "    *,",
-        "    priority: int = ...,",
-        "    is_builtin: bool = ...,",
-        ") -> None:",
-        '    """Register a class programmatically (for dynamic classes or test overrides)."""',
-        "    ...",
-        "",
-        "",
-        "def create_enum(category: str, enum_name: str) -> type:",
-        '    """Create an ExtensibleStrEnum from registered types in a category."""',
-        "    ...",
-        "",
-        "",
-        "def detect_type_from_url(category: str, url: str) -> str:",
-        '    """Detect the plugin type from a URL by matching its scheme."""',
-        "    ...",
-    ]
-    return "\n".join(lines) + "\n"
+# =============================================================================
+# File Manipulation
+# =============================================================================
+
+
+def replace_between_markers(
+    content: str, start_marker: str, end_marker: str, replacement: str
+) -> str:
+    """Replace content between markers (exclusive of markers)."""
+    # Match markers with optional content between them (handles empty or populated)
+    pattern = re.compile(
+        rf"({re.escape(start_marker)})\n(.*?)({re.escape(end_marker)})",
+        re.DOTALL,
+    )
+
+    if not pattern.search(content):
+        raise ValueError(f"Markers not found: {start_marker} ... {end_marker}")
+
+    # If replacement is empty, just keep markers with newline between
+    if not replacement.strip():
+        return pattern.sub(r"\1\n\3", content)
+
+    return pattern.sub(rf"\1\n{replacement}\n\3", content)
+
+
+def inject_generated_code(content: str, categories: dict) -> str:
+    """Inject generated imports and overloads into plugins.py content."""
+    # Generate sections
+    imports_code = generate_imports(categories)
+    overloads_code = generate_overloads(categories)
+
+    # Replace imports section
+    content = replace_between_markers(content, IMPORTS_START, IMPORTS_END, imports_code)
+
+    # Replace overloads section
+    content = replace_between_markers(
+        content, OVERLOADS_START, OVERLOADS_END, overloads_code
+    )
+
+    return content
+
+
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
+
+def normalize_content(content: str) -> str:
+    """Normalize content for comparison."""
+    return "\n".join(line.rstrip() for line in content.strip().split("\n"))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Generate plugin_registry.pyi stub from categories.yaml"
+        description="Generate get_class() overloads in plugins.py from categories.yaml"
     )
     parser.add_argument(
-        "--check", action="store_true", help="Check if stubs are up-to-date"
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=PLUGIN_REGISTRY_PYI,
-        help="Output file (default: src/aiperf/plugin/plugin_registry.pyi)",
+        "--check", action="store_true", help="Check if overloads are up-to-date"
     )
     args = parser.parse_args()
 
@@ -361,39 +223,42 @@ def main() -> int:
         print(f"Error: {CATEGORIES_YAML} not found", file=sys.stderr)
         return 1
 
-    categories = load_categories(CATEGORIES_YAML)
+    if not PLUGINS_PY.exists():
+        print(f"Error: {PLUGINS_PY} not found", file=sys.stderr)
+        return 1
 
-    # Generate the stub
-    generated = generate_full_stub(categories)
+    categories = load_categories(CATEGORIES_YAML)
+    current_content = PLUGINS_PY.read_text(encoding="utf-8")
+
+    # Generate the updated content
+    try:
+        generated_content = inject_generated_code(current_content, categories)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Check if content changed
+    is_up_to_date = normalize_content(current_content) == normalize_content(
+        generated_content
+    )
 
     if args.check:
-        # Compare with current content
-        if not args.output.exists():
-            print(f"Error: {args.output} not found", file=sys.stderr)
-            return 1
-
-        current = args.output.read_text(encoding="utf-8")
-
-        # Normalize whitespace for comparison
-        current_normalized = "\n".join(
-            line.rstrip() for line in current.strip().split("\n")
-        )
-        generated_normalized = "\n".join(
-            line.rstrip() for line in generated.strip().split("\n")
-        )
-
-        if current_normalized != generated_normalized:
+        if not is_up_to_date:
             print(
-                "Stubs are out of date. Run: python tools/generate_plugin_overloads.py"
+                "Overloads are out of date. Run: python tools/generate_plugin_overloads.py"
             )
             return 1
 
-        print("Stubs are up-to-date")
+        print("Overloads are up-to-date")
         return 0
 
-    # Write the stub file
-    args.output.write_text(generated, encoding="utf-8")
-    print(f"Generated {args.output}")
+    # Only write if content changed
+    if is_up_to_date:
+        print("Overloads are up-to-date, no changes needed")
+        return 0
+
+    PLUGINS_PY.write_text(generated_content, encoding="utf-8")
+    print(f"Updated {PLUGINS_PY}")
 
     return 0
 

@@ -59,7 +59,7 @@ def parser():
             "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config"
         ),
         patch(
-            "aiperf.records.inference_result_parser.plugin_registry.get_class",
+            "aiperf.records.inference_result_parser.plugins.get_class",
             return_value=lambda **kwargs: mock_endpoint,
         ),
     ):

@@ -3,14 +3,14 @@
 import pytest
 
 from aiperf.common.models import ConversationMetadata, DatasetMetadata, TurnMetadata
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import DatasetSamplingStrategy
 from aiperf.timing.conversation_source import ConversationSource, SampledSession
 from tests.unit.timing.conftest import make_credit
 
 
 def _mk_source(ds: DatasetMetadata) -> ConversationSource:
-    SamplerClass = plugin_registry.get_class("dataset_sampler", ds.sampling_strategy)
+    SamplerClass = plugins.get_class("dataset_sampler", ds.sampling_strategy)
     sampler = SamplerClass(
         conversation_ids=[c.conversation_id for c in ds.conversations],
     )

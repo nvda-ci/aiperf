@@ -48,12 +48,12 @@ def system_controller(
 
     with (
         patch(
-            "aiperf.controller.system_controller.plugin_registry.get_class",
+            "aiperf.controller.system_controller.plugins.get_class",
             side_effect=mock_get_class,
         ),
         patch("aiperf.controller.system_controller.ProxyManager") as mock_proxy,
         patch(
-            "aiperf.common.mixins.communication_mixin.plugin_registry.get_class",
+            "aiperf.common.mixins.communication_mixin.plugins.get_class",
             side_effect=mock_get_class,
         ),
     ):  # fmt: skip

@@ -4,7 +4,7 @@ import statistics
 
 import pytest
 
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import ArrivalPattern
 from aiperf.timing.intervals import (
     ConcurrencyBurstIntervalGenerator,
@@ -162,7 +162,7 @@ class TestIntervalGeneratorRegistry:
     def test_registry_creates_correct_type(self, pattern: ArrivalPattern, cls: type):
         rate = 10.0 if pattern != ArrivalPattern.CONCURRENCY_BURST else None
         config = cfg(pattern, rate=rate)
-        GeneratorClass = plugin_registry.get_class("arrival_pattern", pattern.value)
+        GeneratorClass = plugins.get_class("arrival_pattern", pattern.value)
         instance = GeneratorClass(config=config)
         assert isinstance(instance, cls)
 

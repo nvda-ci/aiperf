@@ -13,7 +13,7 @@ from aiperf.common.models import (
     RequestInfo,
     RequestRecord,
 )
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 if TYPE_CHECKING:
     from aiperf.transports.base_transports import FirstTokenCallback
@@ -29,7 +29,7 @@ class InferenceClient(AIPerfLifecycleMixin):
 
         # Detect and set transport type if not explicitly set
         if not model_endpoint.transport:
-            model_endpoint.transport = plugin_registry.detect_type_from_url(
+            model_endpoint.transport = plugins.detect_type_from_url(
                 "transport",
                 model_endpoint.endpoint.base_url,
             )
@@ -39,13 +39,9 @@ class InferenceClient(AIPerfLifecycleMixin):
                 )
 
         # Create endpoint and transport instances
-        EndpointClass = plugin_registry.get_class(
-            "endpoint", self.model_endpoint.endpoint.type
-        )
+        EndpointClass = plugins.get_class("endpoint", self.model_endpoint.endpoint.type)
         self.endpoint = EndpointClass(model_endpoint=self.model_endpoint)
-        TransportClass = plugin_registry.get_class(
-            "transport", self.model_endpoint.transport
-        )
+        TransportClass = plugins.get_class("transport", self.model_endpoint.transport)
         self.transport = TransportClass(model_endpoint=self.model_endpoint)
         self.attach_child_lifecycle(self.transport)
 

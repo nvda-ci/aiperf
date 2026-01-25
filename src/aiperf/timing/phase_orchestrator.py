@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from aiperf.common.hooks import on_init, on_start
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.credit.callback_handler import CreditCallbackHandler
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.timing.concurrency import ConcurrencyManager
 from aiperf.timing.conversation_source import ConversationSource
 from aiperf.timing.phase.runner import PhaseRunner
@@ -101,7 +101,7 @@ class PhaseOrchestrator(AIPerfLifecycleMixin):
         self._dataset_metadata = dataset_metadata
 
         # Create dataset sampler
-        SamplerClass = plugin_registry.get_class(
+        SamplerClass = plugins.get_class(
             "dataset_sampler", self._dataset_metadata.sampling_strategy
         )
         self._dataset_sampler = SamplerClass(

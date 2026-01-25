@@ -22,7 +22,7 @@ from aiperf.common.models import (
 from aiperf.common.models.record_models import RequestInfo
 from aiperf.common.protocols import DataExporterProtocol, RecordProcessorProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 @implements_protocol(RecordProcessorProtocol)
@@ -62,7 +62,7 @@ class RawRecordWriterProcessor(BufferedJSONLWriterMixin[RawRecordInfo]):
         output_file = output_dir / f"raw_records_{safe_id}.jsonl"
 
         self._model_endpoint = ModelEndpointInfo.from_user_config(user_config)
-        EndpointClass = plugin_registry.get_class(
+        EndpointClass = plugins.get_class(
             "endpoint", self._model_endpoint.endpoint.type
         )
         self._endpoint = EndpointClass(model_endpoint=self._model_endpoint)

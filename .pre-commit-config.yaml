@@ -63,6 +63,13 @@ repos:
         files: ^(src/aiperf/plugin/categories\.yaml|src/aiperf/plugin/plugins\.yaml|tools/generate_plugin_enums\.py)$
         pass_filenames: false
         args: []
+      - id: generate-plugin-overloads
+        name: generate-plugin-overloads
+        entry: make generate-plugin-overloads
+        language: python
+        files: ^(src/aiperf/plugin/categories\.yaml|tools/generate_plugin_overloads\.py)$
+        pass_filenames: false
+        args: []
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.8
     hooks:

@@ -93,11 +93,9 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
         return row
 
     def _get_title(self) -> str:
-        from aiperf.plugin import plugin_registry
+        from aiperf.plugin import plugins
         from aiperf.plugin.enums import PluginCategory
 
-        endpoint_class = plugin_registry.get_class(
-            PluginCategory.ENDPOINT, self._endpoint_type
-        )
+        endpoint_class = plugins.get_class(PluginCategory.ENDPOINT, self._endpoint_type)
         metadata = endpoint_class.metadata()
         return f"NVIDIA AIPerf | {metadata.metrics_title}"

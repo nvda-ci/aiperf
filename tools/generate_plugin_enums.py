@@ -5,7 +5,7 @@
 Generate enums.py and enums.pyi for the plugin system.
 
 This script generates:
-1. enums.py - Dynamic enum definitions using plugin_registry.create_enum() (from YAML)
+1. enums.py - Dynamic enum definitions using plugins.create_enum() (from YAML)
 2. enums.pyi - Type stubs for IDE autocomplete (from runtime plugin registry)
 
 The enums.pyi file is NOT committed to the repository (.gitignore). Run this generator
@@ -181,7 +181,7 @@ def get_enum_names(categories: dict, plugins: dict) -> list[str]:
 
 
 def generate_enums_py(categories: dict, plugins: dict) -> str:
-    """Generate the content of enums.py with dynamic plugin_registry.create_enum() calls.
+    """Generate the content of enums.py with dynamic plugins.create_enum() calls.
 
     Args:
         categories: Category definitions from categories.yaml
@@ -221,7 +221,7 @@ Usage:
 from typing import TYPE_CHECKING
 
 from aiperf.common.enums import create_enum
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 """
     lines = header.split("\n")
 
@@ -281,7 +281,7 @@ if TYPE_CHECKING:
     from aiperf.plugin.enums import PluginCategory
 else:
     # Create runtime enum with all plugin category names from the registry
-    _all_plugin_categories = plugin_registry.list_categories()
+    _all_plugin_categories = plugins.list_categories()
     PluginCategory = create_enum(
         "PluginCategory",
         {
@@ -302,7 +302,7 @@ else:
 def _generate_dynamic_enum(
     category: str, category_info: dict, enum_name: str, types: dict
 ) -> list[str]:
-    """Generate a dynamic enum assignment with plugin_registry.create_enum()."""
+    """Generate a dynamic enum assignment with plugins.create_enum()."""
     category_member = category.replace("-", "_").upper()
     category_display = category.replace("_", " ")
 
@@ -312,11 +312,11 @@ def _generate_dynamic_enum(
     example_str = ", ".join(f"{enum_name}.{e}" for e in examples)
 
     # Check line length - wrap if over 88 chars (ruff default)
-    single_line = f'{enum_name} = plugin_registry.create_enum(PluginCategory.{category_member}, "{enum_name}")'
+    single_line = f'{enum_name} = plugins.create_enum(PluginCategory.{category_member}, "{enum_name}")'
     if len(single_line) <= 88:
         assignment = single_line
     else:
-        assignment = f"""{enum_name} = plugin_registry.create_enum(
+        assignment = f"""{enum_name} = plugins.create_enum(
     PluginCategory.{category_member}, "{enum_name}"
 )"""
 
@@ -338,14 +338,14 @@ Example: {example_str}
 
 
 def generate_enums_pyi() -> str:
-    """Generate enums.pyi from actual loaded plugin registry.
+    """Generate enums.pyi from actual loaded plugins module.
 
-    This imports the real plugin_registry to get all registered plugins,
+    This imports the real plugins module to get all registered plugins,
     including any 3rd-party plugins that have been loaded.
     Descriptions are obtained from TypeEntry objects in the registry.
     """
-    # Import the actual plugin registry
-    from aiperf.plugin import plugin_registry
+    # Import the actual plugins module
+    from aiperf.plugin import plugins
 
     categories = load_categories()
     category_names = get_category_names(categories)
@@ -381,7 +381,7 @@ class PluginCategory(ExtensibleStrEnum):
     lines = header.split("\n")
 
     # Get all categories from the runtime registry
-    runtime_categories = plugin_registry.list_categories()
+    runtime_categories = plugins.list_categories()
     for category in sorted(runtime_categories):
         member_name = category.replace("-", "_").upper()
         lines.append(f'    {member_name} = "{category}"')
@@ -414,7 +414,7 @@ class PluginCategory(ExtensibleStrEnum):
 
         # Get types from runtime registry
         try:
-            type_entries = plugin_registry.list_types(category)
+            type_entries = plugins.list_types(category)
         except Exception:
             type_entries = []
 

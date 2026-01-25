@@ -35,9 +35,9 @@ from aiperf.common.models.record_models import TokenCounts
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.types import MessageTypeT
 from aiperf.exporters.exporter_config import ExporterConfig
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
+from aiperf.plugin._plugin_registry import PluginRegistry
 from aiperf.plugin.enums import CommunicationBackend, ServiceRunType
-from aiperf.plugin.plugin_registry import PluginRegistry
 from tests.harness.fake_tokenizer import FakeTokenizer
 from tests.harness.time_traveler import TimeTraveler
 
@@ -268,7 +268,7 @@ def load_builtin_registry() -> None:
     """
     # Registry auto-loads builtins on first access via singleton __init__
     # Just access it to ensure it's initialized
-    _ = plugin_registry.list_categories()
+    _ = plugins.list_categories()
 
 
 @pytest.fixture(autouse=True)

@@ -43,7 +43,7 @@ from aiperf.common.protocols import (
 )
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     ComposerType,
     DatasetBackingStoreType,
@@ -86,7 +86,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self._conversation_ids_cache: list[str] = []
         self.dataset_configured = asyncio.Event()
 
-        BackingStoreClass = plugin_registry.get_class(
+        BackingStoreClass = plugins.get_class(
             "dataset_backing_store", DatasetBackingStoreType.MEMORY_MAP
         )
         self._backing_store: DatasetBackingStoreProtocol = BackingStoreClass(
@@ -119,7 +119,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         """Configure the dataset client for serving fallback requests."""
         # Create dataset client for serving fallback requests, then free in-memory dataset
         client_metadata = self._backing_store.get_client_metadata()
-        DatasetClientClass = plugin_registry.get_class(
+        DatasetClientClass = plugins.get_class(
             "dataset_client_store", client_metadata.client_type
         )
         self._dataset_client = DatasetClientClass(client_metadata=client_metadata)
@@ -159,9 +159,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         """Generate input payloads from the dataset for use in the inputs.json file."""
         inputs = InputsFile()
 
-        EndpointClass = plugin_registry.get_class(
-            "endpoint", model_endpoint.endpoint.type
-        )
+        EndpointClass = plugins.get_class("endpoint", model_endpoint.endpoint.type)
         endpoint: EndpointProtocol = EndpointClass(model_endpoint=model_endpoint)
         self.debug(
             lambda: f"Created endpoint protocol for {model_endpoint.endpoint.type}, "
@@ -261,9 +259,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         return await loader.convert_to_conversations(dataset)
 
     def _load_custom_dataset(self) -> list[Conversation]:
-        ComposerClass = plugin_registry.get_class(
-            "dataset_composer", ComposerType.CUSTOM
-        )
+        ComposerClass = plugins.get_class("dataset_composer", ComposerType.CUSTOM)
         composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)
         return composer.create_dataset()
 
@@ -278,7 +274,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         else:
             composer_type = ComposerType.SYNTHETIC
 
-        ComposerClass = plugin_registry.get_class(
+        ComposerClass = plugins.get_class(
             PluginCategory.DATASET_COMPOSER, composer_type
         )
         composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)

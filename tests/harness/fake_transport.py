@@ -66,7 +66,7 @@ from aiperf.common.models import (
 )
 from aiperf.common.types import RequestInputT
 from aiperf.common.utils import yield_to_event_loop
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     EndpointType,
     TransportType,
@@ -221,7 +221,7 @@ class FakeTransport(BaseTransport):
     ) -> RequestRecord:
         """Parse request, create context, and dispatch to handler."""
         start_perf_ns = time.perf_counter_ns()
-        endpoint_class = plugin_registry.get_class("endpoint", endpoint_type)
+        endpoint_class = plugins.get_class("endpoint", endpoint_type)
         endpoint_path = endpoint_class.metadata().endpoint_path
         req = self._parse_payload(payload, request_class)
         ctx = make_ctx(req, endpoint_path, time.perf_counter(), self.config)
@@ -429,7 +429,7 @@ class FakeTransport(BaseTransport):
 # =============================================================================
 
 # Register FakeTransport for HTTP transport at max priority
-plugin_registry.register(
+plugins.register(
     "transport",
     TransportType.HTTP,
     FakeTransport,

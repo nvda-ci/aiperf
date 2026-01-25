@@ -4,12 +4,12 @@
 import pytest
 from pytest import param
 
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import TransportType
 
 
 class TestPluginRegistryDetectFromUrl:
-    """Test suite for plugin_registry.detect_from_url method."""
+    """Test suite for plugins.detect_from_url method."""
 
     @pytest.mark.parametrize(
         "url,expected_transport",
@@ -31,7 +31,7 @@ class TestPluginRegistryDetectFromUrl:
     )  # fmt: skip
     def test_http_https_detection(self, url, expected_transport):
         """Test detection of HTTP/HTTPS URLs with various components."""
-        result = plugin_registry.detect_type_from_url("transport", url)
+        result = plugins.detect_type_from_url("transport", url)
         assert result is not None
         assert result == expected_transport
 
@@ -45,7 +45,7 @@ class TestPluginRegistryDetectFromUrl:
     )
     def test_scheme_case_insensitive(self, url):
         """Test that scheme detection is case-insensitive."""
-        result = plugin_registry.detect_type_from_url("transport", url)
+        result = plugins.detect_type_from_url("transport", url)
         assert result == TransportType.HTTP.value
 
     @pytest.mark.parametrize(
@@ -62,7 +62,7 @@ class TestPluginRegistryDetectFromUrl:
     def test_edge_cases_default_to_http_or_raise(self, url):
         """Test edge cases return HTTP or raise ValueError."""
         try:
-            result = plugin_registry.detect_type_from_url("transport", url)
+            result = plugins.detect_type_from_url("transport", url)
             assert result == TransportType.HTTP.value
         except ValueError:
             # No transport found is also acceptable for malformed URLs
@@ -79,4 +79,4 @@ class TestPluginRegistryDetectFromUrl:
     def test_unregistered_schemes_raise_error(self, url):
         """Test that unregistered schemes raise ValueError."""
         with pytest.raises(ValueError):
-            plugin_registry.detect_type_from_url("transport", url)
+            plugins.detect_type_from_url("transport", url)

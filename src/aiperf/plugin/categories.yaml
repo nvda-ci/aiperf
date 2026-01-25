@@ -80,7 +80,7 @@ dataset_composer:
     One-to-one mapping based on composer_type configuration.
 
 custom_dataset_loader:
-  protocol: aiperf.dataset.loader:CustomDatasetLoaderProtocol
+  protocol: aiperf.common.protocols:CustomDatasetLoaderProtocol
   enum: CustomDatasetType
   description: |
     Custom dataset loaders parse different JSONL file formats into conversations.

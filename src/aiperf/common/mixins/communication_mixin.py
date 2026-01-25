@@ -6,7 +6,7 @@ from abc import ABC
 from aiperf.common.config import ServiceConfig
 from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
 from aiperf.common.protocols import CommunicationProtocol
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 class CommunicationMixin(AIPerfLifecycleMixin, ABC):
@@ -17,7 +17,7 @@ class CommunicationMixin(AIPerfLifecycleMixin, ABC):
     def __init__(self, service_config: ServiceConfig, **kwargs) -> None:
         super().__init__(service_config=service_config, **kwargs)
         self.service_config = service_config
-        CommClass = plugin_registry.get_class(
+        CommClass = plugins.get_class(
             "communication", self.service_config.comm_config.comm_backend
         )
         # CommClass extends Singleton, so repeated calls return the same per-process instance

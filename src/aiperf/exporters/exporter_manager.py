@@ -16,7 +16,7 @@ from aiperf.common.models.export_models import TelemetryExportData
 from aiperf.common.models.server_metrics_models import ServerMetricsResults
 from aiperf.common.protocols import ConsoleExporterProtocol, DataExporterProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 
 class ExporterManager(AIPerfLoggerMixin):
@@ -58,7 +58,7 @@ class ExporterManager(AIPerfLoggerMixin):
     async def export_data(self) -> None:
         self.info("Exporting all records")
 
-        for exporter_type in plugin_registry.list_types("data_exporter"):
+        for exporter_type in plugins.list_types("data_exporter"):
             try:
                 ExporterClass = exporter_type.load()
                 exporter: DataExporterProtocol = ExporterClass(
@@ -85,7 +85,7 @@ class ExporterManager(AIPerfLoggerMixin):
     def get_exported_file_infos(self) -> list[FileExportInfo]:
         """Get the file infos for all exported files."""
         file_infos = []
-        for exporter_type in plugin_registry.list_types("data_exporter"):
+        for exporter_type in plugins.list_types("data_exporter"):
             try:
                 ExporterClass = exporter_type.load()
                 exporter: DataExporterProtocol = ExporterClass(
@@ -106,7 +106,7 @@ class ExporterManager(AIPerfLoggerMixin):
     async def export_console(self, console: Console) -> None:
         self.info("Exporting console data")
 
-        for exporter_type in plugin_registry.list_types("console_exporter"):
+        for exporter_type in plugins.list_types("console_exporter"):
             try:
                 ExporterClass = exporter_type.load()
                 exporter: ConsoleExporterProtocol = ExporterClass(

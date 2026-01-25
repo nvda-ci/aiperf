@@ -26,7 +26,7 @@ Usage:
 from typing import TYPE_CHECKING
 
 from aiperf.common.enums import create_enum
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 
 # ============================================================================
 # Plugin Protocol Categories
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from aiperf.plugin.enums import PluginCategory
 else:
     # Create runtime enum with all plugin category names from the registry
-    _all_plugin_categories = plugin_registry.list_categories()
+    _all_plugin_categories = plugins.list_categories()
     PluginCategory = create_enum(
         "PluginCategory",
         {
@@ -56,7 +56,7 @@ else:
 # Timing Types
 # ============================================================================
 
-TimingMode = plugin_registry.create_enum(PluginCategory.TIMING_STRATEGY, "TimingMode")
+TimingMode = plugins.create_enum(PluginCategory.TIMING_STRATEGY, "TimingMode")
 """
 Dynamic enum for timing strategy implementations.
 
@@ -64,9 +64,7 @@ Members are auto-generated from registered timing strategy plugins.
 Example: TimingMode.FIXED_SCHEDULE, TimingMode.REQUEST_RATE, TimingMode.USER_CENTRIC_RATE
 """
 
-ArrivalPattern = plugin_registry.create_enum(
-    PluginCategory.ARRIVAL_PATTERN, "ArrivalPattern"
-)
+ArrivalPattern = plugins.create_enum(PluginCategory.ARRIVAL_PATTERN, "ArrivalPattern")
 """
 Dynamic enum for arrival pattern implementations.
 
@@ -74,7 +72,7 @@ Members are auto-generated from registered arrival pattern plugins.
 Example: ArrivalPattern.CONCURRENCY_BURST, ArrivalPattern.CONSTANT, ArrivalPattern.GAMMA
 """
 
-RampType = plugin_registry.create_enum(PluginCategory.RAMP, "RampType")
+RampType = plugins.create_enum(PluginCategory.RAMP, "RampType")
 """
 Dynamic enum for ramp implementations.
 
@@ -86,7 +84,7 @@ Example: RampType.EXPONENTIAL, RampType.LINEAR, RampType.POISSON
 # Dataset Types
 # ============================================================================
 
-DatasetBackingStoreType = plugin_registry.create_enum(
+DatasetBackingStoreType = plugins.create_enum(
     PluginCategory.DATASET_BACKING_STORE, "DatasetBackingStoreType"
 )
 """
@@ -96,7 +94,7 @@ Members are auto-generated from registered dataset backing store plugins.
 Example: DatasetBackingStoreType.MEMORY_MAP
 """
 
-DatasetClientStoreType = plugin_registry.create_enum(
+DatasetClientStoreType = plugins.create_enum(
     PluginCategory.DATASET_CLIENT_STORE, "DatasetClientStoreType"
 )
 """
@@ -106,7 +104,7 @@ Members are auto-generated from registered dataset client store plugins.
 Example: DatasetClientStoreType.MEMORY_MAP
 """
 
-DatasetSamplingStrategy = plugin_registry.create_enum(
+DatasetSamplingStrategy = plugins.create_enum(
     PluginCategory.DATASET_SAMPLER, "DatasetSamplingStrategy"
 )
 """
@@ -116,9 +114,7 @@ Members are auto-generated from registered dataset sampler plugins.
 Example: DatasetSamplingStrategy.RANDOM, DatasetSamplingStrategy.SEQUENTIAL, DatasetSamplingStrategy.SHUFFLE
 """
 
-ComposerType = plugin_registry.create_enum(
-    PluginCategory.DATASET_COMPOSER, "ComposerType"
-)
+ComposerType = plugins.create_enum(PluginCategory.DATASET_COMPOSER, "ComposerType")
 """
 Dynamic enum for dataset composer implementations.
 
@@ -126,7 +122,7 @@ Members are auto-generated from registered dataset composer plugins.
 Example: ComposerType.CUSTOM, ComposerType.SYNTHETIC, ComposerType.SYNTHETIC_RANKINGS
 """
 
-CustomDatasetType = plugin_registry.create_enum(
+CustomDatasetType = plugins.create_enum(
     PluginCategory.CUSTOM_DATASET_LOADER, "CustomDatasetType"
 )
 """
@@ -140,7 +136,7 @@ Example: CustomDatasetType.MOONCAKE_TRACE, CustomDatasetType.MULTI_TURN, CustomD
 # Endpoint and Transport Types
 # ============================================================================
 
-EndpointType = plugin_registry.create_enum(PluginCategory.ENDPOINT, "EndpointType")
+EndpointType = plugins.create_enum(PluginCategory.ENDPOINT, "EndpointType")
 """
 Dynamic enum for endpoint implementations.
 
@@ -148,7 +144,7 @@ Members are auto-generated from registered endpoint plugins.
 Example: EndpointType.CHAT, EndpointType.COHERE_RANKINGS, EndpointType.COMPLETIONS
 """
 
-TransportType = plugin_registry.create_enum(PluginCategory.TRANSPORT, "TransportType")
+TransportType = plugins.create_enum(PluginCategory.TRANSPORT, "TransportType")
 """
 Dynamic enum for transport implementations.
 
@@ -160,7 +156,7 @@ Example: TransportType.HTTP
 # Processing Types
 # ============================================================================
 
-RecordProcessorType = plugin_registry.create_enum(
+RecordProcessorType = plugins.create_enum(
     PluginCategory.RECORD_PROCESSOR, "RecordProcessorType"
 )
 """
@@ -170,7 +166,7 @@ Members are auto-generated from registered record processor plugins.
 Example: RecordProcessorType.METRIC_RECORD, RecordProcessorType.RAW_RECORD_WRITER
 """
 
-ResultsProcessorType = plugin_registry.create_enum(
+ResultsProcessorType = plugins.create_enum(
     PluginCategory.RESULTS_PROCESSOR, "ResultsProcessorType"
 )
 """
@@ -184,9 +180,7 @@ Example: ResultsProcessorType.GPU_TELEMETRY_ACCUMULATOR, ResultsProcessorType.GP
 # Export Types
 # ============================================================================
 
-DataExporterType = plugin_registry.create_enum(
-    PluginCategory.DATA_EXPORTER, "DataExporterType"
-)
+DataExporterType = plugins.create_enum(PluginCategory.DATA_EXPORTER, "DataExporterType")
 """
 Dynamic enum for data exporter implementations.
 
@@ -194,7 +188,7 @@ Members are auto-generated from registered data exporter plugins.
 Example: DataExporterType.CSV, DataExporterType.JSON, DataExporterType.RAW_RECORD_AGGREGATOR
 """
 
-ConsoleExporterType = plugin_registry.create_enum(
+ConsoleExporterType = plugins.create_enum(
     PluginCategory.CONSOLE_EXPORTER, "ConsoleExporterType"
 )
 """
@@ -208,7 +202,7 @@ Example: ConsoleExporterType.API_ERRORS, ConsoleExporterType.ERRORS, ConsoleExpo
 # UI Types
 # ============================================================================
 
-UIType = plugin_registry.create_enum(PluginCategory.UI, "UIType")
+UIType = plugins.create_enum(PluginCategory.UI, "UIType")
 """
 Dynamic enum for ui implementations.
 
@@ -220,7 +214,7 @@ Example: UIType.DASHBOARD, UIType.NONE, UIType.SIMPLE
 # Service Types
 # ============================================================================
 
-ServiceType = plugin_registry.create_enum(PluginCategory.SERVICE, "ServiceType")
+ServiceType = plugins.create_enum(PluginCategory.SERVICE, "ServiceType")
 """
 Dynamic enum for service implementations.
 
@@ -228,9 +222,7 @@ Members are auto-generated from registered service plugins.
 Example: ServiceType.DATASET_MANAGER, ServiceType.GPU_TELEMETRY_MANAGER, ServiceType.RECORD_PROCESSOR
 """
 
-ServiceRunType = plugin_registry.create_enum(
-    PluginCategory.SERVICE_MANAGER, "ServiceRunType"
-)
+ServiceRunType = plugins.create_enum(PluginCategory.SERVICE_MANAGER, "ServiceRunType")
 """
 Dynamic enum for service manager implementations.
 
@@ -242,7 +234,7 @@ Example: ServiceRunType.KUBERNETES, ServiceRunType.MULTIPROCESSING
 # Communication Types
 # ============================================================================
 
-CommunicationBackend = plugin_registry.create_enum(
+CommunicationBackend = plugins.create_enum(
     PluginCategory.COMMUNICATION, "CommunicationBackend"
 )
 """
@@ -252,7 +244,7 @@ Members are auto-generated from registered communication plugins.
 Example: CommunicationBackend.ZMQ_IPC, CommunicationBackend.ZMQ_TCP
 """
 
-CommClientType = plugin_registry.create_enum(
+CommClientType = plugins.create_enum(
     PluginCategory.COMMUNICATION_CLIENT, "CommClientType"
 )
 """
@@ -262,7 +254,7 @@ Members are auto-generated from registered communication client plugins.
 Example: CommClientType.PUB, CommClientType.PULL, CommClientType.PUSH
 """
 
-ZMQProxyType = plugin_registry.create_enum(PluginCategory.ZMQ_PROXY, "ZMQProxyType")
+ZMQProxyType = plugins.create_enum(PluginCategory.ZMQ_PROXY, "ZMQProxyType")
 """
 Dynamic enum for zmq proxy implementations.
 
@@ -274,7 +266,7 @@ Example: ZMQProxyType.DEALER_ROUTER, ZMQProxyType.PUSH_PULL, ZMQProxyType.XPUB_X
 # Visualization Types
 # ============================================================================
 
-PlotType = plugin_registry.create_enum(PluginCategory.PLOT, "PlotType")
+PlotType = plugins.create_enum(PluginCategory.PLOT, "PlotType")
 """
 Dynamic enum for plot implementations.
 

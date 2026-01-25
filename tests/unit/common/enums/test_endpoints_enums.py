@@ -3,7 +3,7 @@
 
 import pytest
 
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import EndpointType
 
 
@@ -84,7 +84,7 @@ class TestEndpointType:
         assert str(endpoint_type) == expected_tag
         assert endpoint_type.value == expected_tag
 
-        endpoint_class = plugin_registry.get_class("endpoint", endpoint_type)
+        endpoint_class = plugins.get_class("endpoint", endpoint_type)
         metadata = endpoint_class.metadata()
         assert metadata.endpoint_path == expected_path
         assert metadata.supports_streaming == expected_streaming
@@ -125,7 +125,7 @@ class TestEndpointType:
     def test_all_endpoint_types_have_valid_metadata(self):
         """Ensure all EndpointType members have valid metadata via plugin registry."""
         for endpoint_type in EndpointType:
-            endpoint_class = plugin_registry.get_class("endpoint", endpoint_type)
+            endpoint_class = plugins.get_class("endpoint", endpoint_type)
             metadata = endpoint_class.metadata()
             assert isinstance(metadata.supports_streaming, bool)
             assert isinstance(metadata.produces_tokens, bool)

@@ -11,7 +11,7 @@ import pytest
 import zmq
 
 from aiperf.common.config import ZMQTCPConfig, ZMQTCPProxyConfig
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import ZMQProxyType
 from aiperf.zmq.zmq_proxy_base import ProxyEndType, ProxySocketClient
 from aiperf.zmq.zmq_proxy_sockets import (
@@ -332,13 +332,6 @@ class TestProxyEdgeCases:
     async def test_all_proxy_types_are_registered(self):
         """Test that all proxy types are registered in the plugin registry."""
         # Verify all expected proxy types are registered
-        assert (
-            plugin_registry.get_class("zmq_proxy", ZMQProxyType.XPUB_XSUB) is not None
-        )
-        assert (
-            plugin_registry.get_class("zmq_proxy", ZMQProxyType.DEALER_ROUTER)
-            is not None
-        )
-        assert (
-            plugin_registry.get_class("zmq_proxy", ZMQProxyType.PUSH_PULL) is not None
-        )
+        assert plugins.get_class("zmq_proxy", ZMQProxyType.XPUB_XSUB) is not None
+        assert plugins.get_class("zmq_proxy", ZMQProxyType.DEALER_ROUTER) is not None
+        assert plugins.get_class("zmq_proxy", ZMQProxyType.PUSH_PULL) is not None

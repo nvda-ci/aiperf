@@ -51,7 +51,7 @@ class TestInferenceClient:
             raise ValueError(f"Unknown protocol: {protocol}")
 
         with patch(
-            "aiperf.workers.inference_client.plugin_registry.get_class",
+            "aiperf.workers.inference_client.plugins.get_class",
             side_effect=mock_get_class,
         ):
             return InferenceClient(

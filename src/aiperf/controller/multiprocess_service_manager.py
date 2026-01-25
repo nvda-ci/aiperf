@@ -17,7 +17,7 @@ from aiperf.common.exceptions import AIPerfError
 from aiperf.common.protocols import ServiceManagerProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import PluginCategory
 
 
@@ -59,7 +59,7 @@ class MultiProcessServiceManager(BaseServiceManager):
         self, service_type: ServiceTypeT, num_replicas: int = 1
     ) -> None:
         """Run a service with the given number of replicas."""
-        service_class = plugin_registry.get_class(PluginCategory.SERVICE, service_type)
+        service_class = plugins.get_class(PluginCategory.SERVICE, service_type)
 
         for _ in range(num_replicas):
             service_id = f"{service_type}_{uuid.uuid4().hex[:8]}"

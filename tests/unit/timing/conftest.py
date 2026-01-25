@@ -23,7 +23,7 @@ from aiperf.common.models import (
 from aiperf.common.utils import yield_to_event_loop
 from aiperf.credit.messages import CreditReturn, FirstToken
 from aiperf.credit.structs import Credit, CreditContext, TurnToSend
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     ArrivalPattern,
     DatasetSamplingStrategy,
@@ -424,7 +424,7 @@ def make_sampler(
     conv_ids: list[str] | None = None,
     strategy: DatasetSamplingStrategy = DatasetSamplingStrategy.SEQUENTIAL,
 ):
-    SamplerClass = plugin_registry.get_class("dataset_sampler", strategy)
+    SamplerClass = plugins.get_class("dataset_sampler", strategy)
     return SamplerClass(conversation_ids=conv_ids or ["conv1", "conv2", "conv3"])
 
 

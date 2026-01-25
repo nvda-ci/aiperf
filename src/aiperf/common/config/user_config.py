@@ -25,7 +25,7 @@ from aiperf.common.config.output_config import OutputConfig
 from aiperf.common.config.tokenizer_config import TokenizerConfig
 from aiperf.common.enums import GPUTelemetryMode, ServerMetricsFormat
 from aiperf.common.utils import load_json_str
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     ArrivalPattern,
     CustomDatasetType,
@@ -645,9 +645,7 @@ class UserConfig(BaseConfig):
 
     def _get_artifact_service_kind(self) -> str:
         """Get the service kind name based on the endpoint config."""
-        endpoint_class = plugin_registry.get_class(
-            PluginCategory.ENDPOINT, self.endpoint.type
-        )
+        endpoint_class = plugins.get_class(PluginCategory.ENDPOINT, self.endpoint.type)
         metadata = endpoint_class.metadata()
         return f"{metadata.service_kind}-{self.endpoint.type}"
 

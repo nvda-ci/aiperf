@@ -6,7 +6,7 @@ from zmq import SocketType
 
 from aiperf.common.config import BaseZMQProxyConfig
 from aiperf.common.hooks import on_init
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import ZMQProxyType
 from aiperf.zmq.zmq_base_client import BaseZMQClient
 from aiperf.zmq.zmq_proxy_base import (
@@ -116,7 +116,7 @@ def define_proxy_class(
     ZMQProxy.__name__ = f"ZMQ_{proxy_type.name}_Proxy"
     ZMQProxy.__qualname__ = ZMQProxy.__name__
     ZMQProxy.__doc__ = f"A ZMQ Proxy for {proxy_type.name} communication."
-    plugin_registry.register("zmq_proxy", proxy_type, ZMQProxy)
+    plugins.register("zmq_proxy", proxy_type, ZMQProxy)
     return ZMQProxy
 
 

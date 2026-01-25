@@ -26,7 +26,7 @@ from aiperf.common.hooks import on_stop
 from aiperf.common.messages import TargetedServiceMessage
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.types import CommAddressType, MessageCallbackMapT, MessageTypeT
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import (
     CommClientType,
     CommunicationBackend,
@@ -586,21 +586,21 @@ class FakeCommunication(BaseCommunication):
 # =============================================================================
 
 # Register FakeProxy for all ZMQ proxy types at max priority
-plugin_registry.register(
+plugins.register(
     "zmq_proxy",
     ZMQProxyType.XPUB_XSUB,
     FakeProxy,
     priority=sys.maxsize,
     is_builtin=False,
 )
-plugin_registry.register(
+plugins.register(
     "zmq_proxy",
     ZMQProxyType.DEALER_ROUTER,
     FakeProxy,
     priority=sys.maxsize,
     is_builtin=False,
 )
-plugin_registry.register(
+plugins.register(
     "zmq_proxy",
     ZMQProxyType.PUSH_PULL,
     FakeProxy,
@@ -609,7 +609,7 @@ plugin_registry.register(
 )
 
 # Register FakeCommunication for ZMQ IPC backend at max priority
-plugin_registry.register(
+plugins.register(
     "communication",
     CommunicationBackend.ZMQ_IPC,
     FakeCommunication,

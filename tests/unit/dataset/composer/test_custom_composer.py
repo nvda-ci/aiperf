@@ -136,7 +136,7 @@ class TestErrorHandling:
     """Test class for CustomDatasetComposer error handling scenarios."""
 
     @patch("aiperf.dataset.composer.custom.check_file_exists")
-    @patch("aiperf.dataset.composer.custom.plugin_registry.get_class")
+    @patch("aiperf.dataset.composer.custom.plugins.get_class")
     def test_create_dataset_empty_result(
         self, mock_get_class, mock_check_file, custom_config, mock_tokenizer
     ):

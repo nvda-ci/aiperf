@@ -5,7 +5,7 @@
 from aiperf.common.config import ServiceConfig
 from aiperf.common.hooks import on_init, on_start, on_stop
 from aiperf.common.mixins import AIPerfLifecycleMixin
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import PluginCategory, ZMQProxyType
 
 
@@ -18,15 +18,13 @@ class ProxyManager(AIPerfLifecycleMixin):
     async def _initialize_proxies(self) -> None:
         comm_config = self.service_config.comm_config
         self.proxies = [
-            plugin_registry.get_class(PluginCategory.ZMQ_PROXY, ZMQProxyType.XPUB_XSUB)(
+            plugins.get_class(PluginCategory.ZMQ_PROXY, ZMQProxyType.XPUB_XSUB)(
                 zmq_proxy_config=comm_config.event_bus_proxy_config,
             ),
-            plugin_registry.get_class(
-                PluginCategory.ZMQ_PROXY, ZMQProxyType.DEALER_ROUTER
-            )(
+            plugins.get_class(PluginCategory.ZMQ_PROXY, ZMQProxyType.DEALER_ROUTER)(
                 zmq_proxy_config=comm_config.dataset_manager_proxy_config,
             ),
-            plugin_registry.get_class(PluginCategory.ZMQ_PROXY, ZMQProxyType.PUSH_PULL)(
+            plugins.get_class(PluginCategory.ZMQ_PROXY, ZMQProxyType.PUSH_PULL)(
                 zmq_proxy_config=comm_config.raw_inference_proxy_config,
             ),
         ]

@@ -32,7 +32,7 @@ from aiperf.common.protocols import (
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.utils import compute_time_ns
 from aiperf.metrics.metric_dicts import MetricRecordDict
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.records.inference_result_parser import InferenceResultParser
 
 
@@ -71,7 +71,7 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
         )
 
         self.records_processors: list[RecordProcessorProtocol] = []
-        for processor_type in plugin_registry.list_types("record_processor"):
+        for processor_type in plugins.list_types("record_processor"):
             try:
                 ProcessorClass = processor_type.load()
                 processor: RecordProcessorProtocol = ProcessorClass(

@@ -64,7 +64,7 @@ from aiperf.credit.messages import (
     CreditPhaseStartMessage,
     CreditsCompleteMessage,
 )
-from aiperf.plugin import plugin_registry
+from aiperf.plugin import plugins
 from aiperf.plugin.enums import ResultsProcessorType, UIType
 from aiperf.records.error_tracker import ErrorTracker
 from aiperf.records.records_tracker import RecordsTracker
@@ -124,7 +124,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._gpu_telemetry_accumulator: GPUTelemetryAccumulatorProtocol | None = None  # fmt: skip
         self._server_metrics_accumulator: ServerMetricsAccumulatorProtocol | None = None  # fmt: skip
 
-        for results_processor_type in plugin_registry.list_types("results_processor"):
+        for results_processor_type in plugins.list_types("results_processor"):
             try:
                 ResultsProcessorClass = results_processor_type.load()
                 results_processor = ResultsProcessorClass(
