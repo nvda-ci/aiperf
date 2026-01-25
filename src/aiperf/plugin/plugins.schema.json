@@ -27,12 +27,6 @@
           "description": "Package author or organization.",
           "title": "Author",
           "type": "string"
-        },
-        "builtin": {
-          "default": false,
-          "description": "Whether this is a built-in plugin package.",
-          "title": "Builtin",
-          "type": "boolean"
         }
       },
       "required": [

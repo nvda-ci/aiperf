@@ -87,10 +87,11 @@ class PluginPackageInfo(BaseModel):
         default="", description="Human-readable package description."
     )
     author: str = Field(default="", description="Package author or organization.")
-    builtin: bool = Field(
-        default=False,
-        description="Whether this is a built-in plugin package.",
-    )
+
+    @property
+    def builtin(self) -> bool:
+        """Whether this is a built-in plugin package."""
+        return self.name == "aiperf"
 
 
 class PluginTypeEntry(BaseModel):

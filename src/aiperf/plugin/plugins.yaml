@@ -24,7 +24,6 @@ plugin:
   version: 2.0.0
   description: AIPerf core implementations for AI benchmarking
   author: NVIDIA
-  builtin: true
 
 # =============================================================================
 # Timing Strategies
