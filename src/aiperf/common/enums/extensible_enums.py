@@ -181,7 +181,9 @@ class ExtensibleStrEnum(str, Enum, metaclass=ExtensibleStrEnumMeta):
         return None
 
 
-def create_enum(name: str, members: dict[str, str]) -> type[ExtensibleStrEnum]:
+def create_enum(
+    name: str, members: dict[str, str], module: str | None = None
+) -> type[ExtensibleStrEnum]:
     """Create a new ExtensibleStrEnum dynamically from a dict of members.
 
     This is the preferred way to create enums from plugin registries at runtime.
@@ -190,6 +192,8 @@ def create_enum(name: str, members: dict[str, str]) -> type[ExtensibleStrEnum]:
     Args:
         name: The enum class name (e.g., "EndpointType")
         members: Dict mapping member names to values (e.g., {"CHAT": "chat"})
+        module: Optional module name for the enum. If not provided, uses the
+            caller's module. Setting this correctly is required for pickling.
 
     Returns:
         A new ExtensibleStrEnum subclass with the specified members
@@ -201,4 +205,16 @@ def create_enum(name: str, members: dict[str, str]) -> type[ExtensibleStrEnum]:
         >>> EndpointType("chat")
         EndpointType.CHAT
     """
-    return ExtensibleStrEnum(name, members)  # type: ignore[return-value]
+    import sys
+
+    enum_cls = ExtensibleStrEnum(name, members)  # type: ignore[return-value]
+
+    # Set __module__ to enable pickling. Pickle looks up classes by module.name,
+    # so the enum must be findable in its declared module.
+    if module is None:
+        # Get the caller's module automatically
+        frame = sys._getframe(1)
+        module = frame.f_globals.get("__name__", __name__)
+
+    enum_cls.__module__ = module
+    return enum_cls

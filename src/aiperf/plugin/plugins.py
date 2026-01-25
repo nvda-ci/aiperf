@@ -561,6 +561,8 @@ def create_enum(category: str, enum_name: str) -> type:
         >>> EndpointEnum = plugins.create_enum('endpoint', 'EndpointType')
         >>> print(EndpointEnum.CHAT)  # 'chat'
     """
+    import sys
+
     from aiperf.common.enums import create_enum as _create_enum
 
     types = _registry.list_types(category)
@@ -575,7 +577,11 @@ def create_enum(category: str, enum_name: str) -> type:
         impl.type_name.replace("-", "_").upper(): impl.type_name for impl in types
     }
 
-    return _create_enum(enum_name, members)
+    # Get the caller's module so pickle can find the enum
+    frame = sys._getframe(1)
+    module = frame.f_globals.get("__name__", __name__)
+
+    return _create_enum(enum_name, members, module=module)
 
 
 def detect_type_from_url(category: str, url: str) -> str:
