@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=plugins.schema.json
 
 # =============================================================================
 # AIPerf Built-in Plugin Registry
@@ -13,6 +14,7 @@
 #     class: module.path:ClassName
 #     description: Human-readable description
 #     priority: int (optional, default: 0, for conflict resolution only)
+#     metadata: (optional) Category-specific metadata values, schema defined in categories.yaml
 # =============================================================================
 
 schema_version: "1.0"
@@ -124,42 +126,109 @@ endpoint:
   chat:
     class: aiperf.endpoints.openai_chat:ChatEndpoint
     description: OpenAI Chat Completions endpoint. Supports multi-modal inputs (text, images, audio, video) and both streaming and non-streaming responses. Uses /v1/chat/completions path.
+    metadata:
+      endpoint_path: /v1/chat/completions
+      supports_streaming: true
+      produces_tokens: true
+      tokenizes_input: true
+      supports_audio: true
+      supports_images: true
+      supports_videos: true
+      metrics_title: LLM Metrics
 
   cohere_rankings:
     class: aiperf.endpoints.cohere_rankings:CohereRankingsEndpoint
     description: Cohere Rankings endpoint. Provides document ranking capabilities using Cohere's reranking API.
+    metadata:
+      endpoint_path: /v2/rerank
+      supports_streaming: false
+      produces_tokens: false
+      tokenizes_input: true
+      metrics_title: Ranking Metrics
 
   completions:
     class: aiperf.endpoints.openai_completions:CompletionsEndpoint
     description: OpenAI Completions endpoint. Supports text completions with streaming for legacy completion-based models. Uses /v1/completions path.
+    metadata:
+      endpoint_path: /v1/completions
+      supports_streaming: true
+      produces_tokens: true
+      tokenizes_input: true
+      metrics_title: LLM Metrics
 
   embeddings:
     class: aiperf.endpoints.openai_embeddings:EmbeddingsEndpoint
     description: OpenAI Embeddings endpoint. Generates vector embeddings for text inputs using embedding models. Uses /v1/embeddings path. Non-streaming only.
+    metadata:
+      endpoint_path: /v1/embeddings
+      supports_streaming: false
+      produces_tokens: false
+      tokenizes_input: true
+      metrics_title: Embeddings Metrics
 
   hf_tei_rankings:
     class: aiperf.endpoints.hf_tei_rankings:HFTeiRankingsEndpoint
     description: Hugging Face TEI (Text Embeddings Inference) Rankings endpoint. Provides ranking using TEI reranking models.
+    metadata:
+      endpoint_path: /rerank
+      supports_streaming: false
+      produces_tokens: false
+      tokenizes_input: true
+      metrics_title: Ranking Metrics
 
   huggingface_generate:
     class: aiperf.endpoints.huggingface_generate:HuggingFaceGenerateEndpoint
     description: Hugging Face TGI (Text Generation Inference) endpoint. Supports both streaming (/generate_stream) and non-streaming (/generate) text generation.
+    metadata:
+      endpoint_path: /generate
+      streaming_path: /generate_stream
+      supports_streaming: true
+      produces_tokens: true
+      tokenizes_input: true
+      metrics_title: LLM Metrics
 
   image_generation:
     class: aiperf.endpoints.openai_image_generation:ImageGenerationEndpoint
     description: OpenAI Image Generation endpoint. Generates images from text prompts using models like DALL-E. Supports streaming responses. Uses /v1/images/generations path.
+    metadata:
+      endpoint_path: /v1/images/generations
+      supports_streaming: true
+      produces_tokens: false
+      produces_images: true
+      tokenizes_input: true
+      metrics_title: Image Generation Metrics
 
   nim_rankings:
     class: aiperf.endpoints.nim_rankings:NIMRankingsEndpoint
     description: NVIDIA NIM Rankings endpoint. Processes ranking requests by taking a query and passages, returning relevance scores. Uses /v1/ranking path.
+    metadata:
+      endpoint_path: /v1/ranking
+      supports_streaming: false
+      produces_tokens: false
+      tokenizes_input: true
+      metrics_title: Rankings Metrics
 
   solido_rag:
     class: aiperf.endpoints.solido_rag:SolidoEndpoint
     description: Solido RAG endpoint. Custom endpoint for Solido RAG pipeline integration with retrieval-augmented generation.
+    metadata:
+      endpoint_path: /rag/api/prompt
+      supports_streaming: true
+      produces_tokens: true
+      tokenizes_input: true
+      metrics_title: SOLIDO RAG Metrics
 
   template:
     class: aiperf.endpoints.template_endpoint:TemplateEndpoint
     description: Template endpoint for creating custom endpoint implementations. Serves as a starting point for plugin developers to implement new API formats.
+    metadata:
+      supports_streaming: true
+      produces_tokens: true
+      tokenizes_input: true
+      supports_audio: true
+      supports_images: true
+      supports_videos: true
+      metrics_title: LLM Metrics
 
 # =============================================================================
 # Dataset Samplers
@@ -360,6 +429,9 @@ transport:
   http:
     class: aiperf.transports.aiohttp_transport:AioHttpTransport
     description: HTTP/1.1 transport implementation using aiohttp. Provides high-performance async HTTP client with connection pooling, SSE streaming support, automatic error handling, and custom TCP connector configuration.
+    metadata:
+      transport_type: http
+      url_schemes: [http, https]
 
 # =============================================================================
 # UI Components
@@ -520,40 +592,70 @@ zmq_proxy:
 plot:
   area:
     class: aiperf.plot.handlers.single_run_handlers:AreaHandler
-    description: Area chart handler for visualizing cumulative metrics over time with shaded regions.
+    description: Filled area showing token throughput distribution.
+    metadata:
+      display_name: Throughput Over Time
+      category: combined
 
   dual_axis:
     class: aiperf.plot.handlers.single_run_handlers:DualAxisHandler
-    description: Dual-axis plot handler for comparing two metrics with different scales on the same chart.
+    description: Two metrics on separate Y-axes (e.g., throughput + GPU util).
+    metadata:
+      display_name: Dual Metric Overlay
+      category: combined
 
   histogram:
     class: aiperf.plot.handlers.single_run_handlers:HistogramHandler
-    description: Histogram handler for showing metric value distributions across bins.
+    description: Bar chart of aggregated values per time window.
+    metadata:
+      display_name: Time Window Bars
+      category: aggregated
 
   pareto:
     class: aiperf.plot.handlers.multi_run_handlers:ParetoHandler
-    description: Pareto chart handler for multi-run comparison showing latency vs throughput trade-offs.
+    description: Trade-off frontier showing optimal configurations.
+    metadata:
+      display_name: Pareto Curve
+      category: comparison
 
   percentile_bands:
     class: aiperf.plot.handlers.single_run_handlers:PercentileBandsHandler
-    description: Percentile bands handler showing metric distributions with shaded percentile regions over time.
+    description: p50 line with p95/p99 shaded uncertainty bands for SLA monitoring.
+    metadata:
+      display_name: Percentile Bands Over Time
+      category: aggregated
 
   request_timeline:
     class: aiperf.plot.handlers.single_run_handlers:RequestTimelineHandler
-    description: Request timeline handler showing Gantt-style view of TTFT vs generation time per request.
+    description: Gantt-style view showing TTFT vs generation time per request.
+    metadata:
+      display_name: Request Phase Breakdown
+      category: per_request
 
   scatter:
     class: aiperf.plot.handlers.single_run_handlers:ScatterHandler
-    description: Scatter plot handler for visualizing individual data points for each request.
+    description: Individual data points for each request.
+    metadata:
+      display_name: Per-Request Scatter
+      category: per_request
 
   scatter_line:
     class: aiperf.plot.handlers.multi_run_handlers:ScatterLineHandler
-    description: Scatter line handler for multi-run comparison with connected data points.
+    description: Points connected by lines, grouped by configuration.
+    metadata:
+      display_name: Scatter + Trend Line
+      category: comparison
 
   scatter_with_percentiles:
     class: aiperf.plot.handlers.single_run_handlers:ScatterWithPercentilesHandler
-    description: Scatter plot with rolling percentile trend lines (p50/p95/p99) overlaid.
+    description: Per-request points with rolling p50/p95/p99 trend lines.
+    metadata:
+      display_name: Scatter with Trends
+      category: per_request
 
   timeslice:
     class: aiperf.plot.handlers.single_run_handlers:TimeSliceHandler
-    description: Timeslice handler for showing aggregated averages per time window.
+    description: Aggregated averages per time window (e.g., every 10s).
+    metadata:
+      display_name: Time Window Summary
+      category: aggregated

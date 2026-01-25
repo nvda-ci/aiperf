@@ -147,7 +147,7 @@ class TestPlotTypeHandlerRegistry:
     def test_common_plot_types_registered(self, plot_type: PlotType):
         """Test that common plot types are registered."""
         impls = plugins.list_types("plot")
-        registered_names = [impl.impl_name for impl in impls]
+        registered_names = [impl.type_name for impl in impls]
         assert plot_type.value in registered_names
 
     def test_get_class_returns_handler(self, mock_plot_generator):

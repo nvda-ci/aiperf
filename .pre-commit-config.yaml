@@ -70,6 +70,13 @@ repos:
         files: ^(src/aiperf/plugin/categories\.yaml|tools/generate_plugin_overloads\.py)$
         pass_filenames: false
         args: []
+      - id: generate-plugin-schemas
+        name: generate-plugin-schemas
+        entry: make generate-plugin-schemas
+        language: python
+        files: ^(src/aiperf/plugin/(categories|plugins)\.yaml|src/aiperf/plugin/schemas\.py)$
+        pass_filenames: false
+        args: []
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.8
     hooks:

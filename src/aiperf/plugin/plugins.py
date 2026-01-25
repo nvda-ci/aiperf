@@ -394,6 +394,7 @@ class CategoryMetadata(TypedDict, total=False):
     """Metadata for a plugin category from categories.yaml."""
 
     protocol: str
+    metadata_class: str
     enum: str
     description: str
     internal: bool

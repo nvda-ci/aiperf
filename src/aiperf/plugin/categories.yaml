@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=categories.schema.json
 
 # =============================================================================
 # AIPerf Plugin Category Definitions
@@ -7,6 +8,8 @@
 # This file defines all plugin categories supported by AIPerf.
 # Each category specifies:
 #   - protocol: Fully qualified class path (module:ClassName) for the Protocol/ABC
+#   - metadata_class: (optional) Class path for the metadata model (Pydantic/dataclass).
+#                     Schema is introspected dynamically from the class.
 #   - enum: The dynamic enum generated from registered plugins
 #   - description: Human-readable description of the category's purpose
 #   - internal: (optional) Boolean indicating this category is internal infrastructure,
@@ -95,6 +98,7 @@ custom_dataset_loader:
 
 endpoint:
   protocol: aiperf.common.protocols:EndpointProtocol
+  metadata_class: aiperf.common.models.metadata:EndpointMetadata
   enum: EndpointType
   description: |
     Endpoints define how to format requests and parse responses for different APIs.
@@ -103,6 +107,7 @@ endpoint:
 
 transport:
   protocol: aiperf.common.protocols:TransportProtocol
+  metadata_class: aiperf.common.models.metadata:TransportMetadata
   enum: TransportType
   description: |
     Transports handle the network layer for sending requests to inference servers.
@@ -218,6 +223,7 @@ zmq_proxy:
 
 plot:
   protocol: aiperf.plot.core.plot_type_handlers:PlotTypeHandlerProtocol
+  metadata_class: aiperf.plot.core.plot_specs:PlotTypeInfo
   enum: PlotType
   description: |
     Plot handlers create different types of visualizations from benchmark data.

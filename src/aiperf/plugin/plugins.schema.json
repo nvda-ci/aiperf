@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "PluginPackageInfo": {
+      "additionalProperties": true,
+      "description": "Metadata about the plugin package itself.",
+      "properties": {
+        "name": {
+          "description": "Package name.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Package version.",
+          "title": "Version",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable package description.",
+          "title": "Description",
+          "type": "string"
+        },
+        "author": {
+          "description": "Package author or organization.",
+          "title": "Author",
+          "type": "string"
+        },
+        "builtin": {
+          "default": false,
+          "description": "Whether this is a built-in plugin package.",
+          "title": "Builtin",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "description",
+        "author"
+      ],
+      "title": "PluginPackageInfo",
+      "type": "object"
+    }
+  },
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Shorthand class path"
+        },
+        {
+          "additionalProperties": true,
+          "description": "Full specification for a plugin type entry.",
+          "properties": {
+            "class": {
+              "description": "Fully qualified class path (module:ClassName).",
+              "title": "Class",
+              "type": "string"
+            },
+            "description": {
+              "description": "Human-readable description of this plugin type.",
+              "title": "Description",
+              "type": "string"
+            },
+            "priority": {
+              "default": 0,
+              "description": "Priority for conflict resolution (higher wins).",
+              "title": "Priority",
+              "type": "integer"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Category-specific metadata values, schema defined in categories.yaml.",
+              "title": "Metadata"
+            }
+          },
+          "required": [
+            "class",
+            "description"
+          ],
+          "title": "PluginTypeEntry",
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "description": "Root model for plugins.yaml file.\n\nPlugins files register concrete implementations for plugin categories.\nEach category section maps type names to either:\n- A full PluginTypeEntry with class, description, priority, metadata\n- A simple string class path for shorthand notation",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "description": "Schema version for the plugins file.",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "plugin": {
+      "$ref": "#/$defs/PluginPackageInfo",
+      "description": "Metadata about the plugin package."
+    }
+  },
+  "required": [
+    "plugin"
+  ],
+  "title": "PluginsFile",
+  "type": "object"
+}

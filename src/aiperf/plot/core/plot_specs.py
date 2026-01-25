@@ -3,7 +3,6 @@
 
 """Plot specifications for configurable plot generation."""
 
-from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
@@ -86,13 +85,14 @@ class DataSource(str, Enum):
     SERVER_METRICS_AGGREGATED = "server_metrics_aggregated"
 
 
-@dataclass
-class PlotTypeInfo:
+class PlotTypeInfo(AIPerfBaseModel):
     """Metadata for a plot type including display name and description."""
 
-    display_name: str
-    description: str
-    category: str
+    display_name: str = Field(description="Human-readable name for UI display.")
+    description: str = Field(description="Description of what this plot type shows.")
+    category: str = Field(
+        description="Plot category (per_request, aggregated, combined, comparison)."
+    )
 
 
 PLOT_TYPE_METADATA: dict[PlotType, PlotTypeInfo] = {
@@ -161,7 +161,7 @@ def get_plot_type_info(plot_type: PlotType) -> PlotTypeInfo:
     """
     return PLOT_TYPE_METADATA.get(
         plot_type,
-        PlotTypeInfo(plot_type.value, "", "other"),
+        PlotTypeInfo(display_name=plot_type.value, description="", category="other"),
     )
 
 

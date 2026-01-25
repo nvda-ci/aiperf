@@ -1,0 +1,60 @@
+{
+  "additionalProperties": {
+    "additionalProperties": true,
+    "description": "Specification for a plugin category.",
+    "properties": {
+      "protocol": {
+        "description": "Fully qualified class path (module:ClassName) for the Protocol/ABC.",
+        "title": "Protocol",
+        "type": "string"
+      },
+      "metadata_class": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Class path for the metadata model. Schema is introspected dynamically.",
+        "title": "Metadata Class"
+      },
+      "enum": {
+        "description": "Name of the dynamic enum generated from registered plugins.",
+        "title": "Enum",
+        "type": "string"
+      },
+      "description": {
+        "description": "Human-readable description of the category's purpose.",
+        "title": "Description",
+        "type": "string"
+      },
+      "internal": {
+        "default": false,
+        "description": "Whether this category is internal infrastructure, not user-facing.",
+        "title": "Internal",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "protocol",
+      "enum",
+      "description"
+    ],
+    "title": "CategorySpec",
+    "type": "object"
+  },
+  "description": "Root model for categories.yaml file.\n\nCategories define plugin extension points with their protocols, enums,\nand optional metadata schemas.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "description": "Schema version for the categories file.",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "CategoriesFile",
+  "type": "object"
+}

@@ -22,7 +22,7 @@
 		test-integration test-integration-ci test-integration-verbose test-integration-ci-macos \
 		test-component-integration test-component-integration-ci test-component-integration-verbose \
 		generate-cli-docs generate-env-vars-docs generate-plugin-enums \
-		generate-plugin-overloads check-plugin-overloads \
+		generate-plugin-overloads check-plugin-overloads generate-plugin-schemas \
 		test-stress stress-tests internal-help help
 
 
@@ -260,3 +260,6 @@ generate-plugin-overloads: #? generate the get_class() overloads in plugins.py.
 
 check-plugin-overloads: #? check if the get_class() overloads are up-to-date.
 	$(activate_venv) && python tools/generate_plugin_overloads.py --check
+
+generate-plugin-schemas: #? generate JSON schemas for categories.yaml and plugins.yaml.
+	$(activate_venv) && python -m aiperf.plugin.schemas src/aiperf/plugin
