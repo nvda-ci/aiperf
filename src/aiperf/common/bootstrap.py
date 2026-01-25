@@ -121,23 +121,6 @@ def bootstrap_and_run_service(
                 f"Plugin system initialization failed. This is a critical error. {e!r}"
             ) from e
 
-        # 2. Load configured plugins (if any in user_config)
-        try:
-            from aiperf.common.plugin_loader import initialize_plugins
-
-            plugin_loader = initialize_plugins(
-                user_config.model_dump() if user_config else {}
-            )
-            loaded_plugins = plugin_loader.get_loaded_plugins()
-
-            if loaded_plugins:
-                logger.info(f"Loaded {len(loaded_plugins)} configured plugin(s)")
-
-        except Exception as e:
-            # Plugin loading is optional - warn but continue
-            logger.warning(f"Failed to load configured plugins: {e!r}")
-            # Continue anyway - plugins are optional
-
         logger.info("Plugin system initialized successfully")
 
         # Load and apply custom GPU metrics in child process

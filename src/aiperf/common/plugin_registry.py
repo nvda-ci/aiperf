@@ -14,37 +14,41 @@ This module provides a modern, extensible plugin system for AIPerf that supports
 
 Basic Usage
 -----------
-    from aiperf.common import plugin_registry
+```python
+from aiperf.common import plugin_registry
 
-    # Get type class by name
-    EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-    endpoint = EndpointClass(model_endpoint=config)
+# Get type class by name
+EndpointClass = plugin_registry.get_class('endpoint', 'openai')
+endpoint = EndpointClass(model_endpoint=config)
 
-    # Or by fully qualified class path
-    EndpointClass = plugin_registry.get_class(
-        'endpoint',
-        'aiperf.endpoints.openai:OpenAIEndpoint'
-    )
+# Or by fully qualified class path
+EndpointClass = plugin_registry.get_class(
+    'endpoint',
+    'aiperf.endpoints.openai:OpenAIEndpoint'
+)
 
-    # List available types
-    for impl in plugin_registry.list_types('endpoint'):
-        print(f"{impl.type_name}: {impl.description}")
+# List available types
+for impl in plugin_registry.list_types('endpoint'):
+    print(f"{impl.type_name}: {impl.description}")
 
-    # Get class and instantiate
-    EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-    endpoint = EndpointClass(model_endpoint=config)
+# Get class and instantiate
+EndpointClass = plugin_registry.get_class('endpoint', 'openai')
+endpoint = EndpointClass(model_endpoint=config)
+```
 
 Advanced Usage
 --------------
-    # Conditional loading based on metadata
-    for impl in plugin_registry.list_types('endpoint'):
-        if impl.priority > 50 and not impl.is_builtin:
-            EndpointClass = impl.load()
-            endpoint = EndpointClass(...)
+```python
+# Conditional loading based on metadata
+for impl in plugin_registry.list_types('endpoint'):
+    if impl.priority > 50 and not impl.is_builtin:
+        EndpointClass = impl.load()
+        endpoint = EndpointClass(...)
 
-    # Testing with isolated registry
-    plugin_registry.reset()
-    plugin_registry.load_registry(test_registry_path)
+# Testing with isolated registry
+plugin_registry.reset()
+plugin_registry.load_registry(test_registry_path)
+```
 
 Priority System
 ---------------
@@ -58,6 +62,7 @@ Conflict Resolution:
 
 YAML Schema
 -----------
+```yaml
 schema_version: "1.0"
 
 plugin:
@@ -76,6 +81,7 @@ timing_strategy:
   custom_strategy:
     class: my_plugin.timing:CustomStrategy
     description: Custom timing strategy
+```
 """
 
 from __future__ import annotations
@@ -83,13 +89,10 @@ from __future__ import annotations
 import ast
 import importlib
 import importlib.util
-import threading
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any, Final, TypedDict
 from weakref import WeakKeyDictionary
 
 import yaml
@@ -99,16 +102,6 @@ from aiperf.common.singleton import Singleton
 
 if TYPE_CHECKING:
     from types import TraversableType
-
-# ==============================================================================
-# Type Aliases for Clarity
-# ==============================================================================
-
-CategoryName: TypeAlias = str
-TypeName: TypeAlias = str
-ClassPath: TypeAlias = str
-PackageName: TypeAlias = str
-Priority: TypeAlias = int
 
 __all__ = [
     # Main API
@@ -135,9 +128,6 @@ __all__ = [
     # Exceptions
     "PluginError",
     "TypeNotFoundError",
-    "TypeLoadError",
-    "TypeConflictError",
-    "SchemaVersionError",
 ]
 
 _logger = AIPerfLogger(__name__)
@@ -266,129 +256,6 @@ class TypeNotFoundError(PluginError):
         )
 
 
-class TypeLoadError(PluginError):
-    """Failed to load type.
-
-    This exception preserves the original exception type (ImportError or AttributeError)
-    in the `cause` attribute for backward compatibility. Tests that check exception
-    types should check isinstance(e.cause, ImportError) or isinstance(e, TypeLoadError).
-
-    Attributes:
-        class_path: Fully qualified class path
-        category: Category name
-        type_name: Type name
-        cause: Original exception (ImportError or AttributeError)
-    """
-
-    def __init__(
-        self,
-        class_path: str,
-        category: str,
-        type_name: str,
-        cause: Exception,
-    ) -> None:
-        """Initialize with rich error message.
-
-        Args:
-            class_path: Fully qualified class path
-            category: Category name
-            type_name: Type name
-            cause: Original exception that caused the load failure
-        """
-        self.class_path = class_path
-        self.category = category
-        self.type_name = type_name
-        self.cause = cause
-
-        # Construct rich error message
-        # Use specific terminology for backward compatibility with existing tests
-        if isinstance(cause, ImportError):
-            message = (
-                f"Failed to import module for {category}:{type_name} from '{class_path}'\n"
-                f"Reason: {cause!r}\n"
-                f"Tip: Check that the module is installed and importable"
-            )
-        elif isinstance(cause, AttributeError):
-            # Extract class name from class_path for error message
-            _, class_name = (
-                class_path.rsplit(":", 1) if ":" in class_path else ("", "Unknown")
-            )
-            message = (
-                f"Class '{class_name}' not found for {category}:{type_name} from '{class_path}'\n"
-                f"Reason: {cause!r}\n"
-                f"Tip: Check that the class name is spelled correctly and exported from the module"
-            )
-        else:
-            message = (
-                f"Failed to load {category}:{type_name} from '{class_path}'\n"
-                f"Reason: {cause!r}"
-            )
-
-        super().__init__(message)
-
-
-class TypeConflictError(PluginError):
-    """Multiple plugins provide the same type.
-
-    Attributes:
-        category: Category name
-        type_name: Type name
-        existing_package: Name of existing package
-        new_package: Name of new package
-    """
-
-    def __init__(
-        self,
-        category: str,
-        type_name: str,
-        existing_package: str,
-        new_package: str,
-    ) -> None:
-        """Initialize with rich error message.
-
-        Args:
-            category: Category name
-            type_name: Type name
-            existing_package: Name of package that registered first
-            new_package: Name of package attempting to register
-        """
-        self.category = category
-        self.type_name = type_name
-        self.existing_package = existing_package
-        self.new_package = new_package
-
-        super().__init__(
-            f"Conflict for {category}:{type_name}\n"
-            f"Both '{existing_package}' and '{new_package}' provide this type."
-        )
-
-
-class SchemaVersionError(PluginError):
-    """Incompatible schema version in registry manifest.
-
-    Attributes:
-        schema_version: The unsupported schema version
-        supported_versions: List of supported schema versions
-    """
-
-    def __init__(self, schema_version: str, supported_versions: Sequence[str]) -> None:
-        """Initialize with rich error message.
-
-        Args:
-            schema_version: The incompatible schema version
-            supported_versions: List of supported schema versions
-        """
-        self.schema_version = schema_version
-        self.supported_versions = list(supported_versions)
-
-        supported_str = ", ".join(f"'{v}'" for v in supported_versions)
-        super().__init__(
-            f"Unsupported registry schema version: '{schema_version}'\n"
-            f"Supported versions: {supported_str}\n"
-            f"Tip: Update your package registry to use a supported schema version"
-        )
-
-
 # ==============================================================================
 # Implementation Classes
 # ==============================================================================
@@ -401,19 +268,6 @@ class TypeEntry:
     This class represents a type that hasn't been loaded yet.
     The actual class is only imported when load() is called, enabling fast
     startup and minimal memory usage.
-
-    Architecture:
-    ┌──────────────────────────────┐
-    │ TypeEntry                     │
-    │ ────────────────             │
-    │ • type_name: str             │
-    │ • class_path: str            │
-    │ • priority: int              │
-    │ • description: str           │
-    │ • loaded_class: type | None  │
-    │                              │
-    │ load() → class (lazy!)       │
-    └──────────────────────────────┘
 
     Attributes:
         category: Category name (e.g., 'endpoint', 'timing_strategy')
@@ -464,7 +318,8 @@ class TypeEntry:
 
         Raises:
             ValueError: If class_path format is invalid
-            TypeLoadError: If module or class cannot be imported
+            ImportError: If module cannot be imported
+            AttributeError: If class not found in module
 
         Example:
             >>> lazy_type = TypeEntry(
@@ -495,7 +350,7 @@ class TypeEntry:
 
         # Import and cache the class
         try:
-            cls = _import_class_cached(module_path, class_name)
+            cls = _import_class(module_path, class_name)
 
             # Store reverse mapping for lookups (avoids mutating the class itself)
             # This allows finding the registered name for a class
@@ -672,10 +527,10 @@ class PluginRegistry(Singleton):
         Example:
             # Load built-in registry
             >>> registry = PluginRegistry()
-            >>> registry.load_builtins()
+            >>> registry.load_registry(builtins_path)
 
             # Load custom registry for testing
-            >>> registry.load_builtins("/path/to/test_registry.yaml")
+            >>> registry.load_registry("/path/to/test_registry.yaml")
         """
         # Load YAML content
         yaml_content = self._read_registry_file(registry_path)
@@ -1405,7 +1260,6 @@ def _get_builtins_path() -> Path | TraversableType:
 
 # Create singleton instance at module load
 _registry = PluginRegistry()
-_registry_lock = threading.Lock()
 
 # Reverse mapping from class to registered name (avoids mutating classes)
 # Uses WeakKeyDictionary so classes can be garbage collected when no longer referenced
@@ -1514,13 +1368,13 @@ def find_registered_name(category: str, cls: type) -> str | None:
 def load_registry(registry_path: str | Path) -> None:
     """Load built-in registry from YAML file.
 
-    See PluginRegistry.load_builtins() for full documentation.
+    See PluginRegistry.load_registry() for full documentation.
 
     Args:
         registry_path: Path to registry.yaml
 
     Example:
-        >>> plugin_registry.load_builtins("/path/to/custom.yaml")
+        >>> plugin_registry.load_registry("/path/to/custom.yaml")
     """
     _registry.load_registry(registry_path)
 
@@ -1587,18 +1441,14 @@ def reset() -> None:
     This is primarily useful for testing scenarios where you need an isolated
     registry.
 
-    Thread Safety:
-        This function is thread-safe and uses a lock to ensure atomic reset.
-
     Example:
         >>> plugin_registry.reset()
-        >>> plugin_registry.load_builtins(test_registry_path)
+        >>> plugin_registry.load_registry(test_registry_path)
     """
     global _registry
-    with _registry_lock:
-        PluginRegistry._reset_singleton()
-        _registry = PluginRegistry()
-        _class_to_name.clear()
+    PluginRegistry._reset_singleton()
+    _registry = PluginRegistry()
+    _class_to_name.clear()
     _logger.debug("Registry reset")
 
 
@@ -1676,7 +1526,7 @@ def register(
         class_path=f"{cls.__module__}:{cls.__name__}",
         priority=priority,
         description=cls.__doc__ or "",
-        metadata={"name": "aiperf", "builtin": is_builtin},
+        metadata=PackageMetadata(name="aiperf", builtin=is_builtin),
         loaded_class=cls,
         is_builtin=is_builtin,
     )
@@ -1799,38 +1649,22 @@ def detect_type_from_url(category: str, url: str) -> str:
 # ==============================================================================
 
 
-@cache
-def _import_class_cached(module_path: str, class_name: str) -> type:
-    """Import class with LRU caching for optimal performance.
+def _import_class(module_path: str, class_name: str) -> type:
+    """Import a class from a module path.
 
-    This function caches imported classes to avoid redundant imports when
-    the same class is loaded multiple times. The unbounded cache (maxsize=None)
-    is safe because:
-    1. The number of unique class paths is bounded by package count
-    2. Class objects are lightweight references (not instances)
-    3. Classes persist in sys.modules anyway
-
-    Performance Benefits:
-    - Avoids repeated module imports and attribute lookups
-    - Critical for test suites that reload plugins frequently
-    - Negligible memory overhead (typically < 100 entries)
+    Note: importlib.import_module already caches modules in sys.modules,
+    so no additional caching is needed here.
 
     Args:
         module_path: Module path (e.g., 'aiperf.endpoints.openai')
         class_name: Class name (e.g., 'OpenAIEndpoint')
 
     Returns:
-        Imported class (not instantiated)
+        The class object (not instantiated)
 
     Raises:
         ImportError: If module cannot be imported
         AttributeError: If class not found in module
-
-    Example:
-        >>> EndpointClass = _import_class_cached('aiperf.endpoints.openai', 'OpenAIEndpoint')
-        >>> # Subsequent calls return cached class instantly
-        >>> SameClass = _import_class_cached('aiperf.endpoints.openai', 'OpenAIEndpoint')
-        >>> assert EndpointClass is SameClass
     """
     module = importlib.import_module(module_path)
     return getattr(module, class_name)
