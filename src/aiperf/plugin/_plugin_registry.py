@@ -15,7 +15,7 @@ from aiperf.plugin.constants import (
     DEFAULT_ENTRY_POINT_GROUP,
     SUPPORTED_SCHEMA_VERSIONS,
 )
-from aiperf.plugin.schemas import PluginsFile
+from aiperf.plugin.schema import PluginsFile
 from aiperf.plugin.types import (
     PackageMetadata,
     TypeEntry,

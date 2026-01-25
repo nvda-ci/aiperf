@@ -7,6 +7,8 @@ enabling JSON Schema generation for IDE support and validation.
 
 To generate schema files:
     python tools/generate_plugin_schemas.py [output_dir]
+
+Default output directory: src/aiperf/plugin/schema/
 """
 
 from __future__ import annotations
@@ -49,14 +51,14 @@ class CategoriesFile(BaseModel):
     and optional metadata schemas.
     """
 
+    # Categories are stored as additional fields beyond schema_version
+    # Using model_extra to capture them
+    model_config = ConfigDict(extra="allow")
+
     schema_version: str = Field(
         default="1.0",
         description="Schema version for the categories file.",
     )
-
-    # Categories are stored as additional fields beyond schema_version
-    # Using model_extra to capture them
-    model_config = {"extra": "allow"}
 
     @classmethod
     def model_json_schema(cls, **kwargs) -> dict[str, Any]:

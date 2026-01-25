@@ -34,6 +34,7 @@ from ruamel.yaml import YAML
 # Paths
 REPO_ROOT = Path(__file__).parent.parent
 PLUGIN_DIR = REPO_ROOT / "src" / "aiperf" / "plugin"
+SCHEMA_DIR = PLUGIN_DIR / "schema"
 CATEGORIES_YAML = PLUGIN_DIR / "categories.yaml"
 
 yaml_safe = YAML(typ="safe")
@@ -158,7 +159,7 @@ def load_categories() -> dict[str, dict[str, Any]]:
 
 def generate_categories_schema() -> dict[str, Any]:
     """Generate JSON Schema for categories.yaml."""
-    from aiperf.plugin.schemas import CategoriesFile
+    from aiperf.plugin.schema import CategoriesFile
 
     return CategoriesFile.model_json_schema()
 
@@ -169,7 +170,7 @@ def generate_plugins_schema() -> dict[str, Any]:
     Reads categories.yaml to generate specific properties for each category,
     with metadata schemas introspected from the metadata_class if defined.
     """
-    from aiperf.plugin.schemas import PluginsFile, PluginTypeEntry
+    from aiperf.plugin.schema import PluginsFile, PluginTypeEntry
 
     base_schema = PluginsFile.model_json_schema()
     categories = load_categories()
@@ -271,7 +272,7 @@ def normalize_content(content: str) -> str:
     return "\n".join(line.rstrip() for line in content.strip().split("\n"))
 
 
-def write_schema_files(output_dir: str | Path = PLUGIN_DIR) -> int:
+def write_schema_files(output_dir: str | Path = SCHEMA_DIR) -> int:
     """Write JSON Schema files to the specified directory.
 
     Args:
@@ -327,7 +328,7 @@ def write_schema_files(output_dir: str | Path = PLUGIN_DIR) -> int:
 
 
 def main() -> int:
-    output_dir = sys.argv[1] if len(sys.argv) > 1 else PLUGIN_DIR
+    output_dir = sys.argv[1] if len(sys.argv) > 1 else SCHEMA_DIR
     files_written = write_schema_files(output_dir)
 
     if files_written == 0:
