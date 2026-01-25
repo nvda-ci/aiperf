@@ -9,12 +9,15 @@ import pytest
 from aiperf.cli_commands.plugins_cli import (
     ensure_registry_loaded,
     get_all_categories,
-    plugins,
     show_category_types,
     show_overview,
     show_packages,
     show_type_details,
 )
+from aiperf.cli_commands.plugins_cli import (
+    plugins as plugins_cmd,
+)
+from aiperf.plugin import plugins as plugin_registry
 
 
 @pytest.fixture
@@ -27,8 +30,8 @@ def mock_console() -> MagicMock:
 @pytest.fixture(autouse=True)
 def setup_registry() -> None:
     """Setup registry for each test."""
-    plugins.reset()
-    _ = plugins.list_categories()
+    plugin_registry.reset()
+    _ = plugin_registry.list_categories()
 
 
 class TestHelperFunctions:
@@ -42,7 +45,7 @@ class TestHelperFunctions:
 
     def test_ensure_registry_loaded(self) -> None:
         """Test ensuring registry is loaded."""
-        plugins.reset()
+        plugin_registry.reset()
         ensure_registry_loaded()
         assert len(get_all_categories()) > 0
 
@@ -80,7 +83,7 @@ class TestShowTypeDetails:
         """Test showing details for valid type."""
         categories = get_all_categories()
         if categories:
-            types = plugins.list_types(categories[0])
+            types = plugin_registry.list_types(categories[0])
             if types:
                 show_type_details(categories[0], types[0].type_name)
                 assert mock_console.print.call_count >= 1
@@ -108,7 +111,7 @@ class TestMainCommand:
 
     def test_no_args_shows_overview(self, mock_console: MagicMock) -> None:
         """Test that no args shows overview."""
-        plugins(category=None, type_name=None, packages=False, validate=False)
+        plugins_cmd(category=None, type_name=None, packages=False, validate=False)
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("categor" in c.lower() for c in calls)
 
@@ -116,7 +119,7 @@ class TestMainCommand:
         """Test that category arg shows types."""
         categories = get_all_categories()
         if categories:
-            plugins(
+            plugins_cmd(
                 category=categories[0], type_name=None, packages=False, validate=False
             )
             assert mock_console.print.call_count >= 2
@@ -125,9 +128,9 @@ class TestMainCommand:
         """Test that category+type shows details."""
         categories = get_all_categories()
         if categories:
-            types = plugins.list_types(categories[0])
+            types = plugin_registry.list_types(categories[0])
             if types:
-                plugins(
+                plugins_cmd(
                     category=categories[0],
                     type_name=types[0].type_name,
                     packages=False,
@@ -137,7 +140,7 @@ class TestMainCommand:
 
     def test_packages_flag(self, mock_console: MagicMock) -> None:
         """Test --packages flag prints something."""
-        plugins(category=None, type_name=None, packages=True, validate=False)
+        plugins_cmd(category=None, type_name=None, packages=True, validate=False)
         # Should print at least once (either table or "No plugins found")
         assert mock_console.print.call_count >= 1
 
@@ -148,23 +151,23 @@ class TestIntegration:
     def test_full_workflow(self, mock_console: MagicMock) -> None:
         """Test exploring plugins -> category -> type."""
         # 1. Show overview
-        plugins(category=None, type_name=None, packages=False, validate=False)
+        plugins_cmd(category=None, type_name=None, packages=False, validate=False)
         assert mock_console.print.call_count >= 2
         mock_console.reset_mock()
 
         # 2. Pick a category
         categories = get_all_categories()
         if categories:
-            plugins(
+            plugins_cmd(
                 category=categories[0], type_name=None, packages=False, validate=False
             )
             assert mock_console.print.call_count >= 2
             mock_console.reset_mock()
 
             # 3. Pick a type
-            types = plugins.list_types(categories[0])
+            types = plugin_registry.list_types(categories[0])
             if types:
-                plugins(
+                plugins_cmd(
                     category=categories[0],
                     type_name=types[0].type_name,
                     packages=False,

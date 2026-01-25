@@ -5,13 +5,6 @@
 These models define the structure of categories.yaml and plugins.yaml files,
 enabling JSON Schema generation for IDE support and validation.
 
-Usage:
-    # Generate JSON Schema
-    from aiperf.plugin.schemas import CategoriesFile, PluginsFile
-
-    categories_schema = CategoriesFile.model_json_schema()
-    plugins_schema = PluginsFile.model_json_schema()
-
 To generate schema files:
     python tools/generate_plugin_schemas.py [output_dir]
 """
@@ -20,16 +13,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field
-
-from aiperf.common.models import AIPerfBaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # Categories YAML Schema
 # =============================================================================
 
 
-class CategorySpec(AIPerfBaseModel):
+class CategorySpec(BaseModel):
     """Specification for a plugin category."""
 
     protocol: str = Field(
@@ -51,7 +42,7 @@ class CategorySpec(AIPerfBaseModel):
     )
 
 
-class CategoriesFile(AIPerfBaseModel):
+class CategoriesFile(BaseModel):
     """Root model for categories.yaml file.
 
     Categories define plugin extension points with their protocols, enums,
@@ -87,28 +78,33 @@ class CategoriesFile(AIPerfBaseModel):
 # =============================================================================
 
 
-class PluginPackageInfo(AIPerfBaseModel):
+class PluginPackageInfo(BaseModel):
     """Metadata about the plugin package itself."""
 
     name: str = Field(description="Package name.")
-    version: str = Field(description="Package version.")
-    description: str = Field(description="Human-readable package description.")
-    author: str = Field(description="Package author or organization.")
+    version: str = Field(default="", description="Package version.")
+    description: str = Field(
+        default="", description="Human-readable package description."
+    )
+    author: str = Field(default="", description="Package author or organization.")
     builtin: bool = Field(
         default=False,
         description="Whether this is a built-in plugin package.",
     )
 
 
-class PluginTypeEntry(AIPerfBaseModel):
+class PluginTypeEntry(BaseModel):
     """Full specification for a plugin type entry."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     class_: str = Field(
         alias="class",
         description="Fully qualified class path (module:ClassName).",
     )
     description: str = Field(
-        description="Human-readable description of this plugin type."
+        default="",
+        description="Human-readable description of this plugin type.",
     )
     priority: int = Field(
         default=0,
@@ -119,10 +115,8 @@ class PluginTypeEntry(AIPerfBaseModel):
         description="Category-specific metadata values, schema defined in categories.yaml.",
     )
 
-    model_config = {"populate_by_name": True}
 
-
-class PluginsFile(AIPerfBaseModel):
+class PluginsFile(BaseModel):
     """Root model for plugins.yaml file.
 
     Plugins files register concrete implementations for plugin categories.
@@ -131,6 +125,9 @@ class PluginsFile(AIPerfBaseModel):
     - A simple string class path for shorthand notation
     """
 
+    # Plugin categories are stored as additional fields
+    model_config = ConfigDict(extra="allow")
+
     schema_version: str = Field(
         default="1.0",
         description="Schema version for the plugins file.",
@@ -138,9 +135,6 @@ class PluginsFile(AIPerfBaseModel):
     plugin: PluginPackageInfo = Field(
         description="Metadata about the plugin package.",
     )
-
-    # Plugin categories are stored as additional fields
-    model_config = {"extra": "allow"}
 
     @classmethod
     def model_json_schema(cls, **kwargs) -> dict[str, Any]:

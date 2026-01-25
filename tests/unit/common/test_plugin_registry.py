@@ -454,7 +454,9 @@ class TestPluginRegistryBasics:
         mock_ep.name = "test-plugin"
         mock_ep.load.return_value = str(temp_registry_file)
 
-        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
+        with patch(
+            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        ):
             registry.discover_plugins()
 
         assert "test-plugin" in registry._loaded_plugins
@@ -466,7 +468,9 @@ class TestPluginRegistryBasics:
         mock_ep.name = "bad-plugin"
         mock_ep.load.side_effect = ImportError("Bad plugin")
 
-        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
+        with patch(
+            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        ):
             # Should not raise
             registry.discover_plugins()
 
@@ -481,7 +485,9 @@ class TestPluginRegistryBasics:
         mock_ep.name = "invalid-plugin"
         mock_ep.load.return_value = 12345  # Invalid - not str or Path
 
-        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
+        with patch(
+            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        ):
             registry.discover_plugins()
 
         assert "invalid-plugin" not in registry._loaded_plugins
@@ -1235,7 +1241,8 @@ class TestSchemaValidation:
             yaml.dump(yaml_content, f)
             path = Path(f.name)
 
-        with pytest.raises(ValueError, match="schema_version must be string"):
+        # Pydantic validates schema_version as string
+        with pytest.raises(ValueError, match="Invalid plugins.yaml schema"):
             registry.load_registry(path)
 
     def test_empty_yaml(self, registry):
@@ -1880,7 +1887,9 @@ class TestEdgeCases:
         mock_ep.name = "path-plugin"
         mock_ep.load.return_value = path  # Return Path object
 
-        with patch("aiperf.plugin.plugins.entry_points", return_value=[mock_ep]):
+        with patch(
+            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        ):
             registry.discover_plugins()
 
         assert "path-plugin" in registry._loaded_plugins

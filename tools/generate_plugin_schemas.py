@@ -177,6 +177,9 @@ def generate_plugins_schema() -> dict[str, Any]:
     # Base plugin type entry schema (without metadata)
     plugin_entry_schema = PluginTypeEntry.model_json_schema()
 
+    # Collect all $defs from metadata schemas to hoist to root level
+    all_defs: dict[str, Any] = dict(base_schema.get("$defs", {}))
+
     # Build properties for each category
     category_properties: dict[str, Any] = {}
 
@@ -194,6 +197,10 @@ def generate_plugins_schema() -> dict[str, Any]:
 
         # Build the plugin entry schema for this category
         if metadata_schema:
+            # Hoist any $defs from the metadata schema to root level
+            if "$defs" in metadata_schema:
+                all_defs.update(metadata_schema.pop("$defs"))
+
             # Custom entry schema with typed metadata
             entry_schema = {
                 "additionalProperties": True,
@@ -238,7 +245,7 @@ def generate_plugins_schema() -> dict[str, Any]:
 
     # Build final schema with explicit category properties
     schema = {
-        "$defs": base_schema.get("$defs", {}),
+        "$defs": all_defs,
         "description": base_schema.get("description", ""),
         "properties": {
             "schema_version": base_schema["properties"]["schema_version"],

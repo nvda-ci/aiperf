@@ -3,23 +3,23 @@
 from importlib.abc import Traversable
 from importlib.metadata import entry_points
 from pathlib import Path
+from typing import Any
 from weakref import WeakKeyDictionary
 
+from pydantic import ValidationError
 from ruamel.yaml import YAML
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.singleton import Singleton
 from aiperf.plugin.constants import (
     DEFAULT_ENTRY_POINT_GROUP,
-    DEFAULT_SCHEMA_VERSION,
     SUPPORTED_SCHEMA_VERSIONS,
 )
+from aiperf.plugin.schemas import PluginsFile
 from aiperf.plugin.types import (
-    ManifestData,
     PackageMetadata,
     TypeEntry,
     TypeNotFoundError,
-    TypeSpec,
 )
 
 _logger = AIPerfLogger(__name__)
@@ -73,29 +73,44 @@ class PluginRegistry(Singleton):
         yaml_content = self._read_registry_file(registry_path)
 
         # Parse YAML
-        data: ManifestData = _yaml.load(yaml_content)
+        raw_data = _yaml.load(yaml_content)
 
-        if not data:
+        if not raw_data:
             _logger.warning(f"Empty registry YAML: {registry_path}")
             return
 
-        # Validate schema
-        self._validate_manifest_schema(data)
+        # Validate and parse using Pydantic model
+        try:
+            plugins_file = PluginsFile.model_validate(raw_data)
+        except ValidationError as e:
+            raise ValueError(
+                f"Invalid plugins.yaml schema at {registry_path}:\n{e}"
+            ) from e
 
-        # Extract plugin info
-        plugin_info = data.get("plugin", {})
-        package_name = plugin_info.get("name", "aiperf")
-        is_builtin = plugin_info.get("builtin", True)
+        # Check schema version
+        if plugins_file.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+            _logger.warning(
+                f"Unknown schema version {plugins_file.schema_version}, "
+                f"supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
+            )
+
+        # Extract plugin info from validated model
+        package_name = plugins_file.plugin.name
+        is_builtin = plugins_file.plugin.builtin
 
         _logger.info(
-            f"Loading registry: {package_name} (builtin={is_builtin}, schema={data.get('schema_version', '1.0')})"
+            f"Loading registry: {package_name} (builtin={is_builtin}, schema={plugins_file.schema_version})"
         )
 
-        # Register types from manifest
-        self._register_types_from_manifest(package_name, data, is_builtin)
+        # Register types from manifest (use model_extra for category data)
+        self._register_types_from_manifest(package_name, plugins_file, is_builtin)
 
+        # Count categories (fields in model_extra)
+        category_count = (
+            len(plugins_file.model_extra) if plugins_file.model_extra else 0
+        )
         _logger.info(
-            f"Loaded registry: {package_name} with {len([k for k in data if k not in ('plugin', 'schema_version')])} categories"
+            f"Loaded registry: {package_name} with {category_count} categories"
         )
 
     def discover_plugins(
@@ -298,46 +313,17 @@ class PluginRegistry(Singleton):
                 f"Tip: Check file permissions and disk status"
             ) from e
 
-    def _validate_manifest_schema(self, manifest_data: ManifestData) -> None:
-        """Validate manifest structure and schema version."""
-        # Validate schema_version field
-        schema_version = manifest_data.get("schema_version")
-
-        # Handle missing schema version
-        if not schema_version:
-            _logger.warning(
-                f"Missing schema_version in manifest, assuming {DEFAULT_SCHEMA_VERSION}"
-            )
-            return
-
-        # Validate type
-        if not isinstance(schema_version, str):
-            raise ValueError(
-                f"schema_version must be string, got {type(schema_version).__name__}"
-            )
-
-        # Check for supported versions
-        if schema_version in SUPPORTED_SCHEMA_VERSIONS:
-            _logger.debug(lambda: f"Using schema version {schema_version}")
-        else:
-            _logger.warning(
-                f"Unknown schema version {schema_version}, supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
-            )
-
     def _register_types_from_manifest(
-        self, package_name: str, manifest_data: ManifestData, is_builtin: bool
+        self, package_name: str, plugins_file: PluginsFile, is_builtin: bool
     ) -> None:
         """Register types from manifest with conflict resolution."""
         # Load package metadata from installed package
         package_metadata = self._load_package_metadata(package_name, is_builtin)
         self._loaded_plugins[package_name] = package_metadata
 
-        # Process each category
-        for category_name, types_dict in manifest_data.items():
-            # Skip metadata sections
-            if category_name in ("plugin", "schema_version"):
-                continue
-
+        # Process each category from model_extra (where Pydantic stores extra fields)
+        categories = plugins_file.model_extra or {}
+        for category_name, types_dict in categories.items():
             if not isinstance(types_dict, dict):
                 _logger.warning(
                     f"Invalid category section type for {category_name}: {type(types_dict).__name__}"
@@ -363,7 +349,7 @@ class PluginRegistry(Singleton):
         self,
         category_name: str,
         type_name: str,
-        type_data: TypeSpec | str,
+        type_data: dict[str, Any] | str,
         package_name: str,
         package_metadata: PackageMetadata,
         is_builtin: bool,
@@ -372,11 +358,11 @@ class PluginRegistry(Singleton):
         # Normalize type data
         match type_data:
             case dict():
-                # Full format with metadata (TypeSpec is a TypedDict, which is a dict at runtime)
-                spec = type_data  # type: ignore[assignment]
+                # Full format with class, description, priority, metadata
+                spec = type_data
             case str():
                 # Simple format: "module:Class"
-                spec: TypeSpec = {"class": type_data}
+                spec = {"class": type_data}
             case _:
                 _logger.warning(
                     f"Invalid type format for {category_name}:{type_name}: {type(type_data).__name__}"
@@ -389,11 +375,8 @@ class PluginRegistry(Singleton):
             _logger.warning(f"Missing class path for {category_name}:{type_name}")
             return
 
-        # Extract optional fields
-        priority = spec.get("priority")
-        if priority is None:
-            priority = 0  # Default priority
-
+        # Extract optional fields with defaults
+        priority = spec.get("priority", 0)
         description = spec.get("description", "")
 
         # Create lazy type
