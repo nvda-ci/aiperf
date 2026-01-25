@@ -56,9 +56,9 @@ repos:
         files: ^src/aiperf/common/environment\.py$
         pass_filenames: false
         args: []
-      - id: generate-enum-stubs
-        name: generate-enum-stubs
-        entry: python tools/generate_enum_stubs.py --check
+      - id: generate-plugin-enums
+        name: generate-plugin-enums
+        entry: python tools/generate_plugin_enums.py --check
         language: python
         files: ^(src/aiperf/plugin/categories\.yaml|src/aiperf/registry\.yaml)$
         pass_filenames: false
