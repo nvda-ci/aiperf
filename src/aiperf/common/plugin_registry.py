@@ -80,7 +80,9 @@ timing_strategy:
 
 from __future__ import annotations
 
+import ast
 import importlib
+import importlib.util
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -116,6 +118,9 @@ __all__ = [
     "create_enum",
     "register",
     "detect_type_from_url",
+    "find_registered_name",
+    # Validation
+    "validate_all",
     # Startup
     "load_registry",
     # Utilities
@@ -126,7 +131,6 @@ __all__ = [
     "clear_all_singletons",
     # Types
     "TypeEntry",
-    "ConfigParam",
     "PluginRegistry",
     # Exceptions
     "PluginError",
@@ -190,24 +194,6 @@ class ManifestData(TypedDict, total=False):
     plugin: dict[str, Any]
 
 
-class ConfigParam(TypedDict, total=False):
-    """Configuration parameter specification from YAML.
-
-    Attributes:
-        name: Parameter name
-        type: Parameter type (e.g., 'str', 'int', 'bool')
-        default: Default value
-        description: Human-readable description
-        required: Whether the parameter is required
-    """
-
-    name: str
-    type: str
-    default: Any
-    description: str
-    required: bool
-
-
 # TypeSpec includes 'class' key which is a Python keyword.
 # We use the functional form to define it properly for type checking.
 # Usage: spec.get("class") to access the class path.
@@ -217,9 +203,6 @@ TypeSpec = TypedDict(
         "class": str,  # Fully qualified class path (module:Class)
         "description": str,
         "priority": int,
-        "tags": list[str],
-        "auto_load": bool,
-        "config_params": list[ConfigParam],
     },
     total=False,
 )
@@ -233,9 +216,6 @@ Attributes:
     class: Fully qualified class path (module:Class) - access via spec.get("class")
     description: Human-readable description
     priority: Conflict resolution priority
-    tags: List of tags for categorization and filtering
-    auto_load: Whether to automatically load this type at startup
-    config_params: List of configuration parameters
 """
 
 
@@ -430,9 +410,6 @@ class TypeEntry:
     │ • class_path: str            │
     │ • priority: int              │
     │ • description: str           │
-    │ • tags: tuple[str, ...]      │
-    │ • auto_load: bool            │
-    │ • config_params: tuple       │
     │ • loaded_class: type | None  │
     │                              │
     │ load() → class (lazy!)       │
@@ -445,9 +422,6 @@ class TypeEntry:
         class_path: Full class path (e.g., 'aiperf.endpoints.openai:OpenAIEndpoint')
         priority: Priority for conflict resolution (higher = preferred, default: 0)
         description: Human-readable description of type
-        tags: Tags for categorization and filtering (e.g., ['example', 'logging'])
-        auto_load: Whether to automatically load this type at startup
-        config_params: Configuration parameter specifications for this type
         metadata: Package metadata from installed package (version, author, etc.)
         is_builtin: Whether this is a built-in type
 
@@ -467,15 +441,6 @@ class TypeEntry:
     )
     description: str = field(
         default="", metadata={"description": "Human-readable description"}
-    )
-    tags: tuple[str, ...] = field(
-        default_factory=tuple, metadata={"description": "Tags for categorization"}
-    )
-    auto_load: bool = field(
-        default=False, metadata={"description": "Auto-load at startup"}
-    )
-    config_params: tuple[ConfigParam, ...] = field(
-        default_factory=tuple, metadata={"description": "Configuration parameters"}
     )
     metadata: PackageMetadata = field(
         default_factory=dict, metadata={"description": "Package metadata"}
@@ -559,6 +524,84 @@ class TypeEntry:
                 f"Reason: {e!r}\n"
                 f"Tip: Check that the class name is spelled correctly and exported from the module"
             ) from e
+
+    def validate(self, check_class: bool = False) -> tuple[bool, str | None]:
+        """Validate that the class is loadable without actually importing it.
+
+        This performs static validation to catch configuration errors early:
+        1. Validates class_path format (module:ClassName)
+        2. Checks module exists using importlib.util.find_spec (no import)
+        3. Optionally parses AST to verify class is defined (no execution)
+
+        Args:
+            check_class: If True, also verify the class exists via AST parsing.
+                        This is slower but catches typos in class names.
+
+        Returns:
+            Tuple of (is_valid, error_message). If valid, error_message is None.
+
+        Example:
+            >>> entry = TypeEntry(
+            ...     category='endpoint',
+            ...     type_name='custom',
+            ...     package_name='my_plugin',
+            ...     class_path='my_plugin.endpoints:CustomEndpoint'
+            ... )
+            >>> valid, error = entry.validate(check_class=True)
+            >>> if not valid:
+            ...     print(f"Invalid plugin: {error}")
+        """
+        # Already loaded means it's valid
+        if self.loaded_class is not None:
+            return True, None
+
+        # Validate class_path format
+        parts = self.class_path.split(":")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            return False, f"Invalid class_path format: {self.class_path} (expected 'module:ClassName')"
+
+        module_path, class_name = parts
+
+        # Check if module exists without importing it
+        try:
+            spec = importlib.util.find_spec(module_path)
+            if spec is None:
+                return False, f"Module not found: {module_path}"
+        except ModuleNotFoundError as e:
+            return False, f"Module not found: {module_path} ({e})"
+        except Exception as e:
+            return False, f"Error checking module {module_path}: {e}"
+
+        # Optionally verify class exists via AST (no code execution)
+        if check_class and spec is not None and spec.origin is not None:
+            try:
+                source_path = Path(spec.origin)
+                if source_path.suffix == ".py" and source_path.exists():
+                    source = source_path.read_text(encoding="utf-8")
+                    tree = ast.parse(source)
+
+                    # Look for class definition or import/assignment
+                    class_found = False
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.ClassDef) and node.name == class_name:
+                            class_found = True
+                            break
+                        # Also check for imports that might bring in the class
+                        if isinstance(node, ast.ImportFrom) and node.names:
+                            for alias in node.names:
+                                if alias.name == class_name or alias.asname == class_name:
+                                    class_found = True
+                                    break
+
+                    if not class_found:
+                        return False, f"Class '{class_name}' not found in {module_path}"
+            except SyntaxError as e:
+                return False, f"Syntax error in {module_path}: {e}"
+            except Exception as e:
+                # AST parsing failed, but module exists - don't fail validation
+                _logger.debug(f"Could not verify class via AST: {e}")
+
+        return True, None
 
 
 # ==============================================================================
@@ -819,6 +862,42 @@ class PluginRegistry(Singleton):
         _logger.debug(lambda cat=category, i=impls: f"Listed {len(i)} types for {cat}")
 
         return impls
+
+    def validate_all(
+        self, check_class: bool = False
+    ) -> dict[str, list[tuple[str, str]]]:
+        """Validate all registered types without loading them.
+
+        This is useful for startup validation to catch configuration errors
+        early without incurring the cost of importing all modules.
+
+        Args:
+            check_class: If True, also verify classes exist via AST parsing.
+                        This is slower but catches typos in class names.
+
+        Returns:
+            Dict mapping category to list of (type_name, error_message) tuples.
+            Empty dict means all types are valid.
+
+        Example:
+            >>> errors = plugin_registry.validate_all(check_class=True)
+            >>> if errors:
+            ...     for category, issues in errors.items():
+            ...         for type_name, error in issues:
+            ...             print(f"{category}/{type_name}: {error}")
+            ...     raise RuntimeError("Plugin validation failed")
+        """
+        errors: dict[str, list[tuple[str, str]]] = {}
+
+        for category, types in self._types.items():
+            for type_name, entry in types.items():
+                valid, error = entry.validate(check_class=check_class)
+                if not valid and error:
+                    if category not in errors:
+                        errors[category] = []
+                    errors[category].append((type_name, error))
+
+        return errors
 
     def list_packages(self, builtin_only: bool = False) -> list[str]:
         """List all loaded plugin packages.
@@ -1153,17 +1232,6 @@ class PluginRegistry(Singleton):
 
         description = spec.get("description", "")
 
-        # Extract tags (convert list to tuple for immutability)
-        tags_list = spec.get("tags", [])
-        tags = tuple(tags_list) if tags_list else ()
-
-        # Extract auto_load flag
-        auto_load = spec.get("auto_load", False)
-
-        # Extract config_params (convert list to tuple for immutability)
-        config_params_list = spec.get("config_params", [])
-        config_params = tuple(config_params_list) if config_params_list else ()
-
         # Create lazy type
         lazy_type = TypeEntry(
             category=category_name,
@@ -1172,9 +1240,6 @@ class PluginRegistry(Singleton):
             class_path=class_path,
             priority=priority,
             description=description,
-            tags=tags,
-            auto_load=auto_load,
-            config_params=config_params,
             metadata=package_metadata,
             is_builtin=is_builtin,
         )
@@ -1393,6 +1458,35 @@ def list_types(category: str) -> list[TypeEntry]:
         ...     print(f"{impl.type_name}: {impl.description}")
     """
     return _registry.list_types(category)
+
+
+def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
+    """Validate all registered types without loading them.
+
+    Checks that all registered class paths are valid:
+    1. Module exists (via importlib.util.find_spec - no import)
+    2. Optionally, class exists in module (via AST parsing - no execution)
+
+    This is useful for startup validation to catch configuration errors
+    early without incurring the cost of importing all modules.
+
+    Args:
+        check_class: If True, also verify classes exist via AST parsing.
+                    This is slower but catches typos in class names.
+
+    Returns:
+        Dict mapping category to list of (type_name, error_message) tuples.
+        Empty dict means all types are valid.
+
+    Example:
+        >>> errors = plugin_registry.validate_all(check_class=True)
+        >>> if errors:
+        ...     for category, issues in errors.items():
+        ...         for type_name, error in issues:
+        ...             print(f"{category}/{type_name}: {error}")
+        ...     raise RuntimeError("Plugin validation failed")
+    """
+    return _registry.validate_all(check_class=check_class)
 
 
 def find_registered_name(category: str, cls: type) -> str | None:

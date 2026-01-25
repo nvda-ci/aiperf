@@ -125,18 +125,12 @@ phase_hooks:
     class: aiperf_example_plugin.hooks:ExampleLoggingHook
     description: Simple phase event logger
     priority: 50
-    tags: [example, logging]
-    auto_load: false
-    config_params: [log_file, verbose]
 
   # Hook 2: Metrics collection
   example_metrics_collector_hook:
     class: aiperf_example_plugin.hooks:ExampleMetricsCollectorHook
     description: Collects and aggregates phase metrics
     priority: 60
-    tags: [example, metrics]
-    auto_load: false
-    config_params: [metrics_file, aggregate]
 
 post_processors:
   # Processor 1: Metrics calculation
@@ -144,17 +138,12 @@ post_processors:
     class: aiperf_example_plugin.processors:ExampleMetricsProcessor
     description: Calculates custom metrics from results
     priority: 60
-    tags: [example, metrics]
-    auto_load: false
-    config_params: [output_file, include_percentiles]
 
   # Processor 2: Results aggregation
   example_results_aggregator:
     class: aiperf_example_plugin.processors:ExampleResultsAggregator
     description: Aggregates results from multiple phases
     priority: 70
-    tags: [example, aggregation]
-    auto_load: false
 ```
 
 **Why**: Enables plugin discovery and configuration

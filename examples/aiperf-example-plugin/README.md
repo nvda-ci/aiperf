@@ -318,25 +318,12 @@ phase_hooks:
     class: aiperf_example_plugin.hooks:ExampleLoggingHook
     description: Phase event logger
     priority: 50                    # Lower = earlier execution
-    tags: [logging, example]
-    auto_load: false                # Explicit activation required
-    config_params:
-      - name: log_file
-        type: str
-        default: /tmp/aiperf.log
-        description: Log file path
 
 post_processors:
   example_metrics_processor:
     class: aiperf_example_plugin.processors:ExampleMetricsProcessor
     description: Custom metrics calculator
     priority: 60
-    tags: [metrics, example]
-    auto_load: false
-    config_params:
-      - name: output_file
-        type: str
-        default: /tmp/metrics.txt
 ```
 
 ## Testing
@@ -430,8 +417,6 @@ phase_hooks:
     class: aiperf_example_plugin.custom:MyCustomHook
     description: My custom hook
     priority: 50
-    tags: [custom]
-    auto_load: false
 ```
 
 ## Architecture Patterns

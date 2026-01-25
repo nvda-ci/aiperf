@@ -83,8 +83,6 @@ def sample_registry_yaml() -> dict:
                 "class": "test.hooks:TestHook",
                 "description": "Test hook",
                 "priority": 100,
-                "tags": ["test"],
-                "auto_load": False,
             }
         },
     }

@@ -143,9 +143,6 @@ phase_hooks:
     class: module.path:ClassName
     description: string
     priority: int          # Lower = earlier execution
-    tags: [list, of, tags]
-    auto_load: boolean     # false = manual activation
-    config_params: [list, of, params]
 
 post_processors:
   # Each processor definition (same structure)
@@ -155,9 +152,6 @@ post_processors:
 
 **Key Patterns**:
 - `priority` controls execution order
-- `auto_load: false` requires explicit activation
-- `config_params` document configuration options
-- `tags` help filter/discover components
 
 ## Design Patterns Used
 
@@ -295,7 +289,6 @@ phase_hooks:
   my_hook:
     class: module:MyHook
     priority: 50
-    tags: [logging]
 ```
 
 ## Key Implementation Details
@@ -358,8 +351,6 @@ phase_hooks:
     class: aiperf_example_plugin.hooks:MyCustomHook
     description: My custom hook
     priority: 50
-    tags: [custom]
-    auto_load: false
 ```
 
 3. **Export in `__init__.py`**:
