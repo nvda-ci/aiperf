@@ -55,7 +55,6 @@ from aiperf_mock_server.utils import (
 )
 from pydantic import BaseModel
 
-from aiperf.common import plugin_registry
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.models import (
     ErrorDetails,
@@ -67,6 +66,7 @@ from aiperf.common.models import (
 )
 from aiperf.common.types import RequestInputT
 from aiperf.common.utils import yield_to_event_loop
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     EndpointType,
     TransportType,

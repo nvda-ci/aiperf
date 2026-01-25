@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig
 from aiperf.common.hooks import on_init, on_start, on_stop
 from aiperf.common.mixins import AIPerfLifecycleMixin
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ZMQProxyType
 
 

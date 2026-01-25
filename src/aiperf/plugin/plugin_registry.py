@@ -4,7 +4,7 @@
 """Plugin registry singleton with lazy loading and priority-based conflict resolution.
 
 Usage:
-    from aiperf.common import plugin_registry
+    from aiperf.plugin import plugin_registry
 
     EndpointClass = plugin_registry.get_class('endpoint', 'openai')
     for impl in plugin_registry.list_types('endpoint'):
@@ -28,6 +28,8 @@ from ruamel.yaml import YAML
 
 if TYPE_CHECKING:
     from importlib.abc import Traversable
+
+    from aiperf.plugin.enums import PluginCategory
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.singleton import Singleton
@@ -146,17 +148,13 @@ class TypeEntry:
             return self.loaded_class
 
         # Validate and parse class path using structural pattern matching
-        match self.class_path.split(":"):
-            case [module_path, class_name] if module_path and class_name:
-                # Valid format: "module.path:ClassName"
-                pass
-            case _:
-                # Invalid format
-                raise ValueError(
-                    f"Invalid class_path format: {self.class_path}\n"
-                    f"Expected format: 'module.path:ClassName'\n"
-                    f"Example: 'aiperf.endpoints.openai:OpenAIEndpoint'"
-                )
+        module_path, _, class_name = self.class_path.rpartition(":")
+        if not module_path or not class_name:
+            raise ValueError(
+                f"Invalid class_path format: {self.class_path}\n"
+                f"Expected format: 'module.path:ClassName'\n"
+                f"Example: 'aiperf.endpoints.openai:OpenAIEndpoint'"
+            )
 
         # Import and cache the class
         try:
@@ -196,7 +194,10 @@ class TypeEntry:
         # Validate class_path format
         parts = self.class_path.split(":")
         if len(parts) != 2 or not parts[0] or not parts[1]:
-            return False, f"Invalid class_path format: {self.class_path} (expected 'module:ClassName')"
+            return (
+                False,
+                f"Invalid class_path format: {self.class_path} (expected 'module:ClassName')",
+            )
 
         module_path, class_name = parts
 
@@ -227,7 +228,10 @@ class TypeEntry:
                         # Also check for imports that might bring in the class
                         if isinstance(node, ast.ImportFrom) and node.names:
                             for alias in node.names:
-                                if alias.name == class_name or alias.asname == class_name:
+                                if (
+                                    alias.name == class_name
+                                    or alias.asname == class_name
+                                ):
                                     class_found = True
                                     break
 
@@ -700,7 +704,7 @@ class PluginRegistry(Singleton):
 # ==============================================================================
 # This pattern follows the random_generator module design.
 # Usage:
-#   from aiperf.common import plugin_registry
+#   from aiperf.plugin import plugin_registry
 #   EndpointClass = plugin_registry.get_class('endpoint', 'openai')
 # ==============================================================================
 
@@ -729,14 +733,16 @@ _registry = PluginRegistry()
 # ==============================================================================
 # Public API: Module-Level Functions
 # ==============================================================================
+# Type stubs with get_class() overloads are in plugin_registry.pyi
+# ==============================================================================
 
 
-def get_class(category: str, name_or_class_path: str) -> type:
+def get_class(category: PluginCategory, name_or_class_path: str) -> type:
     """Get type class by name or class path. See PluginRegistry.get_class()."""
     return _registry.get_class(category, name_or_class_path)
 
 
-def list_types(category: str) -> list[TypeEntry]:
+def list_types(category: PluginCategory) -> list[TypeEntry]:
     """List all TypeEntry objects for a category. See PluginRegistry.list_types()."""
     return _registry.list_types(category)
 
@@ -862,5 +868,3 @@ def detect_type_from_url(category: str, url: str) -> str:
     raise ValueError(
         f"No {category} type found for URL scheme '{scheme}' in URL: {url}"
     )
-
-

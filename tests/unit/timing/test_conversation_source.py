@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from aiperf.common import plugin_registry
 from aiperf.common.models import ConversationMetadata, DatasetMetadata, TurnMetadata
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import DatasetSamplingStrategy
 from aiperf.timing.conversation_source import ConversationSource, SampledSession
 from tests.unit.timing.conftest import make_credit

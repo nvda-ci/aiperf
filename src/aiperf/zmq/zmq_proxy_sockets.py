@@ -4,9 +4,9 @@
 import zmq
 from zmq import SocketType
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import BaseZMQProxyConfig
 from aiperf.common.hooks import on_init
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ZMQProxyType
 from aiperf.zmq.zmq_base_client import BaseZMQClient
 from aiperf.zmq.zmq_proxy_base import (

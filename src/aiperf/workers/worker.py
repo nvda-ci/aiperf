@@ -4,7 +4,6 @@ import asyncio
 import time
 import uuid
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.constants import BYTES_PER_MIB
@@ -62,6 +61,7 @@ from aiperf.credit.messages import (
     WorkerShutdown,
 )
 from aiperf.credit.structs import Credit, CreditContext
+from aiperf.plugin import plugin_registry
 from aiperf.workers.inference_client import InferenceClient
 from aiperf.workers.session_manager import UserSession, UserSessionManager
 

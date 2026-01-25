@@ -8,7 +8,6 @@ from pathlib import Path
 
 import zmq.asyncio
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_comms import BaseCommunication
 from aiperf.common.config import BaseZMQCommunicationConfig, ZMQIPCConfig, ZMQTCPConfig
 from aiperf.common.decorators import implements_protocol
@@ -22,6 +21,7 @@ from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.protocols import CommunicationClientProtocol, CommunicationProtocol
 from aiperf.common.singleton import Singleton
 from aiperf.common.types import CommAddressType
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import CommClientType
 
 

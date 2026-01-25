@@ -13,9 +13,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from aiperf.common import plugin_registry
 from aiperf.plot.core.plot_specs import PlotSpec, PlotType
 from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerProtocol
+from aiperf.plugin import plugin_registry
 
 
 @pytest.fixture

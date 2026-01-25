@@ -5,7 +5,6 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.constants import NANOS_PER_SECOND
@@ -65,6 +64,7 @@ from aiperf.credit.messages import (
     CreditPhaseStartMessage,
     CreditsCompleteMessage,
 )
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ResultsProcessorType, UIType
 from aiperf.records.error_tracker import ErrorTracker
 from aiperf.records.records_tracker import RecordsTracker

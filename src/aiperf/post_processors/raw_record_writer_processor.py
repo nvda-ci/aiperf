@@ -6,7 +6,6 @@ import contextlib
 
 import aiofiles
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.decorators import implements_protocol
@@ -23,6 +22,7 @@ from aiperf.common.models import (
 from aiperf.common.models.record_models import RequestInfo
 from aiperf.common.protocols import DataExporterProtocol, RecordProcessorProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
+from aiperf.plugin import plugin_registry
 
 
 @implements_protocol(RecordProcessorProtocol)

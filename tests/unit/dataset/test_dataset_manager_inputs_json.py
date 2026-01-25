@@ -11,9 +11,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from aiperf.common import plugin_registry
 from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.models import InputsFile, SessionPayloads
+from aiperf.plugin import plugin_registry
 
 
 def _validate_chat_payload_structure(payload: dict) -> None:

@@ -41,7 +41,7 @@ class EndpointFactory(...):
 
     @classmethod
     def create_instance(cls, class_type, **kwargs):
-        from aiperf.common.plugin_registry import get_plugin_registry
+        from aiperf.plugin.plugin_registry import get_plugin_registry
         registry = get_plugin_registry()
         EndpointClass = registry.get("endpoint", impl_name)
         return EndpointClass(**kwargs)

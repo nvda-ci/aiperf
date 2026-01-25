@@ -12,7 +12,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
-from aiperf.common import plugin_registry
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
@@ -20,6 +19,7 @@ from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.data_preparation import flatten_config
 from aiperf.plot.core.plot_specs import ExperimentClassificationConfig, PlotSpec
 from aiperf.plot.exporters.png.base import BasePNGExporter
+from aiperf.plugin import plugin_registry
 
 
 class MultiRunPNGExporter(BasePNGExporter):

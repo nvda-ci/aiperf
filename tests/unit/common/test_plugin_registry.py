@@ -11,8 +11,8 @@ from unittest.mock import Mock, patch
 import pytest
 import yaml
 
-from aiperf.common import plugin_registry
-from aiperf.common.plugin_registry import (
+from aiperf.plugin import plugin_registry
+from aiperf.plugin.plugin_registry import (
     PluginRegistry,
     TypeEntry,
     TypeNotFoundError,
@@ -329,7 +329,7 @@ class TestGet:
             mock_module.TestEndpoint = mock_class
             mock_import.return_value = mock_module
 
-            cls = registry.get("endpoint", "test_endpoint")
+            cls = registry.get_class("endpoint", "test_endpoint")
 
             assert cls is mock_class
             # User manually instantiates
@@ -344,28 +344,28 @@ class TestGet:
             mock_module.TestEndpoint = mock_class
             mock_import.return_value = mock_module
 
-            cls = registry.get("endpoint", "test.module:TestEndpoint")
+            cls = registry.get_class("endpoint", "test.module:TestEndpoint")
 
             assert cls is mock_class
 
     def test_get_unknown_category(self, registry):
         """Test getting with unknown category."""
         with pytest.raises(KeyError, match="Unknown category"):
-            registry.get("nonexistent_category", "type")
+            registry.get_class("nonexistent_category", "type")
 
     def test_get_unknown_type(self, registry, temp_registry_file):
         """Test getting with unknown type."""
         registry.load_registry(temp_registry_file)
 
         with pytest.raises(TypeNotFoundError, match="not found for category"):
-            registry.get("endpoint", "nonexistent_type")
+            registry.get_class("endpoint", "nonexistent_type")
 
     def test_get_class_path_category_mismatch(self, registry, temp_registry_file):
         """Test getting by class path with category mismatch."""
         registry.load_registry(temp_registry_file)
 
         with pytest.raises(ValueError, match="registered for category"):
-            registry.get("post_processor", "test.module:TestEndpoint")
+            registry.get_class("post_processor", "test.module:TestEndpoint")
 
 
 # ==============================================================================
@@ -912,7 +912,7 @@ class TestIntegration:
             mock_module.TestEndpoint = mock_class
             mock_import.return_value = mock_module
 
-            cls = registry.get("endpoint", "test_endpoint")
+            cls = registry.get_class("endpoint", "test_endpoint")
             assert cls is mock_class
             mock_import.assert_called_once()
 
@@ -928,7 +928,7 @@ class TestIntegration:
             mock_import.return_value = mock_module
 
             # Get class
-            EndpointClass = registry.get("endpoint", "test_endpoint")
+            EndpointClass = registry.get_class("endpoint", "test_endpoint")
 
             # User manually instantiates
             endpoint = EndpointClass(arg1="value1", arg2="value2")

@@ -54,10 +54,10 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import ConfigDict, Field
 
-from aiperf.common import plugin_registry
 from aiperf.common import random_generator as rng
 from aiperf.common.enums import CaseInsensitiveStrEnum
 from aiperf.common.models import AIPerfBaseModel
+from aiperf.plugin import plugin_registry
 
 # =============================================================================
 # RampType - The different ramp algorithms for gradually transitioning numeric values

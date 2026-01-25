@@ -60,7 +60,7 @@ Once installed, the plugin is automatically discovered by AIPerf:
 
 ```python
 # The plugin is auto-discovered via entry points!
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 # List available hooks (includes plugin hooks)
 hooks = plugin_registry.list_implementations('phase_hook')
@@ -190,7 +190,7 @@ print(report)
 ### Basic Usage with Module-Level API
 
 ```python
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 # Auto-discovery! Plugin hooks are available via registry
 hook = plugin_registry.create_instance(
@@ -290,7 +290,7 @@ plugins:
 The AIPerf framework automatically loads configured plugins via the registry:
 
 ```python
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 # Load hooks from config
 for hook_config in config.get('plugins', {}).get('phase_hooks', []):

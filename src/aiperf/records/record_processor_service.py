@@ -3,7 +3,6 @@
 import asyncio
 import traceback
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import (
@@ -33,6 +32,7 @@ from aiperf.common.protocols import (
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.utils import compute_time_ns
 from aiperf.metrics.metric_dicts import MetricRecordDict
+from aiperf.plugin import plugin_registry
 from aiperf.records.inference_result_parser import InferenceResultParser
 
 

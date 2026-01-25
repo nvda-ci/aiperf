@@ -4,7 +4,7 @@ import statistics
 
 import pytest
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ArrivalPattern
 from aiperf.timing.intervals import (
     ConcurrencyBurstIntervalGenerator,

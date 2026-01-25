@@ -9,7 +9,6 @@ from orjson import JSONDecodeError
 from pydantic import BeforeValidator, Field, model_validator
 from typing_extensions import Self
 
-from aiperf.common import plugin_registry
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.config.base_config import BaseConfig
 from aiperf.common.config.cli_parameter import CLIParameter, DisableCLI
@@ -26,6 +25,7 @@ from aiperf.common.config.output_config import OutputConfig
 from aiperf.common.config.tokenizer_config import TokenizerConfig
 from aiperf.common.enums import GPUTelemetryMode, ServerMetricsFormat
 from aiperf.common.utils import load_json_str
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     ArrivalPattern,
     CustomDatasetType,

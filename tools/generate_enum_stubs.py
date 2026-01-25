@@ -4,8 +4,8 @@
 """
 Generate type stub files (.pyi) for dynamic plugin enums.
 
-This script reads registry.yaml and generates a .pyi stub file that provides
-IDE autocomplete and type checking for dynamically created enums.
+This script reads categories.yaml and registry.yaml and generates a .pyi stub
+file that provides IDE autocomplete and type checking for dynamically created enums.
 
 Usage:
     python tools/generate_enum_stubs.py
@@ -19,30 +19,18 @@ from ruamel.yaml import YAML
 
 yaml = YAML(typ="safe")
 
-# Mapping from registry category names to enum class names
-CATEGORY_TO_ENUM = {
-    "arrival_pattern": "ArrivalPatternType",
-    "communication": "CommunicationBackend",
-    "communication_client": "CommClientType",
-    "console_exporter": "ConsoleExporterType",
-    "custom_dataset_loader": "CustomDatasetType",
-    "data_exporter": "DataExporterType",
-    "dataset_backing_store": "DatasetBackingStoreType",
-    "dataset_client_store": "DatasetClientStoreType",
-    "dataset_composer": "ComposerType",
-    "dataset_sampler": "DatasetSamplingStrategy",
-    "endpoint": "EndpointType",
-    "plot": "PlotType",
-    "ramp": "RampType",
-    "record_processor": "RecordProcessorType",
-    "results_processor": "ResultsProcessorType",
-    "service": "ServiceType",
-    "service_manager": "ServiceRunType",
-    "timing_strategy": "TimingStrategyType",
-    "transport": "TransportType",
-    "ui": "UIType",
-    "zmq_proxy": "ZMQProxyType",
-}
+
+def load_categories() -> dict:
+    """Load the plugin categories from categories.yaml."""
+    categories_path = (
+        Path(__file__).parent.parent / "src" / "aiperf" / "plugin" / "categories.yaml"
+    )
+
+    if not categories_path.exists():
+        raise FileNotFoundError(f"Categories file not found: {categories_path}")
+
+    with open(categories_path) as f:
+        return yaml.load(f)
 
 
 def load_registry() -> dict:
@@ -75,15 +63,20 @@ def get_description(type_spec: str | dict) -> str | None:
     return None
 
 
-def generate_stub_content(registry: dict) -> str:
-    """Generate the content of the .pyi stub file."""
+def generate_stub_content(categories: dict, registry: dict) -> str:
+    """Generate the content of the .pyi stub file.
+
+    Args:
+        categories: Category definitions from categories.yaml
+        registry: Plugin registry from registry.yaml
+    """
     lines = [
         "# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.",
         "# SPDX-License-Identifier: Apache-2.0",
         '"""',
         "Type stubs for dynamically generated plugin enums.",
         "",
-        "This file is AUTO-GENERATED from registry.yaml.",
+        "This file is AUTO-GENERATED from categories.yaml and registry.yaml.",
         "Run `python tools/generate_enum_stubs.py` to regenerate.",
         "",
         "These stubs provide IDE autocomplete and type checking for enum members",
@@ -94,25 +87,44 @@ def generate_stub_content(registry: dict) -> str:
         "",
     ]
 
-    # Get all categories from registry (excluding metadata keys)
-    metadata_keys = {"schema_version", "plugin"}
-    categories = sorted(k for k in registry if k not in metadata_keys)
+    # Get all categories from categories.yaml (excluding metadata keys)
+    metadata_keys = {"schema_version"}
+    category_names = sorted(k for k in categories if k not in metadata_keys)
 
-    # Generate PluginCategory enum from registry categories
+    # Generate PluginCategory enum from categories
     lines.append("class PluginCategory(ExtensibleStrEnum):")
-    lines.append('    """Dynamic enum for plugin categories."""')
+    lines.append('    """')
+    lines.append("    Dynamic enum for plugin categories.")
+    lines.append("")
+    lines.append("    Each category represents a type of plugin that can be registered")
+    lines.append("    and used within the AIPerf framework.")
+    lines.append('    """')
     lines.append("")
 
-    for category in categories:
+    for category in category_names:
         member_name = category.replace("-", "_").upper()
         lines.append(f'    {member_name} = "{category}"')
 
-    lines.append("")
+        # Add description as docstring if available
+        category_info = categories.get(category, {})
+        if isinstance(category_info, dict) and category_info.get("description"):
+            desc = category_info["description"].strip()
+            desc_lines = desc.split("\n")
+            lines.append(f'    """{desc_lines[0].strip()}')
+            for desc_line in desc_lines[1:]:
+                lines.append(f"    {desc_line.rstrip()}")
+            lines.append('    """')
+        lines.append("")
+
     lines.append("")
 
-    # Generate enums for each category that has a mapping
-    for category in categories:
-        enum_name = CATEGORY_TO_ENUM.get(category)
+    # Generate enums for each category that has an enum mapping in categories.yaml
+    for category in category_names:
+        category_info = categories.get(category, {})
+        if not isinstance(category_info, dict):
+            continue
+
+        enum_name = category_info.get("enum")
         if not enum_name:
             continue
 
@@ -120,9 +132,17 @@ def generate_stub_content(registry: dict) -> str:
         if not types:
             continue
 
-        # Add class definition
+        # Add class definition with description from categories.yaml
         lines.append(f"class {enum_name}(ExtensibleStrEnum):")
-        lines.append(f'    """Dynamic enum for {category} plugin types."""')
+
+        description = category_info.get("description", "").strip()
+        if description:
+            lines.append('    """')
+            for desc_line in description.split("\n"):
+                lines.append(f"    {desc_line.rstrip()}")
+            lines.append('    """')
+        else:
+            lines.append(f'    """Dynamic enum for {category} plugin types."""')
         lines.append("")
 
         # Add enum members with their string values and descriptions
@@ -134,16 +154,25 @@ def generate_stub_content(registry: dict) -> str:
             lines.append(f'    {member_name} = "{type_name}"')
             if description:
                 # Add description as a docstring comment after the member
-                lines.append(f'    """{description}"""')
+                desc_lines = description.strip().split("\n")
+                if len(desc_lines) == 1:
+                    lines.append(f'    """{desc_lines[0]}"""')
+                else:
+                    lines.append(f'    """{desc_lines[0]}')
+                    for desc_line in desc_lines[1:]:
+                        lines.append(f"    {desc_line.rstrip()}")
+                    lines.append('    """')
             lines.append("")
 
         lines.append("")
 
     # Add __all__ export
     enum_names = ["PluginCategory"] + [
-        CATEGORY_TO_ENUM[cat]
-        for cat in categories
-        if cat in CATEGORY_TO_ENUM and registry.get(cat)
+        categories[cat]["enum"]
+        for cat in category_names
+        if isinstance(categories.get(cat), dict)
+        and categories[cat].get("enum")
+        and registry.get(cat)
     ]
 
     lines.append("__all__ = [")
@@ -156,11 +185,12 @@ def generate_stub_content(registry: dict) -> str:
 
 def main():
     """Generate the stub file."""
-    # Load registry
+    # Load categories and registry
+    categories = load_categories()
     registry = load_registry()
 
     # Generate stub content
-    stub_content = generate_stub_content(registry)
+    stub_content = generate_stub_content(categories, registry)
 
     # Write to file
     stub_path = Path(__file__).parent.parent / "src" / "aiperf" / "plugin" / "enums.pyi"

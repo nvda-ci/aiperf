@@ -4,7 +4,6 @@ import asyncio
 import time
 from contextlib import suppress
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.hooks import on_init
 from aiperf.common.mixins import CommunicationMixin
@@ -18,6 +17,7 @@ from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.record_models import ReasoningResponseData, TokenCounts
 from aiperf.common.protocols import EndpointProtocol
 from aiperf.common.tokenizer import Tokenizer
+from aiperf.plugin import plugin_registry
 
 
 # TODO: Should we create non-tokenizer based parsers?

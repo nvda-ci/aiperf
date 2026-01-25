@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig
 from aiperf.common.enums import (
     CommAddress,
@@ -24,6 +23,7 @@ from aiperf.common.models import (
 from aiperf.common.utils import yield_to_event_loop
 from aiperf.credit.messages import CreditReturn, FirstToken
 from aiperf.credit.structs import Credit, CreditContext, TurnToSend
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     ArrivalPattern,
     DatasetSamplingStrategy,

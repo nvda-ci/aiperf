@@ -1292,7 +1292,7 @@ def reset_registries():
     PhaseHookRegistry.clear()
 
     # Reset plugin registry
-    from aiperf.common import plugin_registry
+    from aiperf.plugin import plugin_registry
     plugin_registry.reset()
 
     yield
@@ -2715,7 +2715,7 @@ endpoint:
 
 ```python
 # NEW: Registry creation
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 MyEndpoint = plugin_registry.get_class("endpoint", "my_endpoint")
 endpoint = MyEndpoint(model_endpoint=config)
@@ -2756,7 +2756,7 @@ from aiperf.common.factories import EndpointFactory
 from aiperf.common.enums import EndpointType
 
 # After
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 ```
 
 **4. Update Creation Code:**
@@ -2783,7 +2783,7 @@ def test_endpoint():
 
 # After
 import pytest
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 @pytest.fixture(autouse=True)
 def reset_registry():
@@ -2816,7 +2816,7 @@ def create_endpoint_old_style(endpoint_type, **kwargs):
         "MY_ENDPOINT": "my_endpoint",
     }
 
-    from aiperf.common import plugin_registry
+    from aiperf.plugin import plugin_registry
     return plugin_registry.create_instance(
         "endpoint",
         name_mapping[endpoint_type],
@@ -2837,7 +2837,7 @@ def test_endpoint_creation(creation_method):
     if creation_method == "old":
         endpoint = create_endpoint_old_style("MY_ENDPOINT", ...)
     else:
-        from aiperf.common import plugin_registry
+        from aiperf.plugin import plugin_registry
         endpoint = plugin_registry.create_instance("endpoint", "my_endpoint", ...)
 
     # Both should work the same
@@ -2876,7 +2876,7 @@ python -c "import aiperf_my_plugin"
 
 **Diagnosis:**
 ```python
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 impls = plugin_registry.list_types("endpoint")
 for impl in impls:
@@ -2913,7 +2913,7 @@ endpoint = plugin_registry.create_instance(
 **Solution:**
 ```python
 # Ensure registry is loaded
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 # Load built-in registry
 plugin_registry.load_builtins()

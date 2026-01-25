@@ -12,13 +12,13 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 import aiperf.plot.handlers.single_run_handlers  # noqa: F401
-from aiperf.common import plugin_registry
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.plot_specs import (
     DataSource,
     PlotSpec,
 )
 from aiperf.plot.exporters.png.base import BasePNGExporter
+from aiperf.plugin import plugin_registry
 
 
 class SingleRunPNGExporter(BasePNGExporter):

@@ -27,7 +27,7 @@ class BaseMetricsProcessor(AIPerfLifecycleMixin, ABC):
         # Start with no flags (unfiltered)
         required_flags, disallowed_flags = MetricFlags.NONE, MetricFlags.NONE
         # Disable metrics that are not applicable to the endpoint type
-        from aiperf.common import plugin_registry
+        from aiperf.plugin import plugin_registry
 
         endpoint_class = plugin_registry.get_class(
             "endpoint", self.user_config.endpoint.type

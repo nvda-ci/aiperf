@@ -12,12 +12,12 @@ import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aiperf.common import plugin_registry
 from aiperf.common.enums import CreditPhase
 from aiperf.common.environment import Environment
 from aiperf.common.loop_scheduler import LoopScheduler
 from aiperf.common.mixins import TaskManagerMixin
 from aiperf.credit.issuer import CreditIssuer
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import TimingMode
 from aiperf.timing.phase.lifecycle import PhaseLifecycle
 from aiperf.timing.phase.progress_tracker import PhaseProgressTracker

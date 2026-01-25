@@ -27,7 +27,6 @@ from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from ruamel.yaml import YAML
 
-from aiperf.common import plugin_registry
 from aiperf.plot.config import PlotConfig
 from aiperf.plot.constants import (
     ALL_STAT_KEYS,
@@ -88,6 +87,7 @@ from aiperf.plot.metric_names import (
     get_metric_display_name,
     get_metric_display_name_with_unit,
 )
+from aiperf.plugin import plugin_registry
 
 _logger = logging.getLogger(__name__)
 

@@ -101,7 +101,7 @@ def bootstrap_and_run_service(
 
         try:
             # 1. Initialize plugin registry (loads built-in + discovers plugins automatically)
-            from aiperf.common import plugin_registry
+            from aiperf.plugin import plugin_registry
 
             # Check for external plugins
             all_plugins = plugin_registry.list_packages()

@@ -14,11 +14,11 @@ from rich.logging import RichHandler
 from rich.text import Text
 from rich.traceback import Traceback
 
-from aiperf.common import plugin_registry
 from aiperf.common.aiperf_logger import _DEBUG, _TRACE, AIPerfLogger
 from aiperf.common.config import ServiceConfig, ServiceDefaults, UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.environment import Environment
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ServiceType, UIType
 
 _logger = AIPerfLogger(__name__)

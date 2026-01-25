@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from aiperf.common import plugin_registry
 from aiperf.common.exceptions import PluginNotFoundError
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     ArrivalPattern,
     TimingMode,

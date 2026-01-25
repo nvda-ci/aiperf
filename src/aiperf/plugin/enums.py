@@ -17,8 +17,8 @@ Import these types from aiperf.plugin.enums or aiperf.plugin.
 
 from typing import TYPE_CHECKING
 
-from aiperf.common import plugin_registry
 from aiperf.common.enums.base_enums import ExtensibleStrEnum
+from aiperf.plugin import plugin_registry
 
 # ============================================================================
 # Plugin Protocol Categories

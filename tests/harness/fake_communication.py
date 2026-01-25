@@ -20,13 +20,13 @@ from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_comms import BaseCommunication
 from aiperf.common.enums import CommAddress
 from aiperf.common.hooks import on_stop
 from aiperf.common.messages import TargetedServiceMessage
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.types import CommAddressType, MessageCallbackMapT, MessageTypeT
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     CommClientType,
     CommunicationBackend,

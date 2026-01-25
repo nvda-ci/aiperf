@@ -47,7 +47,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
         registered_name = getattr(cls, "_registered_name", None)
         if not registered_name:
             # Fallback: reverse lookup in the registry for direct instantiation
-            from aiperf.common import plugin_registry
+            from aiperf.plugin import plugin_registry
 
             registered_name = plugin_registry.find_registered_name("service", cls)
 

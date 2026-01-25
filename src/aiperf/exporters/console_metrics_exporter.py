@@ -93,7 +93,7 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
         return row
 
     def _get_title(self) -> str:
-        from aiperf.common import plugin_registry
+        from aiperf.plugin import plugin_registry
 
         endpoint_class = plugin_registry.get_class("endpoint", self._endpoint_type)
         metadata = endpoint_class.metadata()

@@ -15,7 +15,6 @@ import asyncio
 import sys
 import uuid
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
@@ -28,6 +27,7 @@ from aiperf.common.models import ServiceRunInfo
 from aiperf.common.protocols import ServiceManagerProtocol, ServiceProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ServiceRunType
 from tests.harness.fake_communication import FakeCommunication
 

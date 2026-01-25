@@ -182,7 +182,7 @@ class AioHttpTransport(BaseTransport):
             url = f"{base_url}/{path}"
         else:
             # Get endpoint path from endpoint metadata
-            from aiperf.common import plugin_registry
+            from aiperf.plugin import plugin_registry
 
             endpoint_class = plugin_registry.get_class("endpoint", endpoint_info.type)
             endpoint_metadata = endpoint_class.metadata()

@@ -6,7 +6,6 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from aiperf.common import plugin_registry
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models import (
     ErrorDetails,
@@ -14,6 +13,7 @@ from aiperf.common.models import (
     RequestInfo,
     RequestRecord,
 )
+from aiperf.plugin import plugin_registry
 
 if TYPE_CHECKING:
     from aiperf.transports.base_transports import FirstTokenCallback

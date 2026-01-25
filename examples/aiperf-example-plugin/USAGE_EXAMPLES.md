@@ -14,7 +14,7 @@ Complete working examples demonstrating how to use the plugin components.
 """Simple example of registering and using a phase hook via registry."""
 
 import asyncio
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 async def main():
     # Create hook instance via registry (auto-discovered!)
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 import asyncio
 import json
 from pathlib import Path
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 async def main():
     # Create metrics collector via registry
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 """Example of processing results and calculating metrics."""
 
 import asyncio
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 async def main():
     # Create processor via registry
@@ -214,7 +214,7 @@ plugins:
 """Example of integrating hooks with a custom phase orchestrator."""
 
 import asyncio
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 class MyPhaseOrchestrator:
     """Example orchestrator with plugin support."""

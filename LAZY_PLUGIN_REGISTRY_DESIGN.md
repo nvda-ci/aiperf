@@ -258,7 +258,7 @@ def get_plugin_registry() -> LazyPluginRegistry:
 # src/aiperf/common/factories.py (UPDATE EXISTING)
 # ============================================
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 
 class PhaseLifecycleHookFactory:
@@ -421,7 +421,7 @@ class DatadogPhaseHook:
 # src/aiperf/cli.py or bootstrap
 # ============================================
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 
 def initialize_aiperf():
@@ -615,7 +615,7 @@ orchestrator = PhaseOrchestrator(..., hooks=[
 ### Proposed (Lazy Loading + Config-Driven)
 
 ```python
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 # Startup: Discover (don't load)
 plugin_registry.discover_plugins()  # Finds datadog, prometheus
@@ -666,7 +666,7 @@ class CreditIssuingStrategyFactory:
         Returns:
             Strategy instance
         """
-        from aiperf.common import plugin_registry
+        from aiperf.plugin import plugin_registry
 
         mode_name = timing_mode.value  # "fixed_schedule" or "request_rate"
 
@@ -781,7 +781,7 @@ benchmark:
 # src/aiperf/main.py or cli.py
 # ============================================
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 from aiperf.timing.phase_hooks import setup_phase_hooks
 
 

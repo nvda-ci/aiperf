@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 from aiperf.timing.ramping import (
     BaseRampStrategy as RampStrategy,
 )

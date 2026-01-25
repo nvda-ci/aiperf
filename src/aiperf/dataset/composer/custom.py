@@ -4,7 +4,6 @@
 from pathlib import Path
 from typing import Any
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.models import Conversation
@@ -13,6 +12,7 @@ from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.utils import load_json_str
 from aiperf.dataset.composer.base import BaseDatasetComposer
 from aiperf.dataset.utils import check_file_exists
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import CustomDatasetType
 
 

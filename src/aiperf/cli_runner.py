@@ -35,10 +35,10 @@ def run_system_controller(
         with contextlib.suppress(RuntimeError):
             multiprocessing.set_start_method("spawn", force=True)
 
-    from aiperf.common import plugin_registry as plugin_registry
     from aiperf.common.aiperf_logger import AIPerfLogger
     from aiperf.common.bootstrap import bootstrap_and_run_service
     from aiperf.controller import SystemController
+    from aiperf.plugin import plugin_registry as plugin_registry
 
     logger = AIPerfLogger(__name__)
 

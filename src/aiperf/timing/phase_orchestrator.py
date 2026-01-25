@@ -17,10 +17,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aiperf.common import plugin_registry
 from aiperf.common.hooks import on_init, on_start
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.credit.callback_handler import CreditCallbackHandler
+from aiperf.plugin import plugin_registry
 from aiperf.timing.concurrency import ConcurrencyManager
 from aiperf.timing.conversation_source import ConversationSource
 from aiperf.timing.phase.runner import PhaseRunner

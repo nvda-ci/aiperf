@@ -15,7 +15,7 @@ from aiperf.cli_commands.plugins_cli import (
     show_packages,
     show_type_details,
 )
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 
 
 @pytest.fixture

@@ -8,11 +8,11 @@ import asyncio
 import time
 from typing import TYPE_CHECKING
 
-from aiperf.common import plugin_registry
 from aiperf.common.constants import MILLIS_PER_SECOND, NANOS_PER_SECOND
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.utils import yield_to_event_loop
 from aiperf.credit.structs import Credit, TurnToSend
+from aiperf.plugin import plugin_registry
 from aiperf.timing.intervals import IntervalGeneratorConfig
 
 if TYPE_CHECKING:

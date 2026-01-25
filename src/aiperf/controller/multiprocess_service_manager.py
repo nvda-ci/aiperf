@@ -8,7 +8,6 @@ from multiprocessing.context import ForkProcess, SpawnProcess
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aiperf.common import plugin_registry
 from aiperf.common.bootstrap import bootstrap_and_run_service
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
@@ -18,6 +17,7 @@ from aiperf.common.exceptions import AIPerfError
 from aiperf.common.protocols import ServiceManagerProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
+from aiperf.plugin import plugin_registry
 
 
 class MultiProcessRunInfo(BaseModel):

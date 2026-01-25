@@ -5,7 +5,6 @@ import asyncio
 
 from rich.console import Console
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.exceptions import (
     ConsoleExporterDisabled,
@@ -17,6 +16,7 @@ from aiperf.common.models.export_models import TelemetryExportData
 from aiperf.common.models.server_metrics_models import ServerMetricsResults
 from aiperf.common.protocols import ConsoleExporterProtocol, DataExporterProtocol
 from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
+from aiperf.plugin import plugin_registry
 
 
 class ExporterManager(AIPerfLoggerMixin):

@@ -10,7 +10,6 @@ from rich.console import Console
 from rich.panel import Panel
 
 from aiperf.cli_utils import print_developer_mode_warning
-from aiperf.common import plugin_registry
 from aiperf.common.base_service import BaseService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
@@ -59,6 +58,7 @@ from aiperf.controller.proxy_manager import ProxyManager
 from aiperf.controller.system_mixins import SignalHandlerMixin
 from aiperf.credit.messages import CreditsCompleteMessage
 from aiperf.exporters.exporter_manager import ExporterManager
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import ServiceType
 
 

@@ -3,7 +3,7 @@
 """
 Type stubs for dynamically generated plugin enums.
 
-This file is AUTO-GENERATED from registry.yaml.
+This file is AUTO-GENERATED from categories.yaml and registry.yaml.
 Run `python tools/generate_enum_stubs.py` to regenerate.
 
 These stubs provide IDE autocomplete and type checking for enum members
@@ -13,32 +13,145 @@ that are created dynamically at runtime from the plugin registry.
 from aiperf.common.enums import ExtensibleStrEnum
 
 class PluginCategory(ExtensibleStrEnum):
-    """Dynamic enum for plugin categories."""
+    """
+    Dynamic enum for plugin categories.
+
+    Each category represents a type of plugin that can be registered
+    and used within the AIPerf framework.
+    """
 
     ARRIVAL_PATTERN = "arrival_pattern"
-    COMMUNICATION = "communication"
-    COMMUNICATION_CLIENT = "communication_client"
-    CONSOLE_EXPORTER = "console_exporter"
-    CUSTOM_DATASET_LOADER = "custom_dataset_loader"
-    DATA_EXPORTER = "data_exporter"
-    DATASET_BACKING_STORE = "dataset_backing_store"
-    DATASET_CLIENT_STORE = "dataset_client_store"
-    DATASET_COMPOSER = "dataset_composer"
-    DATASET_SAMPLER = "dataset_sampler"
-    ENDPOINT = "endpoint"
-    PLOT = "plot"
-    RAMP = "ramp"
-    RECORD_PROCESSOR = "record_processor"
-    RESULTS_PROCESSOR = "results_processor"
-    SERVICE = "service"
-    SERVICE_MANAGER = "service_manager"
-    TIMING_STRATEGY = "timing_strategy"
-    TRANSPORT = "transport"
-    UI = "ui"
-    ZMQ_PROXY = "zmq_proxy"
+    """Interval generators determine inter-arrival times for request rate strategy.
+    Controls the distribution of request timing (constant, Poisson, gamma, etc.).
+    One-to-one mapping when using request_rate timing mode.
+    """
 
-class ArrivalPatternType(ExtensibleStrEnum):
-    """Dynamic enum for arrival_pattern plugin types."""
+    COMMUNICATION = "communication"
+    """Communication backends provide the underlying transport for inter-service messaging.
+    Supports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.
+    One-to-one mapping based on deployment configuration.
+    """
+
+    COMMUNICATION_CLIENT = "communication_client"
+    """Communication clients implement different ZMQ socket patterns for messaging.
+    Includes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.
+    Internal infrastructure: automatically created by framework based on usage.
+    """
+
+    CONSOLE_EXPORTER = "console_exporter"
+    """Console exporters display benchmark results and diagnostics to stdout.
+    Provides formatted output for metrics, errors, telemetry, and traces.
+    One-to-many mapping: multiple console exporters can be loaded simultaneously.
+    """
+
+    CUSTOM_DATASET_LOADER = "custom_dataset_loader"
+    """Custom dataset loaders parse different JSONL file formats into conversations.
+    Supports single-turn, multi-turn, random-pool, and trace formats.
+    Auto-detection: loaders are tried in priority order based on can_load().
+    """
+
+    DATA_EXPORTER = "data_exporter"
+    """Data exporters write benchmark results to files in various formats.
+    Supports CSV, JSON, Parquet, and specialized export formats.
+    One-to-many mapping: multiple exporters can be loaded simultaneously.
+    """
+
+    DATASET_BACKING_STORE = "dataset_backing_store"
+    """Dataset backing stores manage conversation data on the DatasetManager side.
+    Provides efficient storage for dataset distribution to workers.
+    Handles streaming writes and finalization for client access.
+    """
+
+    DATASET_CLIENT_STORE = "dataset_client_store"
+    """Dataset client stores read conversation data on the Worker side.
+    Provides efficient access to datasets from backing stores.
+    Supports zero-copy reads and O(1) lookup performance.
+    """
+
+    DATASET_COMPOSER = "dataset_composer"
+    """Dataset composers create conversation datasets from various sources.
+    Handles synthetic generation, custom file loading, and specialized formats.
+    One-to-one mapping based on composer_type configuration.
+    """
+
+    DATASET_SAMPLER = "dataset_sampler"
+    """Dataset samplers control how conversations are selected from the dataset.
+    Supports random, sequential, and shuffle sampling strategies.
+    One-to-one mapping based on sampling strategy configuration.
+    """
+
+    ENDPOINT = "endpoint"
+    """Endpoints define how to format requests and parse responses for different APIs.
+    Supports OpenAI-compatible, HuggingFace, Cohere, NIM, and custom API formats.
+    One-to-one mapping based on endpoint_type configuration.
+    """
+
+    PLOT = "plot"
+    """Plot handlers create different types of visualizations from benchmark data.
+    Supports scatter, histogram, timeline, percentile bands, and multi-run comparisons.
+    One-to-one mapping based on plot type selection.
+    """
+
+    RAMP = "ramp"
+    """Ramp strategies control how values are gradually transitioned over time.
+    Used for ramping concurrency limits, request rates, and other numeric parameters.
+    Supports linear, exponential, and stochastic ramping patterns.
+    """
+
+    RECORD_PROCESSOR = "record_processor"
+    """Record processors stream records and compute metrics in a distributed manner.
+    First stage of metrics pipeline, handling per-record computations.
+    One-to-many mapping: multiple processors can be loaded simultaneously.
+    """
+
+    RESULTS_PROCESSOR = "results_processor"
+    """Results processors aggregate results from record processors and compute derived metrics.
+    Final stage of metrics pipeline for aggregated statistics and summaries.
+    One-to-many mapping: multiple processors can be loaded simultaneously.
+    """
+
+    SERVICE = "service"
+    """Services are the core processes that make up the AIPerf distributed system.
+    Each service runs in a separate process and communicates via ZMQ message bus.
+    Includes SystemController, Workers, Managers, and processing services.
+    """
+
+    SERVICE_MANAGER = "service_manager"
+    """Service managers orchestrate how services are launched and managed.
+    Supports multiprocessing (single-node) and Kubernetes (multi-node) deployments.
+    One-to-one mapping based on run_mode configuration.
+    """
+
+    TIMING_STRATEGY = "timing_strategy"
+    """Timing strategies control request scheduling and credit issuance.
+    Determines when requests are sent based on fixed schedules, request rates,
+    or user-centric patterns. One-to-one mapping per benchmark run.
+    """
+
+    TRANSPORT = "transport"
+    """Transports handle the network layer for sending requests to inference servers.
+    Manages connection pooling, streaming, error handling, and TCP configuration.
+    One-to-one mapping based on transport_type configuration.
+    """
+
+    UI = "ui"
+    """UI components provide progress tracking and visualization during benchmark execution.
+    Supports rich terminal dashboards, simple progress bars, or headless execution.
+    One-to-one mapping based on ui configuration.
+    """
+
+    ZMQ_PROXY = "zmq_proxy"
+    """ZMQ proxies provide message routing between different socket patterns.
+    Includes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.
+    Internal infrastructure: automatically created by framework based on configuration.
+    """
+
+class ArrivalPattern(ExtensibleStrEnum):
+    """
+    Interval generators determine inter-arrival times for request rate strategy.
+    Controls the distribution of request timing (constant, Poisson, gamma, etc.).
+    One-to-one mapping when using request_rate timing mode.
+    """
 
     CONCURRENCY_BURST = "concurrency_burst"
     """Generate intervals as soon as possible, up to a max concurrency limit. Only allowed when a request rate is not specified."""
@@ -48,17 +161,21 @@ class ArrivalPatternType(ExtensibleStrEnum):
 
     GAMMA = "gamma"
     """Generate intervals using a gamma distribution with tunable smoothness.
-Use --arrival-smoothness to control the shape parameter:
-- smoothness = 1.0: Equivalent to Poisson (exponential inter-arrivals)
-- smoothness < 1.0: More bursty/clustered arrivals
-- smoothness > 1.0: More regular/smooth arrivals
-"""
+    Use --arrival-smoothness to control the shape parameter:
+    - smoothness = 1.0: Equivalent to Poisson (exponential inter-arrivals)
+    - smoothness < 1.0: More bursty/clustered arrivals
+    - smoothness > 1.0: More regular/smooth arrivals
+    """
 
     POISSON = "poisson"
     """Generate intervals using a poisson process."""
 
 class CommunicationBackend(ExtensibleStrEnum):
-    """Dynamic enum for communication plugin types."""
+    """
+    Communication backends provide the underlying transport for inter-service messaging.
+    Supports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.
+    One-to-one mapping based on deployment configuration.
+    """
 
     ZMQ_IPC = "zmq_ipc"
     """ZMQ IPC communication backend for single-node deployments. Provides high-performance message passing over Unix domain sockets for same-machine communication."""
@@ -67,7 +184,11 @@ class CommunicationBackend(ExtensibleStrEnum):
     """ZMQ TCP communication backend for distributed multi-node deployments. Provides reliable message passing over TCP sockets for cross-machine communication."""
 
 class CommClientType(ExtensibleStrEnum):
-    """Dynamic enum for communication_client plugin types."""
+    """
+    Communication clients implement different ZMQ socket patterns for messaging.
+    Includes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.
+    Internal infrastructure: automatically created by framework based on usage.
+    """
 
     PUB = "pub"
     """ZMQ PUB client for publish-subscribe messaging pattern. Broadcasts messages to multiple subscribers with topic-based filtering support."""
@@ -94,7 +215,11 @@ class CommClientType(ExtensibleStrEnum):
     """ZMQ SUB client for publish-subscribe messaging pattern. Receives broadcasts from publishers with topic filtering and subscription management."""
 
 class ConsoleExporterType(ExtensibleStrEnum):
-    """Dynamic enum for console_exporter plugin types."""
+    """
+    Console exporters display benchmark results and diagnostics to stdout.
+    Provides formatted output for metrics, errors, telemetry, and traces.
+    One-to-many mapping: multiple console exporters can be loaded simultaneously.
+    """
 
     API_ERRORS = "api_errors"
     """Console exporter for API error details. Displays detailed error information for API request failures with grouped error analysis."""
@@ -121,7 +246,11 @@ class ConsoleExporterType(ExtensibleStrEnum):
     """Console exporter for usage discrepancy warnings. Alerts when token counts from server differ significantly from client calculations. Always loaded."""
 
 class CustomDatasetType(ExtensibleStrEnum):
-    """Dynamic enum for custom_dataset_loader plugin types."""
+    """
+    Custom dataset loaders parse different JSONL file formats into conversations.
+    Supports single-turn, multi-turn, random-pool, and trace formats.
+    Auto-detection: loaders are tried in priority order based on can_load().
+    """
 
     MOONCAKE_TRACE = "mooncake_trace"
     """Mooncake trace dataset loader for loading Alibaba Mooncake trace format with timestamp-based replay support. Designed for fixed_schedule timing mode."""
@@ -136,7 +265,11 @@ class CustomDatasetType(ExtensibleStrEnum):
     """Single-turn dataset loader supporting multi-modal data and client-side batching. Supports text, images, audio with optional timestamps or delays. Does NOT support multi-turn features."""
 
 class DataExporterType(ExtensibleStrEnum):
-    """Dynamic enum for data_exporter plugin types."""
+    """
+    Data exporters write benchmark results to files in various formats.
+    Supports CSV, JSON, Parquet, and specialized export formats.
+    One-to-many mapping: multiple exporters can be loaded simultaneously.
+    """
 
     CSV = "csv"
     """CSV exporter for aggregated metrics. Exports benchmark results to CSV format for spreadsheet analysis and data processing. Always loaded."""
@@ -163,19 +296,31 @@ class DataExporterType(ExtensibleStrEnum):
     """JSON exporter for timeslice metrics. Exports time-series metric data to JSON format for temporal analysis and visualization."""
 
 class DatasetBackingStoreType(ExtensibleStrEnum):
-    """Dynamic enum for dataset_backing_store plugin types."""
+    """
+    Dataset backing stores manage conversation data on the DatasetManager side.
+    Provides efficient storage for dataset distribution to workers.
+    Handles streaming writes and finalization for client access.
+    """
 
     MEMORY_MAP = "memory_map"
     """Memory-mapped file backing store for zero-copy worker access. Stores dataset in memory-mapped files for efficient sharing across processes."""
 
 class DatasetClientStoreType(ExtensibleStrEnum):
-    """Dynamic enum for dataset_client_store plugin types."""
+    """
+    Dataset client stores read conversation data on the Worker side.
+    Provides efficient access to datasets from backing stores.
+    Supports zero-copy reads and O(1) lookup performance.
+    """
 
     MEMORY_MAP = "memory_map"
     """Memory-mapped file client store for zero-copy reads. Reads from memory-mapped files with O(1) lookup performance."""
 
 class ComposerType(ExtensibleStrEnum):
-    """Dynamic enum for dataset_composer plugin types."""
+    """
+    Dataset composers create conversation datasets from various sources.
+    Handles synthetic generation, custom file loading, and specialized formats.
+    One-to-one mapping based on composer_type configuration.
+    """
 
     CUSTOM = "custom"
     """Custom dataset composer that loads conversations from JSONL files. Supports single-turn, multi-turn, random-pool, and mooncake-trace formats with automatic format detection."""
@@ -187,7 +332,11 @@ class ComposerType(ExtensibleStrEnum):
     """Synthetic rankings dataset composer that generates ranking tasks with query and passage pairs for ranking model evaluation and benchmarking."""
 
 class DatasetSamplingStrategy(ExtensibleStrEnum):
-    """Dynamic enum for dataset_sampler plugin types."""
+    """
+    Dataset samplers control how conversations are selected from the dataset.
+    Supports random, sequential, and shuffle sampling strategies.
+    One-to-one mapping based on sampling strategy configuration.
+    """
 
     RANDOM = "random"
     """Random sampler that randomly selects conversation IDs with replacement. Can return the same conversation ID multiple times before seeing all IDs. Uses derived RNG for reproducibility."""
@@ -199,7 +348,11 @@ class DatasetSamplingStrategy(ExtensibleStrEnum):
     """Shuffle sampler that randomly samples without replacement, then repeats. Ensures all conversations are seen before any repetition, similar to music shuffle. Uses derived RNG for reproducibility."""
 
 class EndpointType(ExtensibleStrEnum):
-    """Dynamic enum for endpoint plugin types."""
+    """
+    Endpoints define how to format requests and parse responses for different APIs.
+    Supports OpenAI-compatible, HuggingFace, Cohere, NIM, and custom API formats.
+    One-to-one mapping based on endpoint_type configuration.
+    """
 
     CHAT = "chat"
     """OpenAI Chat Completions endpoint. Supports multi-modal inputs (text, images, audio, video) and both streaming and non-streaming responses. Uses /v1/chat/completions path."""
@@ -232,7 +385,11 @@ class EndpointType(ExtensibleStrEnum):
     """Template endpoint for creating custom endpoint implementations. Serves as a starting point for plugin developers to implement new API formats."""
 
 class PlotType(ExtensibleStrEnum):
-    """Dynamic enum for plot plugin types."""
+    """
+    Plot handlers create different types of visualizations from benchmark data.
+    Supports scatter, histogram, timeline, percentile bands, and multi-run comparisons.
+    One-to-one mapping based on plot type selection.
+    """
 
     AREA = "area"
     """Area chart handler for visualizing cumulative metrics over time with shaded regions."""
@@ -265,7 +422,11 @@ class PlotType(ExtensibleStrEnum):
     """Timeslice handler for showing aggregated averages per time window."""
 
 class RampType(ExtensibleStrEnum):
-    """Dynamic enum for ramp plugin types."""
+    """
+    Ramp strategies control how values are gradually transitioned over time.
+    Used for ramping concurrency limits, request rates, and other numeric parameters.
+    Supports linear, exponential, and stochastic ramping patterns.
+    """
 
     EXPONENTIAL = "exponential"
     """Exponential ease-in ramp strategy. Starts slow and accelerates toward target, providing gradual warmup before full load."""
@@ -277,7 +438,11 @@ class RampType(ExtensibleStrEnum):
     """Poisson ramp strategy with exponentially-distributed intervals. Provides stochastic burstiness while guaranteeing completion within duration."""
 
 class RecordProcessorType(ExtensibleStrEnum):
-    """Dynamic enum for record_processor plugin types."""
+    """
+    Record processors stream records and compute metrics in a distributed manner.
+    First stage of metrics pipeline, handling per-record computations.
+    One-to-many mapping: multiple processors can be loaded simultaneously.
+    """
 
     METRIC_RECORD = "metric_record"
     """Streaming record processor that computes metrics from MetricType.RECORD and MetricType.AGGREGATE. First stage of distributed processing pipeline. Always loaded."""
@@ -286,7 +451,11 @@ class RecordProcessorType(ExtensibleStrEnum):
     """Raw record writer that streams raw request/response data to JSONL files for detailed analysis and debugging. Enabled when export_level is RAW."""
 
 class ResultsProcessorType(ExtensibleStrEnum):
-    """Dynamic enum for results_processor plugin types."""
+    """
+    Results processors aggregate results from record processors and compute derived metrics.
+    Final stage of metrics pipeline for aggregated statistics and summaries.
+    One-to-many mapping: multiple processors can be loaded simultaneously.
+    """
 
     GPU_TELEMETRY_ACCUMULATOR = "gpu_telemetry_accumulator"
     """GPU telemetry accumulator that aggregates GPU telemetry records and computes metrics in a hierarchical structure. Loaded when telemetry is enabled."""
@@ -310,7 +479,11 @@ class ResultsProcessorType(ExtensibleStrEnum):
     """Timeslice results processor that computes metrics for user-configurable time slices, enabling time-series analysis of benchmark performance. Enabled when timeslice config is set."""
 
 class ServiceType(ExtensibleStrEnum):
-    """Dynamic enum for service plugin types."""
+    """
+    Services are the core processes that make up the AIPerf distributed system.
+    Each service runs in a separate process and communicates via ZMQ message bus.
+    Includes SystemController, Workers, Managers, and processing services.
+    """
 
     DATASET_MANAGER = "dataset_manager"
     """Dataset management service. Handles prompt/token generation, dataset loading and composition, conversation sampling, and distribution to timing manager."""
@@ -340,7 +513,11 @@ class ServiceType(ExtensibleStrEnum):
     """Worker lifecycle and health monitoring service. Manages worker pool, monitors health metrics, handles worker failures, and coordinates worker scaling."""
 
 class ServiceRunType(ExtensibleStrEnum):
-    """Dynamic enum for service_manager plugin types."""
+    """
+    Service managers orchestrate how services are launched and managed.
+    Supports multiprocessing (single-node) and Kubernetes (multi-node) deployments.
+    One-to-one mapping based on run_mode configuration.
+    """
 
     KUBERNETES = "kubernetes"
     """Kubernetes service manager for multi-node deployments. Runs each service as a Kubernetes pod with ZMQ TCP communication for distributed cloud execution."""
@@ -348,31 +525,43 @@ class ServiceRunType(ExtensibleStrEnum):
     MULTIPROCESSING = "multiprocessing"
     """Multiprocess service manager for single-node deployments. Runs each service as a separate process with ZMQ IPC communication for high-performance local execution."""
 
-class TimingStrategyType(ExtensibleStrEnum):
-    """Dynamic enum for timing_strategy plugin types."""
+class TimingMode(ExtensibleStrEnum):
+    """
+    Timing strategies control request scheduling and credit issuance.
+    Determines when requests are sent based on fixed schedules, request rates,
+    or user-centric patterns. One-to-one mapping per benchmark run.
+    """
 
     FIXED_SCHEDULE = "fixed_schedule"
     """A mode where the TimingManager will send requests according to a fixed schedule."""
 
     REQUEST_RATE = "request_rate"
     """A mode where the TimingManager will send requests using a request rate generator based on various modes.
-Optionally, a max concurrency limit can be specified as well.
-"""
+    Optionally, a max concurrency limit can be specified as well.
+    """
 
     USER_CENTRIC_RATE = "user_centric_rate"
     """A mode where each session acts as a separate user with gap = num_users / request_rate between turns.
-Users block on their previous turn (no interleaving within a user).
-Matches LMBenchmark behavior for KV cache benchmarking.
-"""
+    Users block on their previous turn (no interleaving within a user).
+    Matches LMBenchmark behavior for KV cache benchmarking.
+    """
 
 class TransportType(ExtensibleStrEnum):
-    """Dynamic enum for transport plugin types."""
+    """
+    Transports handle the network layer for sending requests to inference servers.
+    Manages connection pooling, streaming, error handling, and TCP configuration.
+    One-to-one mapping based on transport_type configuration.
+    """
 
     HTTP = "http"
     """HTTP/1.1 transport implementation using aiohttp. Provides high-performance async HTTP client with connection pooling, SSE streaming support, automatic error handling, and custom TCP connector configuration."""
 
 class UIType(ExtensibleStrEnum):
-    """Dynamic enum for ui plugin types."""
+    """
+    UI components provide progress tracking and visualization during benchmark execution.
+    Supports rich terminal dashboards, simple progress bars, or headless execution.
+    One-to-one mapping based on ui configuration.
+    """
 
     DASHBOARD = "dashboard"
     """Rich terminal dashboard UI with real-time progress tracking, metric updates, and visual components using Textual framework. Provides interactive TUI experience."""
@@ -384,7 +573,11 @@ class UIType(ExtensibleStrEnum):
     """Simple progress bar UI using tqdm. Provides lightweight progress tracking suitable for simple terminals and logs with minimal resource overhead."""
 
 class ZMQProxyType(ExtensibleStrEnum):
-    """Dynamic enum for zmq_proxy plugin types."""
+    """
+    ZMQ proxies provide message routing between different socket patterns.
+    Includes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.
+    Internal infrastructure: automatically created by framework based on configuration.
+    """
 
     DEALER_ROUTER = "dealer_router"
     """DEALER/ROUTER proxy for request-reply pattern. Routes messages between DEALER clients and ROUTER services with identity-based routing and response forwarding."""
@@ -396,7 +589,7 @@ class ZMQProxyType(ExtensibleStrEnum):
     """XPUB/XSUB proxy for publish-subscribe pattern. Routes messages from PUB clients to SUB services with subscription management and message broadcasting."""
 
 __all__ = [
-    "ArrivalPatternType",
+    "ArrivalPattern",
     "CommClientType",
     "CommunicationBackend",
     "ComposerType",
@@ -414,7 +607,7 @@ __all__ = [
     "ResultsProcessorType",
     "ServiceRunType",
     "ServiceType",
-    "TimingStrategyType",
+    "TimingMode",
     "TransportType",
     "UIType",
     "ZMQProxyType",

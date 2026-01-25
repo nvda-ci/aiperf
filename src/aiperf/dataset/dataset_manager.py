@@ -6,7 +6,6 @@ import time
 
 import orjson
 
-from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import OutputDefaults, ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
@@ -44,6 +43,7 @@ from aiperf.common.protocols import (
 )
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     ComposerType,
     DatasetBackingStoreType,

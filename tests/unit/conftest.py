@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import zmq.asyncio
 
-from aiperf.common import plugin_registry
 from aiperf.common import random_generator as rng
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
@@ -33,11 +32,12 @@ from aiperf.common.models import (
     Turn,
 )
 from aiperf.common.models.record_models import TokenCounts
-from aiperf.common.plugin_registry import PluginRegistry
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.types import MessageTypeT
 from aiperf.exporters.exporter_config import ExporterConfig
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import CommunicationBackend, ServiceRunType
+from aiperf.plugin.plugin_registry import PluginRegistry
 from tests.harness.fake_tokenizer import FakeTokenizer
 from tests.harness.time_traveler import TimeTraveler
 

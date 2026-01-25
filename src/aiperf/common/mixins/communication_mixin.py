@@ -3,10 +3,10 @@
 
 from abc import ABC
 
-from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig
 from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
 from aiperf.common.protocols import CommunicationProtocol
+from aiperf.plugin import plugin_registry
 
 
 class CommunicationMixin(AIPerfLifecycleMixin, ABC):

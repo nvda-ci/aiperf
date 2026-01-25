@@ -4,7 +4,7 @@
 import pytest
 from pytest import param
 
-from aiperf.common import plugin_registry
+from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import TransportType
 
 
