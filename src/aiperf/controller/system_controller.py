@@ -59,7 +59,7 @@ from aiperf.controller.system_mixins import SignalHandlerMixin
 from aiperf.credit.messages import CreditsCompleteMessage
 from aiperf.exporters.exporter_manager import ExporterManager
 from aiperf.plugin import plugin_registry
-from aiperf.plugin.enums import ServiceType
+from aiperf.plugin.enums import PluginCategory, ServiceType
 
 
 class SystemController(SignalHandlerMixin, BaseService):
@@ -106,7 +106,7 @@ class SystemController(SignalHandlerMixin, BaseService):
             service_config=self.service_config
         )
         ServiceManagerClass = plugin_registry.get_class(
-            "service_manager", self.service_config.service_run_type
+            PluginCategory.SERVICE_MANAGER, self.service_config.service_run_type
         )
         self.service_manager: ServiceManagerProtocol = ServiceManagerClass(
             required_services=self.required_services,
@@ -114,7 +114,9 @@ class SystemController(SignalHandlerMixin, BaseService):
             service_config=self.service_config,
             log_queue=get_global_log_queue(),
         )
-        UIClass = plugin_registry.get_class("ui", self.service_config.ui_type)
+        UIClass = plugin_registry.get_class(
+            PluginCategory.UI, self.service_config.ui_type
+        )
         self.ui: AIPerfUIProtocol = UIClass(
             service_config=self.service_config,
             user_config=self.user_config,

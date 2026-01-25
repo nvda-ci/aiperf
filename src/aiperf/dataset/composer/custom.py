@@ -13,7 +13,7 @@ from aiperf.common.utils import load_json_str
 from aiperf.dataset.composer.base import BaseDatasetComposer
 from aiperf.dataset.utils import check_file_exists
 from aiperf.plugin import plugin_registry
-from aiperf.plugin.enums import CustomDatasetType
+from aiperf.plugin.enums import CustomDatasetType, PluginCategory
 
 
 @implements_protocol(ServiceProtocol)
@@ -115,7 +115,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
                 # Try to convert the type string to enum
                 explicit_type = CustomDatasetType(data["type"])
                 loader_class = plugin_registry.get_class(
-                    "custom_dataset_loader", explicit_type
+                    PluginCategory.CUSTOM_DATASET_LOADER, explicit_type
                 )
                 if not loader_class.can_load(data, filename):
                     raise ValueError(
@@ -162,7 +162,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
         """
         if self.config.input.dataset_sampling_strategy is None:
             loader_class = plugin_registry.get_class(
-                "custom_dataset_loader", dataset_type
+                PluginCategory.CUSTOM_DATASET_LOADER, dataset_type
             )
             preferred_strategy = loader_class.get_preferred_sampling_strategy()
             self.config.input.dataset_sampling_strategy = preferred_strategy
@@ -202,7 +202,9 @@ class CustomDatasetComposer(BaseDatasetComposer):
         elif dataset_type == CustomDatasetType.RANDOM_POOL:
             kwargs["num_conversations"] = self.config.input.conversation.num
 
-        LoaderClass = plugin_registry.get_class("custom_dataset_loader", dataset_type)
+        LoaderClass = plugin_registry.get_class(
+            PluginCategory.CUSTOM_DATASET_LOADER, dataset_type
+        )
         self.loader = LoaderClass(
             filename=self.config.input.file,
             user_config=self.config,

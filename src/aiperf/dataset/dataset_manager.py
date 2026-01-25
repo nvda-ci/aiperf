@@ -47,6 +47,7 @@ from aiperf.plugin import plugin_registry
 from aiperf.plugin.enums import (
     ComposerType,
     DatasetBackingStoreType,
+    PluginCategory,
 )
 
 
@@ -277,7 +278,9 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         else:
             composer_type = ComposerType.SYNTHETIC
 
-        ComposerClass = plugin_registry.get_class("dataset_composer", composer_type)
+        ComposerClass = plugin_registry.get_class(
+            PluginCategory.DATASET_COMPOSER, composer_type
+        )
         composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)
         return composer.create_dataset()
 

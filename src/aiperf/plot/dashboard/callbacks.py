@@ -88,6 +88,7 @@ from aiperf.plot.metric_names import (
     get_metric_display_name_with_unit,
 )
 from aiperf.plugin import plugin_registry
+from aiperf.plugin.enums import PluginCategory
 
 _logger = logging.getLogger(__name__)
 
@@ -1309,7 +1310,9 @@ def register_export_png_callback(
 
         # Use handler factory (same as PNG exporter line 121)
         try:
-            HandlerClass = plugin_registry.get_class("plot_type", spec.plot_type)
+            HandlerClass = plugin_registry.get_class(
+                PluginCategory.PLOT, spec.plot_type
+            )
             handler = HandlerClass(plot_generator=plot_gen, logger=None)
             return handler.create_plot(spec, run, available_metrics)
         except Exception as e:
@@ -4832,7 +4835,9 @@ def _generate_singlerun_figure(
             if not spec:
                 return None
 
-            HandlerClass = plugin_registry.get_class("plot_type", spec.plot_type)
+            HandlerClass = plugin_registry.get_class(
+                PluginCategory.PLOT, spec.plot_type
+            )
             handler = HandlerClass(plot_generator=plot_gen, logger=None)
             available_metrics = _build_available_metrics_dict(plot_specs)
             fig = handler.create_plot(spec, run, available_metrics)

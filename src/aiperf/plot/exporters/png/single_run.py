@@ -19,6 +19,7 @@ from aiperf.plot.core.plot_specs import (
 )
 from aiperf.plot.exporters.png.base import BasePNGExporter
 from aiperf.plugin import plugin_registry
+from aiperf.plugin.enums import PluginCategory
 
 
 class SingleRunPNGExporter(BasePNGExporter):
@@ -118,7 +119,7 @@ class SingleRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        HandlerClass = plugin_registry.get_class("plot", spec.plot_type)
+        HandlerClass = plugin_registry.get_class(PluginCategory.PLOT, spec.plot_type)
         handler = HandlerClass(plot_generator=self.plot_generator, logger=self)
 
         return handler.create_plot(spec, run, available_metrics)

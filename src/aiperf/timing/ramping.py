@@ -58,6 +58,7 @@ from aiperf.common import random_generator as rng
 from aiperf.common.enums import CaseInsensitiveStrEnum
 from aiperf.common.models import AIPerfBaseModel
 from aiperf.plugin import plugin_registry
+from aiperf.plugin.enums import PluginCategory
 
 # =============================================================================
 # RampType - The different ramp algorithms for gradually transitioning numeric values
@@ -173,7 +174,7 @@ class Ramper:
         """
         self._setter = setter
         self._config = config
-        RampClass = plugin_registry.get_class("ramp", config.ramp_type)
+        RampClass = plugin_registry.get_class(PluginCategory.RAMP, config.ramp_type)
         self._strategy = RampClass(config=config)
         self._task: asyncio.Task | None = None
 

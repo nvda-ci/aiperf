@@ -5,9 +5,10 @@
 
 Usage:
     from aiperf.plugin import plugin_registry
+    from aiperf.plugin.enums import PluginCategory
 
-    EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-    for impl in plugin_registry.list_types('endpoint'):
+    EndpointClass = plugin_registry.get_class(PluginCategory.ENDPOINT, 'openai')
+    for impl in plugin_registry.list_types(PluginCategory.ENDPOINT):
         print(f"{impl.type_name}: {impl.description}")
 
 Conflict resolution: higher priority wins; equal priority: external beats built-in.
@@ -705,7 +706,8 @@ class PluginRegistry(Singleton):
 # This pattern follows the random_generator module design.
 # Usage:
 #   from aiperf.plugin import plugin_registry
-#   EndpointClass = plugin_registry.get_class('endpoint', 'openai')
+#   from aiperf.plugin.enums import PluginCategory
+#   EndpointClass = plugin_registry.get_class(PluginCategory.ENDPOINT, 'openai')
 # ==============================================================================
 
 
