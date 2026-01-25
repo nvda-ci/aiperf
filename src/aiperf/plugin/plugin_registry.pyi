@@ -274,27 +274,27 @@ def get_class(category: PluginCategory, name_or_class_path: str) -> type: ...
 # ==============================================================================
 
 def get_class(category: PluginCategory, name_or_class_path: str) -> type:
-    """Get type class by name or class path. See PluginRegistry.get_class()."""
+    """Get type class by name or fully qualified class path (lazy-loaded, cached)."""
     ...
 
 def list_types(category: PluginCategory) -> list[TypeEntry]:
-    """List all TypeEntry objects for a category. See PluginRegistry.list_types()."""
+    """List all TypeEntry objects for a category (sorted alphabetically)."""
     ...
 
 def validate_all(check_class: bool = ...) -> dict[str, list[tuple[str, str]]]:
-    """Validate all registered types without loading. See PluginRegistry.validate_all()."""
+    """Validate all registered types without loading. Returns {category: [(type, error)]}."""
     ...
 
 def find_registered_name(category: str, cls: type) -> str | None:
-    """Reverse lookup: find registered name for a class. See PluginRegistry.find_registered_name()."""
+    """Reverse lookup: find registered name for a class, or None if not found."""
     ...
 
 def load_registry(registry_path: str | Path) -> None:
-    """Load registry from YAML file. See PluginRegistry.load_registry()."""
+    """Load plugin types from a YAML registry manifest."""
     ...
 
 def list_packages(builtin_only: bool = ...) -> list[str]:
-    """List all loaded plugin package names. See PluginRegistry.list_packages()."""
+    """List all loaded plugin package names."""
     ...
 
 def get_package_metadata(package_name: str) -> PackageMetadata:
@@ -306,7 +306,7 @@ def list_categories() -> list[str]:
     ...
 
 def reset() -> None:
-    """Reset registry to empty state (for testing)."""
+    """Reset registry to empty state and reload built-in plugins (for testing)."""
     ...
 
 def register(
@@ -325,5 +325,5 @@ def create_enum(category: str, enum_name: str) -> type:
     ...
 
 def detect_type_from_url(category: str, url: str) -> str:
-    """Detect the type from a URL by matching URL scheme to type metadata."""
+    """Detect the plugin type from a URL by matching its scheme."""
     ...

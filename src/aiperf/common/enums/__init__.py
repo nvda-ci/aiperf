@@ -12,9 +12,6 @@ from aiperf.common.enums.base_enums import (
     BasePydanticBackedStrEnum,
     BasePydanticEnumInfo,
     CaseInsensitiveStrEnum,
-    ExtensibleStrEnum,
-    ExtensibleStrEnumMeta,
-    create_enum,
 )
 from aiperf.common.enums.command_enums import (
     CommandResponseStatus,
@@ -34,6 +31,11 @@ from aiperf.common.enums.dataset_enums import (
     PublicDatasetType,
     VideoFormat,
     VideoSynthType,
+)
+from aiperf.common.enums.extensible_enums import (
+    ExtensibleStrEnum,
+    ExtensibleStrEnumMeta,
+    create_enum,
 )
 from aiperf.common.enums.logging_enums import (
     AIPerfLogLevel,

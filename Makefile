@@ -21,7 +21,8 @@
 		integration-tests integration-tests-ci integration-tests-verbose integration-tests-ci-macos \
 		test-integration test-integration-ci test-integration-verbose test-integration-ci-macos \
 		test-component-integration test-component-integration-ci test-component-integration-verbose \
-		generate-cli-docs generate-env-vars-docs test-stress stress-tests internal-help help
+		generate-cli-docs generate-env-vars-docs generate-enum-stubs check-enum-stubs \
+		test-stress stress-tests internal-help help
 
 
 # Include user-defined environment variables
@@ -241,3 +242,9 @@ generate-cli-docs: #? generate the CLI documentation.
 
 generate-env-vars-docs: #? generate the environment variables documentation.
 	$(activate_venv) && tools/generate_env_vars_docs.py
+
+generate-enum-stubs: #? generate the plugin enum stubs (enums.py and enums.pyi).
+	$(activate_venv) && python tools/generate_enum_stubs.py
+
+check-enum-stubs: #? check if the plugin enum stubs are up-to-date.
+	$(activate_venv) && python tools/generate_enum_stubs.py --check
