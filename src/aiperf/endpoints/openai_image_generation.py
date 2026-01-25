@@ -1,10 +1,8 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 from typing import Any
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import EndpointType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import ImageDataItem, ImageResponseData, ParsedResponse
 from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.record_models import RequestInfo
@@ -13,7 +11,6 @@ from aiperf.endpoints.base_endpoint import BaseEndpoint
 
 
 @implements_protocol(EndpointProtocol)
-@EndpointFactory.register(EndpointType.IMAGE_GENERATION)
 class ImageGenerationEndpoint(BaseEndpoint):
     """OpenAI Image Generation endpoint.
 

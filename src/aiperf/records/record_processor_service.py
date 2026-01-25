@@ -3,20 +3,16 @@
 import asyncio
 import traceback
 
+from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
     MessageType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.exceptions import FactoryCreationError, PostProcessorDisabled
-from aiperf.common.factories import (
-    RecordProcessorFactory,
-    ServiceFactory,
-)
+from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.hooks import on_command, on_pull_message
 from aiperf.common.messages import (
     InferenceResultsMessage,
@@ -40,7 +36,6 @@ from aiperf.metrics.metric_dicts import MetricRecordDict
 from aiperf.records.inference_result_parser import InferenceResultParser
 
 
-@ServiceFactory.register(ServiceType.RECORD_PROCESSOR)
 class RecordProcessor(PullClientMixin, BaseComponentService):
     """RecordProcessor is responsible for processing the records and pushing them to the RecordsManager.
     This service is meant to be run in a distributed fashion, where the amount of record processors can be scaled
@@ -76,31 +71,23 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
         )
 
         self.records_processors: list[RecordProcessorProtocol] = []
-        for processor_type in RecordProcessorFactory.get_all_class_types():
+        for processor_type in plugin_registry.list_types("record_processor"):
             try:
-                processor: RecordProcessorProtocol = (
-                    RecordProcessorFactory.create_instance(
-                        processor_type,
-                        service_config=self.service_config,
-                        user_config=self.user_config,
-                        service_id=self.service_id,
-                    )
+                ProcessorClass = processor_type.load()
+                processor: RecordProcessorProtocol = ProcessorClass(
+                    service_config=self.service_config,
+                    user_config=self.user_config,
+                    service_id=self.service_id,
                 )
                 self.records_processors.append(processor)
                 self.attach_child_lifecycle(processor)
                 self.debug(
                     f"Created record processor: {processor_type}: {processor.__class__.__name__}"
                 )
-            except FactoryCreationError as e:
-                if e.__cause__ is not None and isinstance(
-                    e.__cause__, PostProcessorDisabled
-                ):
-                    self.debug(
-                        f"Record processor {processor_type} is disabled and will not be used"
-                    )
-                else:
-                    self.exception(f"Error creating record processor: {e!r}")
-                    raise
+            except PostProcessorDisabled:
+                self.debug(
+                    f"Record processor {processor_type} is disabled and will not be used"
+                )
 
     @on_command(CommandType.PROFILE_CONFIGURE)
     async def _profile_configure_command(

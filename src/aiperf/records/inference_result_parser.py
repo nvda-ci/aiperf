@@ -4,8 +4,8 @@ import asyncio
 import time
 from contextlib import suppress
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.hooks import on_init
 from aiperf.common.mixins import CommunicationMixin
 from aiperf.common.models import (
@@ -39,9 +39,11 @@ class InferenceResultParser(CommunicationMixin):
         self.model_endpoint: ModelEndpointInfo = ModelEndpointInfo.from_user_config(
             user_config
         )
-        self.endpoint: EndpointProtocol = EndpointFactory.create_instance(
-            self.model_endpoint.endpoint.type,
-            model_endpoint=self.model_endpoint,
+        EndpointClass = plugin_registry.get_class(
+            "endpoint", self.model_endpoint.endpoint.type
+        )
+        self.endpoint: EndpointProtocol = EndpointClass(
+            model_endpoint=self.model_endpoint
         )
         endpoint_meta = self.endpoint.metadata()
         # Disable tokenization if the endpoint doesn't produce tokens and doesn't tokenize input, or

@@ -10,12 +10,10 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommandType,
     MessageType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.event_loop_monitor import EventLoopMonitor
 from aiperf.common.exceptions import InvalidStateError
-from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import (
     on_command,
     on_message,
@@ -36,7 +34,6 @@ from aiperf.timing.phase_orchestrator import PhaseOrchestrator
 
 
 @implements_protocol(ServiceProtocol)
-@ServiceFactory.register(ServiceType.TIMING_MANAGER)
 class TimingManager(BaseComponentService):
     """Service orchestrating credit issuance and request timing.
 

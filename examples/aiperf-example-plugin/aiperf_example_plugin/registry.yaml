@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# AIPerf Example Plugin Registry
+# Schema version: 1.0
+
+schema_version: "1.0"
+
+plugin:
+  name: aiperf-example-plugin
+  version: 1.0.0
+  description: Example plugin demonstrating AIPerf extensibility patterns
+  author: NVIDIA
+  license: Apache-2.0
+  enabled: true
+
+# Phase Hooks
+# Phase hooks receive notifications at key lifecycle events:
+# - on_phase_start: Phase begins
+# - on_phase_sending_complete: All credits sent
+# - on_phase_complete: All credits returned
+# - on_phase_timeout: Phase timed out
+phase_hooks:
+  example_logging_hook:
+    class: aiperf_example_plugin.hooks:ExampleLoggingHook
+    description: Simple phase event logger
+    tags: [example, logging, phase-events]
+    auto_load: false
+    config_params:
+      - name: log_file
+        type: str
+        default: /tmp/aiperf_phases.log
+        description: Path to write phase logs
+      - name: verbose
+        type: bool
+        default: false
+        description: Enable detailed logging
+
+  example_metrics_collector_hook:
+    class: aiperf_example_plugin.hooks:ExampleMetricsCollectorHook
+    description: Collects and aggregates phase metrics to JSON
+    tags: [example, metrics, phase-events, json]
+    auto_load: false
+    config_params:
+      - name: metrics_file
+        type: str
+        default: /tmp/aiperf_metrics.json
+        description: Path to write metrics JSON
+      - name: aggregate
+        type: bool
+        default: true
+        description: Aggregate metrics across phases
+
+# Post-Processors
+# Post-processors run after phase execution to analyze results
+post_processors:
+  example_metrics_processor:
+    class: aiperf_example_plugin.processors:ExampleMetricsProcessor
+    description: Calculates custom metrics from results
+    tags: [example, metrics, custom, post-processor]
+    auto_load: false
+    config_params:
+      - name: output_file
+        type: str
+        default: /tmp/aiperf_metrics.txt
+        description: Path to write processed metrics
+      - name: include_percentiles
+        type: bool
+        default: true
+        description: Calculate latency percentiles
+
+  example_results_aggregator:
+    class: aiperf_example_plugin.processors:ExampleResultsAggregator
+    description: Aggregates results from multiple phases
+    tags: [example, aggregation, post-processor]
+    auto_load: false

@@ -14,8 +14,8 @@ from aiperf.common.config import (
     SynthesisConfig,
     UserConfig,
 )
-from aiperf.common.enums import CustomDatasetType
 from aiperf.dataset import MooncakeTrace, MooncakeTraceDatasetLoader
+from aiperf.plugin.enums import CustomDatasetType
 
 
 class TestMooncakeTrace:

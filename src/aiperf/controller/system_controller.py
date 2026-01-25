@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from aiperf.cli_utils import print_developer_mode_warning
+from aiperf.common import plugin_registry
 from aiperf.common.base_service import BaseService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.config.config_defaults import OutputDefaults
@@ -18,15 +19,9 @@ from aiperf.common.enums import (
     CommandType,
     MessageType,
     ServiceRegistrationStatus,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import LifecycleOperationError
-from aiperf.common.factories import (
-    AIPerfUIFactory,
-    ServiceFactory,
-    ServiceManagerFactory,
-)
 from aiperf.common.hooks import on_command, on_init, on_message, on_start, on_stop
 from aiperf.common.logging import cleanup_global_log_queue, get_global_log_queue
 from aiperf.common.messages import (
@@ -64,9 +59,9 @@ from aiperf.controller.proxy_manager import ProxyManager
 from aiperf.controller.system_mixins import SignalHandlerMixin
 from aiperf.credit.messages import CreditsCompleteMessage
 from aiperf.exporters.exporter_manager import ExporterManager
+from aiperf.plugin.enums import ServiceType
 
 
-@ServiceFactory.register(ServiceType.SYSTEM_CONTROLLER)
 class SystemController(SignalHandlerMixin, BaseService):
     """System Controller service.
 
@@ -110,17 +105,17 @@ class SystemController(SignalHandlerMixin, BaseService):
         self.proxy_manager: ProxyManager = ProxyManager(
             service_config=self.service_config
         )
-        self.service_manager: ServiceManagerProtocol = (
-            ServiceManagerFactory.create_instance(
-                self.service_config.service_run_type.value,
-                required_services=self.required_services,
-                user_config=self.user_config,
-                service_config=self.service_config,
-                log_queue=get_global_log_queue(),
-            )
+        ServiceManagerClass = plugin_registry.get_class(
+            "service_manager", self.service_config.service_run_type
         )
-        self.ui: AIPerfUIProtocol = AIPerfUIFactory.create_instance(
-            self.service_config.ui_type,
+        self.service_manager: ServiceManagerProtocol = ServiceManagerClass(
+            required_services=self.required_services,
+            user_config=self.user_config,
+            service_config=self.service_config,
+            log_queue=get_global_log_queue(),
+        )
+        UIClass = plugin_registry.get_class("ui", self.service_config.ui_type)
+        self.ui: AIPerfUIProtocol = UIClass(
             service_config=self.service_config,
             user_config=self.user_config,
             log_queue=get_global_log_queue(),

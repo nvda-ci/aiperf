@@ -10,9 +10,9 @@ from unittest.mock import Mock, patch
 import pytest
 import zmq
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import ZMQTCPConfig, ZMQTCPProxyConfig
-from aiperf.common.enums import ZMQProxyType
-from aiperf.common.factories import ZMQProxyFactory
+from aiperf.plugin.enums import ZMQProxyType
 from aiperf.zmq.zmq_proxy_base import ProxyEndType, ProxySocketClient
 from aiperf.zmq.zmq_proxy_sockets import (
     ZMQDealerRouterProxy,
@@ -330,8 +330,15 @@ class TestProxyEdgeCases:
 
     @pytest.mark.asyncio
     async def test_all_proxy_types_are_registered(self):
-        """Test that all proxy types are registered in the factory."""
+        """Test that all proxy types are registered in the plugin registry."""
         # Verify all expected proxy types are registered
-        assert ZMQProxyType.XPUB_XSUB in ZMQProxyFactory._registry
-        assert ZMQProxyType.DEALER_ROUTER in ZMQProxyFactory._registry
-        assert ZMQProxyType.PUSH_PULL in ZMQProxyFactory._registry
+        assert (
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.XPUB_XSUB) is not None
+        )
+        assert (
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.DEALER_ROUTER)
+            is not None
+        )
+        assert (
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.PUSH_PULL) is not None
+        )

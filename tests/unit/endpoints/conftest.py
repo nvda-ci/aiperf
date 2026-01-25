@@ -3,11 +3,12 @@
 """Shared fixtures and helpers for endpoint tests."""
 
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
-import pytest
-
-from aiperf.common.enums import CreditPhase, EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import (
+    CreditPhase,
+    ModelSelectionStrategy,
+)
 from aiperf.common.models import Text, Turn
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
@@ -17,6 +18,7 @@ from aiperf.common.models.model_endpoint_info import (
 )
 from aiperf.common.models.record_models import RequestInfo
 from aiperf.common.protocols import InferenceServerResponse
+from aiperf.plugin.enums import EndpointType
 
 
 def create_model_endpoint(
@@ -44,12 +46,12 @@ def create_model_endpoint(
 
 
 def create_endpoint_with_mock_transport(endpoint_class, model_endpoint):
-    """Helper to create an endpoint instance with mocked transport."""
-    with patch(
-        "aiperf.common.factories.TransportFactory.create_instance"
-    ) as mock_transport:
-        mock_transport.return_value = MagicMock()
-        return endpoint_class(model_endpoint=model_endpoint)
+    """Helper to create an endpoint instance.
+
+    Note: Endpoints don't create transports themselves - transports are created
+    by InferenceClient. This helper exists for backwards compatibility.
+    """
+    return endpoint_class(model_endpoint=model_endpoint)
 
 
 def create_request_info(
@@ -111,11 +113,3 @@ def create_mock_response(
     mock_response.get_json.return_value = json_data
     mock_response.get_text.return_value = text
     return mock_response
-
-
-@pytest.fixture
-def mock_transport_factory():
-    """Mock the TransportFactory to return a MagicMock."""
-    with patch("aiperf.common.factories.TransportFactory.create_instance") as mock:
-        mock.return_value = MagicMock()
-        yield mock

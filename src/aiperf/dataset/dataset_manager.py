@@ -6,27 +6,18 @@ import time
 
 import orjson
 
+from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import OutputDefaults, ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
-    ComposerType,
     CreditPhase,
-    DatasetBackingStoreType,
     MessageType,
     PublicDatasetType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.factories import (
-    ComposerFactory,
-    DatasetBackingStoreFactory,
-    DatasetClientStoreFactory,
-    EndpointFactory,
-    ServiceFactory,
-)
 from aiperf.common.hooks import on_command, on_request, on_stop
 from aiperf.common.messages import (
     ConversationRequestMessage,
@@ -53,10 +44,13 @@ from aiperf.common.protocols import (
 )
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
+from aiperf.plugin.enums import (
+    ComposerType,
+    DatasetBackingStoreType,
+)
 
 
 @implements_protocol(ServiceProtocol)
-@ServiceFactory.register(ServiceType.DATASET_MANAGER)
 class DatasetManager(ReplyClientMixin, BaseComponentService):
     """Manages dataset generation/acquisition and provides mmap access for workers.
 
@@ -91,11 +85,11 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         self._conversation_ids_cache: list[str] = []
         self.dataset_configured = asyncio.Event()
 
-        self._backing_store: DatasetBackingStoreProtocol = (
-            DatasetBackingStoreFactory.create_instance(
-                DatasetBackingStoreType.MEMORY_MAP,
-                benchmark_id=user_config.benchmark_id,
-            )
+        BackingStoreClass = plugin_registry.get_class(
+            "dataset_backing_store", DatasetBackingStoreType.MEMORY_MAP
+        )
+        self._backing_store: DatasetBackingStoreProtocol = BackingStoreClass(
+            benchmark_id=user_config.benchmark_id,
         )
         self._dataset_client: DatasetClientStoreProtocol | None = None
 
@@ -124,9 +118,10 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         """Configure the dataset client for serving fallback requests."""
         # Create dataset client for serving fallback requests, then free in-memory dataset
         client_metadata = self._backing_store.get_client_metadata()
-        self._dataset_client = DatasetClientStoreFactory.create_instance(
-            client_metadata=client_metadata,
+        DatasetClientClass = plugin_registry.get_class(
+            "dataset_client_store", client_metadata.client_type
         )
+        self._dataset_client = DatasetClientClass(client_metadata=client_metadata)
         await self._dataset_client.initialize()
         # Now that the client is ready, signal that fallback requests can be served
         self.dataset_configured.set()
@@ -163,10 +158,10 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         """Generate input payloads from the dataset for use in the inputs.json file."""
         inputs = InputsFile()
 
-        endpoint: EndpointProtocol = EndpointFactory.create_instance(
-            model_endpoint.endpoint.type,
-            model_endpoint=model_endpoint,
+        EndpointClass = plugin_registry.get_class(
+            "endpoint", model_endpoint.endpoint.type
         )
+        endpoint: EndpointProtocol = EndpointClass(model_endpoint=model_endpoint)
         self.debug(
             lambda: f"Created endpoint protocol for {model_endpoint.endpoint.type}, "
             f"class: {endpoint.__class__.__name__}",
@@ -265,11 +260,10 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         return await loader.convert_to_conversations(dataset)
 
     def _load_custom_dataset(self) -> list[Conversation]:
-        composer = ComposerFactory.create_instance(
-            ComposerType.CUSTOM,
-            config=self.user_config,
-            tokenizer=self.tokenizer,
+        ComposerClass = plugin_registry.get_class(
+            "dataset_composer", ComposerType.CUSTOM
         )
+        composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)
         return composer.create_dataset()
 
     def _is_rankings_endpoint(self, endpoint_type: str) -> bool:
@@ -283,11 +277,8 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
         else:
             composer_type = ComposerType.SYNTHETIC
 
-        composer = ComposerFactory.create_instance(
-            composer_type,
-            config=self.user_config,
-            tokenizer=self.tokenizer,
-        )
+        ComposerClass = plugin_registry.get_class("dataset_composer", composer_type)
+        composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)
         return composer.create_dataset()
 
     async def _configure_dataset(self) -> None:

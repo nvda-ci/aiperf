@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
@@ -11,9 +11,7 @@ import jmespath
 import orjson
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import EndpointType
 from aiperf.common.exceptions import InvalidStateError
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import ParsedResponse
 from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.record_models import RequestInfo
@@ -26,7 +24,6 @@ NAMED_TEMPLATES: dict[str, str] = {
 
 
 @implements_protocol(EndpointProtocol)
-@EndpointFactory.register(EndpointType.TEMPLATE)
 class TemplateEndpoint(BaseEndpoint):
     """Custom template endpoint using Jinja2 for payload formatting.
 

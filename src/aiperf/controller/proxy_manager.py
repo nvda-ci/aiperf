@@ -1,12 +1,12 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig
-from aiperf.common.enums import ZMQProxyType
-from aiperf.common.factories import ZMQProxyFactory
 from aiperf.common.hooks import on_init, on_start, on_stop
 from aiperf.common.mixins import AIPerfLifecycleMixin
+from aiperf.plugin.enums import ZMQProxyType
 
 
 class ProxyManager(AIPerfLifecycleMixin):
@@ -18,16 +18,13 @@ class ProxyManager(AIPerfLifecycleMixin):
     async def _initialize_proxies(self) -> None:
         comm_config = self.service_config.comm_config
         self.proxies = [
-            ZMQProxyFactory.create_instance(
-                ZMQProxyType.XPUB_XSUB,
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.XPUB_XSUB)(
                 zmq_proxy_config=comm_config.event_bus_proxy_config,
             ),
-            ZMQProxyFactory.create_instance(
-                ZMQProxyType.DEALER_ROUTER,
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.DEALER_ROUTER)(
                 zmq_proxy_config=comm_config.dataset_manager_proxy_config,
             ),
-            ZMQProxyFactory.create_instance(
-                ZMQProxyType.PUSH_PULL,
+            plugin_registry.get_class("zmq_proxy", ZMQProxyType.PUSH_PULL)(
                 zmq_proxy_config=comm_config.raw_inference_proxy_config,
             ),
         ]

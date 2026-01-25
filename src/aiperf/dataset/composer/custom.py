@@ -4,20 +4,19 @@
 from pathlib import Path
 from typing import Any
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import UserConfig
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import ComposerType, CustomDatasetType
-from aiperf.common.factories import ComposerFactory, CustomDatasetFactory
 from aiperf.common.models import Conversation
 from aiperf.common.protocols import ServiceProtocol
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.utils import load_json_str
 from aiperf.dataset.composer.base import BaseDatasetComposer
 from aiperf.dataset.utils import check_file_exists
+from aiperf.plugin.enums import CustomDatasetType
 
 
 @implements_protocol(ServiceProtocol)
-@ComposerFactory.register(ComposerType.CUSTOM)
 class CustomDatasetComposer(BaseDatasetComposer):
     def __init__(self, config: UserConfig, tokenizer: Tokenizer):
         super().__init__(config, tokenizer)
@@ -115,7 +114,9 @@ class CustomDatasetComposer(BaseDatasetComposer):
             try:
                 # Try to convert the type string to enum
                 explicit_type = CustomDatasetType(data["type"])
-                loader_class = CustomDatasetFactory.get_class_from_type(explicit_type)
+                loader_class = plugin_registry.get_class(
+                    "custom_dataset_loader", explicit_type
+                )
                 if not loader_class.can_load(data, filename):
                     raise ValueError(
                         f"Explicit type field {explicit_type} specified, but loader {loader_class.__name__} "
@@ -129,10 +130,9 @@ class CustomDatasetComposer(BaseDatasetComposer):
                 ) from e
 
         detected_type = None
-        for (
-            loader_class,
-            dataset_type,
-        ) in CustomDatasetFactory.get_all_classes_and_types():
+        for impl in plugin_registry.list_types("custom_dataset_loader"):
+            loader_class = impl.load()
+            dataset_type = CustomDatasetType(impl.impl_name)
             if loader_class.can_load(data, filename):
                 self.info(
                     f"Loader {loader_class.__name__} can handle the input file data format."
@@ -161,7 +161,9 @@ class CustomDatasetComposer(BaseDatasetComposer):
             dataset_type: The type of custom dataset
         """
         if self.config.input.dataset_sampling_strategy is None:
-            loader_class = CustomDatasetFactory.get_class_from_type(dataset_type)
+            loader_class = plugin_registry.get_class(
+                "custom_dataset_loader", dataset_type
+            )
             preferred_strategy = loader_class.get_preferred_sampling_strategy()
             self.config.input.dataset_sampling_strategy = preferred_strategy
             self.info(
@@ -200,8 +202,8 @@ class CustomDatasetComposer(BaseDatasetComposer):
         elif dataset_type == CustomDatasetType.RANDOM_POOL:
             kwargs["num_conversations"] = self.config.input.conversation.num
 
-        self.loader = CustomDatasetFactory.create_instance(
-            dataset_type,
+        LoaderClass = plugin_registry.get_class("custom_dataset_loader", dataset_type)
+        self.loader = LoaderClass(
             filename=self.config.input.file,
             user_config=self.config,
             **kwargs,

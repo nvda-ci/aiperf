@@ -4,28 +4,6 @@
 from aiperf.common.enums.base_enums import CaseInsensitiveStrEnum
 
 
-class ConsoleExporterType(CaseInsensitiveStrEnum):
-    API_ERRORS = "api_errors"
-    ERRORS = "errors"
-    EXPERIMENTAL_METRICS = "experimental_metrics"
-    HTTP_TRACE = "http_trace"
-    INTERNAL_METRICS = "internal_metrics"
-    METRICS = "metrics"
-    TELEMETRY = "telemetry"
-    USAGE_DISCREPANCY_WARNING = "usage_discrepancy_warning"
-
-
-class DataExporterType(CaseInsensitiveStrEnum):
-    JSON = "json"
-    CSV = "csv"
-    RAW_RECORD_AGGREGATOR = "raw_record_aggregator"
-    SERVER_METRICS_JSON = "server_metrics_json"
-    SERVER_METRICS_CSV = "server_metrics_csv"
-    SERVER_METRICS_PARQUET = "server_metrics_parquet"
-    TIMESLICE_JSON = "timeslice_json"
-    TIMESLICE_CSV = "timeslice_csv"
-
-
 class ServerMetricsFormat(CaseInsensitiveStrEnum):
     """Format options for server metrics export.
 

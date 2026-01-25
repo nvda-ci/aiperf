@@ -4,13 +4,13 @@ import statistics
 
 import pytest
 
-from aiperf.common.enums import ArrivalPattern
+from aiperf.common import plugin_registry
+from aiperf.plugin.enums import ArrivalPattern
 from aiperf.timing.intervals import (
     ConcurrencyBurstIntervalGenerator,
     ConstantIntervalGenerator,
     GammaIntervalGenerator,
     IntervalGeneratorConfig,
-    IntervalGeneratorFactory,
     PoissonIntervalGenerator,
 )
 
@@ -157,13 +157,14 @@ class TestConcurrencyBurstIntervalGenerator:
         assert gen.rate == 0.0 and gen.next_interval() == 0
 
 
-class TestIntervalGeneratorFactory:
+class TestIntervalGeneratorRegistry:
     @pytest.mark.parametrize("pattern,cls", [(ArrivalPattern.POISSON, PoissonIntervalGenerator), (ArrivalPattern.GAMMA, GammaIntervalGenerator), (ArrivalPattern.CONSTANT, ConstantIntervalGenerator), (ArrivalPattern.CONCURRENCY_BURST, ConcurrencyBurstIntervalGenerator)])  # fmt: skip
-    def test_factory_creates_correct_type(self, pattern: ArrivalPattern, cls: type):
+    def test_registry_creates_correct_type(self, pattern: ArrivalPattern, cls: type):
         rate = 10.0 if pattern != ArrivalPattern.CONCURRENCY_BURST else None
-        assert isinstance(
-            IntervalGeneratorFactory.create_instance(cfg(pattern, rate=rate)), cls
-        )
+        config = cfg(pattern, rate=rate)
+        GeneratorClass = plugin_registry.get_class("arrival_pattern", pattern.value)
+        instance = GeneratorClass(config=config)
+        assert isinstance(instance, cls)
 
 
 class TestEdgeCases:

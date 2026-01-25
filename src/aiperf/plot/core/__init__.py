@@ -50,7 +50,6 @@ from aiperf.plot.core.plot_specs import (
     get_plot_type_info,
 )
 from aiperf.plot.core.plot_type_handlers import (
-    PlotTypeHandlerFactory,
     PlotTypeHandlerProtocol,
 )
 from aiperf.plot.core.swept_params import (
@@ -73,7 +72,6 @@ __all__ = [
     "PlotGenerator",
     "PlotSpec",
     "PlotType",
-    "PlotTypeHandlerFactory",
     "PlotTypeHandlerProtocol",
     "PlotTypeInfo",
     "RunData",

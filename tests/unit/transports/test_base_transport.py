@@ -8,9 +8,7 @@ import pytest
 
 from aiperf.common.enums import (
     CreditPhase,
-    EndpointType,
     ModelSelectionStrategy,
-    TransportType,
 )
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
@@ -19,6 +17,10 @@ from aiperf.common.models.model_endpoint_info import (
     ModelListInfo,
 )
 from aiperf.common.models.record_models import RequestInfo, RequestRecord
+from aiperf.plugin.enums import (
+    EndpointType,
+    TransportType,
+)
 from aiperf.transports.base_transports import BaseTransport, TransportMetadata
 
 AIPERF_USER_AGENT = f"aiperf/{importlib_metadata.version('aiperf')}"

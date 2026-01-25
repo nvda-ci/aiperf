@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aiperf.common.factories import DatasetSamplingStrategyFactory
+from aiperf.common import plugin_registry
 from aiperf.common.hooks import on_init, on_start
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.credit.callback_handler import CreditCallbackHandler
@@ -101,8 +101,10 @@ class PhaseOrchestrator(AIPerfLifecycleMixin):
         self._dataset_metadata = dataset_metadata
 
         # Create dataset sampler
-        self._dataset_sampler = DatasetSamplingStrategyFactory.create_instance(
-            self._dataset_metadata.sampling_strategy,
+        SamplerClass = plugin_registry.get_class(
+            "dataset_sampler", self._dataset_metadata.sampling_strategy
+        )
+        self._dataset_sampler = SamplerClass(
             conversation_ids=[
                 c.conversation_id for c in self._dataset_metadata.conversations
             ],

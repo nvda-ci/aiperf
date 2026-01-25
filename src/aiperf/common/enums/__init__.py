@@ -12,6 +12,9 @@ from aiperf.common.enums.base_enums import (
     BasePydanticBackedStrEnum,
     BasePydanticEnumInfo,
     CaseInsensitiveStrEnum,
+    ExtensibleStrEnum,
+    ExtensibleStrEnumMeta,
+    create_enum,
 )
 from aiperf.common.enums.command_enums import (
     CommandResponseStatus,
@@ -19,23 +22,13 @@ from aiperf.common.enums.command_enums import (
 )
 from aiperf.common.enums.communication_enums import (
     CommAddress,
-    CommClientType,
-    CommunicationBackend,
-    ZMQProxyType,
 )
 from aiperf.common.enums.data_exporter_enums import (
-    ConsoleExporterType,
-    DataExporterType,
     ExportLevel,
     ServerMetricsFormat,
 )
 from aiperf.common.enums.dataset_enums import (
     AudioFormat,
-    ComposerType,
-    CustomDatasetType,
-    DatasetBackingStoreType,
-    DatasetClientStoreType,
-    DatasetSamplingStrategy,
     ImageFormat,
     PromptSource,
     PublicDatasetType,
@@ -83,14 +76,7 @@ from aiperf.common.enums.model_enums import (
     ModelSelectionStrategy,
 )
 from aiperf.common.enums.plugin_enums import (
-    AIPerfUIType,
     ConnectionReuseStrategy,
-    EndpointType,
-    TransportType,
-)
-from aiperf.common.enums.post_processor_enums import (
-    RecordProcessorType,
-    ResultsProcessorType,
 )
 from aiperf.common.enums.prometheus_enums import (
     PrometheusMetricType,
@@ -98,8 +84,6 @@ from aiperf.common.enums.prometheus_enums import (
 from aiperf.common.enums.service_enums import (
     LifecycleState,
     ServiceRegistrationStatus,
-    ServiceRunType,
-    ServiceType,
 )
 from aiperf.common.enums.sse_enums import (
     SSEEventType,
@@ -112,9 +96,7 @@ from aiperf.common.enums.telemetry_enums import (
     GPUTelemetryMode,
 )
 from aiperf.common.enums.timing_enums import (
-    ArrivalPattern,
     CreditPhase,
-    TimingMode,
 )
 from aiperf.common.enums.worker_enums import (
     WorkerStatus,
@@ -122,8 +104,6 @@ from aiperf.common.enums.worker_enums import (
 
 __all__ = [
     "AIPerfLogLevel",
-    "AIPerfUIType",
-    "ArrivalPattern",
     "AudioFormat",
     "BaseMetricUnit",
     "BaseMetricUnitInfo",
@@ -131,23 +111,15 @@ __all__ = [
     "BasePydanticEnumInfo",
     "CaseInsensitiveStrEnum",
     "CommAddress",
-    "CommClientType",
     "CommandResponseStatus",
     "CommandType",
-    "CommunicationBackend",
-    "ComposerType",
     "ConnectionReuseStrategy",
-    "ConsoleExporterType",
     "CreditPhase",
-    "CustomDatasetType",
-    "DataExporterType",
-    "DatasetBackingStoreType",
-    "DatasetClientStoreType",
-    "DatasetSamplingStrategy",
-    "EndpointType",
     "EnergyMetricUnit",
     "EnergyMetricUnitInfo",
     "ExportLevel",
+    "ExtensibleStrEnum",
+    "ExtensibleStrEnumMeta",
     "FrequencyMetricUnit",
     "FrequencyMetricUnitInfo",
     "GPUTelemetryMode",
@@ -177,21 +149,15 @@ __all__ = [
     "PrometheusMetricType",
     "PromptSource",
     "PublicDatasetType",
-    "RecordProcessorType",
-    "ResultsProcessorType",
     "SSEEventType",
     "SSEFieldType",
     "ServerMetricsFormat",
     "ServiceRegistrationStatus",
-    "ServiceRunType",
-    "ServiceType",
     "SystemState",
     "TemperatureMetricUnit",
     "TemperatureMetricUnitInfo",
-    "TimingMode",
-    "TransportType",
     "VideoFormat",
     "VideoSynthType",
     "WorkerStatus",
-    "ZMQProxyType",
+    "create_enum",
 ]

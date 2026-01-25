@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
@@ -6,8 +6,6 @@ from __future__ import annotations
 from typing import Any
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import EndpointType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import (
     BaseResponseData,
     ParsedResponse,
@@ -23,7 +21,6 @@ _DEFAULT_ROLE: str = "user"
 
 
 @implements_protocol(EndpointProtocol)
-@EndpointFactory.register(EndpointType.CHAT)
 class ChatEndpoint(BaseEndpoint):
     """OpenAI Chat Completions endpoint.
 

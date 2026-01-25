@@ -6,7 +6,6 @@ from unittest.mock import Mock, mock_open, patch
 import pytest
 
 from aiperf.common.config import SynthesisConfig
-from aiperf.common.enums import CustomDatasetType, DatasetSamplingStrategy
 from aiperf.common.models import Conversation, Turn
 from aiperf.dataset import (
     MooncakeTraceDatasetLoader,
@@ -15,6 +14,10 @@ from aiperf.dataset import (
     SingleTurnDatasetLoader,
 )
 from aiperf.dataset.composer.custom import CustomDatasetComposer
+from aiperf.plugin.enums import (
+    CustomDatasetType,
+    DatasetSamplingStrategy,
+)
 
 
 class TestInitialization:
@@ -133,16 +136,16 @@ class TestErrorHandling:
     """Test class for CustomDatasetComposer error handling scenarios."""
 
     @patch("aiperf.dataset.composer.custom.check_file_exists")
-    @patch("aiperf.dataset.composer.custom.CustomDatasetFactory.create_instance")
+    @patch("aiperf.dataset.composer.custom.plugin_registry.get_class")
     def test_create_dataset_empty_result(
-        self, mock_factory, mock_check_file, custom_config, mock_tokenizer
+        self, mock_get_class, mock_check_file, custom_config, mock_tokenizer
     ):
         """Test create_dataset when loader returns empty data."""
         mock_check_file.return_value = None
         mock_loader = Mock()
         mock_loader.load_dataset.return_value = {}
         mock_loader.convert_to_conversations.return_value = []
-        mock_factory.return_value = mock_loader
+        mock_get_class.return_value = lambda **kwargs: mock_loader
 
         composer = CustomDatasetComposer(custom_config, mock_tokenizer)
         result = composer.create_dataset()

@@ -5,22 +5,19 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from aiperf.common import plugin_registry
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
-    AIPerfUIType,
     CommAddress,
     CommandType,
     CreditPhase,
     MessageType,
-    ResultsProcessorType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.exceptions import FactoryCreationError, PostProcessorDisabled
-from aiperf.common.factories import ResultsProcessorFactory, ServiceFactory
+from aiperf.common.exceptions import PostProcessorDisabled
 from aiperf.common.hooks import background_task, on_command, on_message, on_pull_message
 from aiperf.common.messages import (
     AllRecordsReceivedMessage,
@@ -68,6 +65,7 @@ from aiperf.credit.messages import (
     CreditPhaseStartMessage,
     CreditsCompleteMessage,
 )
+from aiperf.plugin.enums import ResultsProcessorType, UIType
 from aiperf.records.error_tracker import ErrorTracker
 from aiperf.records.records_tracker import RecordsTracker
 
@@ -86,7 +84,6 @@ class ErrorTrackingState:
 
 
 @implements_protocol(ServiceProtocol)
-@ServiceFactory.register(ServiceType.RECORDS_MANAGER)
 class RecordsManager(PullClientMixin, BaseComponentService):
     """Collects and processes benchmark results from workers.
 
@@ -127,10 +124,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
         self._gpu_telemetry_accumulator: GPUTelemetryAccumulatorProtocol | None = None  # fmt: skip
         self._server_metrics_accumulator: ServerMetricsAccumulatorProtocol | None = None  # fmt: skip
 
-        for results_processor_type in ResultsProcessorFactory.get_all_class_types():
+        for results_processor_type in plugin_registry.list_types("results_processor"):
             try:
-                results_processor = ResultsProcessorFactory.create_instance(
-                    class_type=results_processor_type,
+                ResultsProcessorClass = results_processor_type.load()
+                results_processor = ResultsProcessorClass(
                     service_id=self.service_id,
                     service_config=self.service_config,
                     user_config=self.user_config,
@@ -164,15 +161,10 @@ class RecordsManager(PullClientMixin, BaseComponentService):
                 self.debug(
                     f"Created results processor: {results_processor_type}: {results_processor.__class__.__name__}"
                 )
-            except FactoryCreationError as e:
-                if isinstance(e.__cause__, PostProcessorDisabled):
-                    self.debug(
-                        f"Results processor {results_processor_type} is disabled and will not be used"
-                    )
-                else:
-                    self.error(
-                        f"Failed to create results processor {results_processor_type}: {e}"
-                    )
+            except PostProcessorDisabled:
+                self.debug(
+                    f"Results processor {results_processor_type} is disabled and will not be used"
+                )
 
     @on_pull_message(MessageType.METRIC_RECORDS)
     async def _on_metric_records(self, message: MetricRecordsMessage) -> None:
@@ -484,7 +476,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
     async def _report_realtime_inference_metrics_task(self) -> None:
         """Report inference metrics at regular intervals (dashboard only)."""
         if (
-            self.service_config.ui_type != AIPerfUIType.DASHBOARD
+            self.service_config.ui_type != UIType.DASHBOARD
             and not Environment.UI.REALTIME_METRICS_ENABLED
         ):
             return

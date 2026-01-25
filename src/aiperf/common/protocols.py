@@ -5,7 +5,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from aiperf.common.enums import CommClientType, LifecycleState
+from aiperf.common.enums import LifecycleState
 from aiperf.common.environment import Environment
 from aiperf.common.hooks import Hook, HookType
 from aiperf.common.models import (
@@ -30,6 +30,7 @@ from aiperf.common.types import (
     RequestOutputT,
     ServiceTypeT,
 )
+from aiperf.plugin.enums import CommClientType
 
 if TYPE_CHECKING:
     import multiprocessing
@@ -38,7 +39,6 @@ if TYPE_CHECKING:
     from rich.console import Console
 
     from aiperf.common.config import ServiceConfig, UserConfig
-    from aiperf.common.enums import DatasetSamplingStrategy
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.dataset_models import DatasetClientMetadata
     from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from aiperf.dataset.loader.models import CustomDatasetT
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
+    from aiperf.plugin.enums import DatasetSamplingStrategy
 
 
 ################################################################################

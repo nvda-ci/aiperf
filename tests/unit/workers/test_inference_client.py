@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import ModelSelectionStrategy
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -13,6 +13,7 @@ from aiperf.common.models.model_endpoint_info import (
     ModelListInfo,
 )
 from aiperf.common.models.record_models import RequestRecord
+from aiperf.plugin.enums import EndpointType
 from aiperf.workers.inference_client import InferenceClient
 
 
@@ -36,21 +37,23 @@ class TestInferenceClient:
     @pytest.fixture
     def inference_client(self, model_endpoint):
         """Create an InferenceClient instance."""
-        with (
-            patch(
-                "aiperf.common.factories.TransportFactory.create_instance"
-            ) as mock_transport_factory,
-            patch(
-                "aiperf.common.factories.EndpointFactory.create_instance"
-            ) as mock_endpoint_factory,
+        mock_transport = MagicMock()
+        mock_endpoint = MagicMock()
+        mock_endpoint.get_endpoint_headers.return_value = {}
+        mock_endpoint.get_endpoint_params.return_value = {}
+        mock_endpoint.format_payload.return_value = {}
+
+        def mock_get_class(protocol, type_name):
+            if protocol == "endpoint":
+                return lambda **kwargs: mock_endpoint
+            if protocol == "transport":
+                return lambda **kwargs: mock_transport
+            raise ValueError(f"Unknown protocol: {protocol}")
+
+        with patch(
+            "aiperf.workers.inference_client.plugin_registry.get_class",
+            side_effect=mock_get_class,
         ):
-            mock_transport = MagicMock()
-            mock_endpoint = MagicMock()
-            mock_endpoint.get_endpoint_headers.return_value = {}
-            mock_endpoint.get_endpoint_params.return_value = {}
-            mock_endpoint.format_payload.return_value = {}
-            mock_transport_factory.return_value = mock_transport
-            mock_endpoint_factory.return_value = mock_endpoint
             return InferenceClient(
                 model_endpoint=model_endpoint, service_id="test-service-id"
             )

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -12,13 +12,13 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
+from aiperf.common import plugin_registry
 from aiperf.common.enums import PrometheusMetricType
 from aiperf.common.models.record_models import MetricResult
 from aiperf.plot.constants import DEFAULT_PERCENTILE, NON_METRIC_KEYS
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.data_preparation import flatten_config
 from aiperf.plot.core.plot_specs import ExperimentClassificationConfig, PlotSpec
-from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
 
@@ -108,10 +108,8 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        handler = PlotTypeHandlerFactory.create_instance(
-            spec.plot_type,
-            plot_generator=self.plot_generator,
-        )
+        HandlerClass = plugin_registry.get_class("plot", spec.plot_type)
+        handler = HandlerClass(plot_generator=self.plot_generator)
 
         return handler.create_plot(spec, df, available_metrics)
 

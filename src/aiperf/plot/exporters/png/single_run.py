@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -12,12 +12,12 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 import aiperf.plot.handlers.single_run_handlers  # noqa: F401
+from aiperf.common import plugin_registry
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.plot_specs import (
     DataSource,
     PlotSpec,
 )
-from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.exporters.png.base import BasePNGExporter
 
 
@@ -118,10 +118,7 @@ class SingleRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        handler = PlotTypeHandlerFactory.create_instance(
-            spec.plot_type,
-            plot_generator=self.plot_generator,
-            logger=self,
-        )
+        HandlerClass = plugin_registry.get_class("plot", spec.plot_type)
+        handler = HandlerClass(plot_generator=self.plot_generator, logger=self)
 
         return handler.create_plot(spec, run, available_metrics)

@@ -1,12 +1,12 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """Tests for EmbeddingsEndpoint parse_response functionality."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import ModelSelectionStrategy
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -16,6 +16,7 @@ from aiperf.common.models.model_endpoint_info import (
 from aiperf.common.models.record_models import EmbeddingResponseData
 from aiperf.common.protocols import InferenceServerResponse
 from aiperf.endpoints.openai_embeddings import EmbeddingsEndpoint
+from aiperf.plugin.enums import EndpointType
 
 
 class TestEmbeddingsEndpointParseResponse:
@@ -34,11 +35,7 @@ class TestEmbeddingsEndpointParseResponse:
                 base_url="http://localhost:8000",
             ),
         )
-        with patch(
-            "aiperf.common.factories.TransportFactory.create_instance"
-        ) as mock_transport:
-            mock_transport.return_value = MagicMock()
-            return EmbeddingsEndpoint(model_endpoint=model_endpoint)
+        return EmbeddingsEndpoint(model_endpoint=model_endpoint)
 
     def test_parse_response_single_embedding(self, endpoint):
         """Test parsing response with single embedding."""

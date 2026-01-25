@@ -3,12 +3,12 @@
 
 import pytest
 
-from aiperf.common.enums import EndpointType
 from aiperf.common.models import Text, Turn
 from aiperf.common.models.record_models import (
     TextResponseData,
 )
 from aiperf.endpoints.solido_rag import SolidoEndpoint
+from aiperf.plugin.enums import EndpointType
 from tests.unit.endpoints.conftest import (
     create_endpoint_with_mock_transport,
     create_mock_response,

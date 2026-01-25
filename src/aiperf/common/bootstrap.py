@@ -75,9 +75,9 @@ def bootstrap_and_run_service(
         if Environment.DEV.ENABLE_YAPPI:
             _start_yappi_profiling()
 
-        from aiperf.module_loader import ensure_modules_loaded
+        from aiperf.common.aiperf_logger import AIPerfLogger
 
-        ensure_modules_loaded()
+        logger = AIPerfLogger(__name__)
 
         if service_class.__name__ in ("Worker", "TimingManager"):
             # Disable garbage collection in child processes to prevent unpredictable latency spikes.
@@ -89,6 +89,56 @@ def bootstrap_and_run_service(
             gc.freeze()
             gc.set_threshold(0)
             gc.disable()
+
+        # ===================================================================
+        # Initialize plugin system EARLY (before service creation)
+        # ===================================================================
+        # This must happen BEFORE any factory is used to ensure all
+        # implementations (built-in + plugins) are available.
+        # ===================================================================
+
+        logger.info("Initializing plugin system...")
+
+        try:
+            # 1. Initialize plugin registry (loads built-in + discovers plugins automatically)
+            from aiperf.common import plugin_registry
+
+            # Check for external plugins
+            all_plugins = plugin_registry.list_packages()
+            builtin_plugins = plugin_registry.list_packages(builtin_only=True)
+            external_plugins = [p for p in all_plugins if p not in builtin_plugins]
+
+            if external_plugins:
+                logger.info(
+                    f"Discovered {len(external_plugins)} external plugin(s): {', '.join(external_plugins)}"
+                )
+            else:
+                logger.debug("No external plugins discovered")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize plugin registry: {e!r}")
+            raise RuntimeError(
+                f"Plugin system initialization failed. This is a critical error. {e!r}"
+            ) from e
+
+        # 2. Load configured plugins (if any in user_config)
+        try:
+            from aiperf.common.plugin_loader import initialize_plugins
+
+            plugin_loader = initialize_plugins(
+                user_config.model_dump() if user_config else {}
+            )
+            loaded_plugins = plugin_loader.get_loaded_plugins()
+
+            if loaded_plugins:
+                logger.info(f"Loaded {len(loaded_plugins)} configured plugin(s)")
+
+        except Exception as e:
+            # Plugin loading is optional - warn but continue
+            logger.warning(f"Failed to load configured plugins: {e!r}")
+            # Continue anyway - plugins are optional
+
+        logger.info("Plugin system initialized successfully")
 
         # Load and apply custom GPU metrics in child process
         if user_config.gpu_telemetry_metrics_file:

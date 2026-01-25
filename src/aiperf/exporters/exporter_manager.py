@@ -1,17 +1,16 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
 
 from rich.console import Console
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.exceptions import (
     ConsoleExporterDisabled,
     DataExporterDisabled,
-    FactoryCreationError,
 )
-from aiperf.common.factories import ConsoleExporterFactory, DataExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import ProfileResults
 from aiperf.common.models.export_models import TelemetryExportData
@@ -59,20 +58,20 @@ class ExporterManager(AIPerfLoggerMixin):
     async def export_data(self) -> None:
         self.info("Exporting all records")
 
-        for exporter_type in DataExporterFactory.get_all_class_types():
+        for exporter_type in plugin_registry.list_types("data_exporter"):
             try:
-                exporter: DataExporterProtocol = DataExporterFactory.create_instance(
-                    exporter_type, exporter_config=self._exporter_config
+                ExporterClass = exporter_type.load()
+                exporter: DataExporterProtocol = ExporterClass(
+                    exporter_config=self._exporter_config,
                 )
-            except FactoryCreationError as e:
-                if isinstance(e.__cause__, DataExporterDisabled):
-                    self.debug(
-                        f"Data exporter {exporter_type} is disabled and will not be used"
-                    )
-                    continue
-                else:
-                    self.exception("Error creating data exporter: {e!r}")
-                    continue
+            except DataExporterDisabled:
+                self.debug(
+                    f"Data exporter {exporter_type} is disabled and will not be used"
+                )
+                continue
+            except Exception as e:
+                self.error(f"Error creating data exporter: {e!r}")
+                continue
 
             self.debug(f"Creating task for exporter: {exporter_type}")
             task = asyncio.create_task(exporter.export())
@@ -86,20 +85,20 @@ class ExporterManager(AIPerfLoggerMixin):
     def get_exported_file_infos(self) -> list[FileExportInfo]:
         """Get the file infos for all exported files."""
         file_infos = []
-        for exporter_type in DataExporterFactory.get_all_class_types():
+        for exporter_type in plugin_registry.list_types("data_exporter"):
             try:
-                exporter: DataExporterProtocol = DataExporterFactory.create_instance(
-                    exporter_type, exporter_config=self._exporter_config
+                ExporterClass = exporter_type.load()
+                exporter: DataExporterProtocol = ExporterClass(
+                    exporter_config=self._exporter_config,
                 )
-            except FactoryCreationError as e:
-                if isinstance(e.__cause__, DataExporterDisabled):
-                    self.debug(
-                        f"Data exporter {exporter_type} is disabled and will not be used"
-                    )
-                    continue
-                else:
-                    self.exception("Error creating data exporter: {e!r}")
-                    continue
+            except DataExporterDisabled:
+                self.debug(
+                    f"Data exporter {exporter_type} is disabled and will not be used"
+                )
+                continue
+            except Exception as e:
+                self.error(f"Error creating data exporter: {e!r}")
+                continue
 
             file_infos.append(exporter.get_export_info())
         return file_infos
@@ -107,22 +106,17 @@ class ExporterManager(AIPerfLoggerMixin):
     async def export_console(self, console: Console) -> None:
         self.info("Exporting console data")
 
-        for exporter_type in ConsoleExporterFactory.get_all_class_types():
+        for exporter_type in plugin_registry.list_types("console_exporter"):
             try:
-                exporter: ConsoleExporterProtocol = (
-                    ConsoleExporterFactory.create_instance(
-                        exporter_type, exporter_config=self._exporter_config
-                    )
+                ExporterClass = exporter_type.load()
+                exporter: ConsoleExporterProtocol = ExporterClass(
+                    exporter_config=self._exporter_config,
                 )
-            except FactoryCreationError as e:
-                if isinstance(e.__cause__, ConsoleExporterDisabled):
-                    self.debug(
-                        f"Console exporter {exporter_type} is disabled and will not be used"
-                    )
-                    continue
-                else:
-                    self.exception("Error creating console exporter: {e!r}")
-                    continue
+            except ConsoleExporterDisabled:
+                self.debug(
+                    f"Console exporter {exporter_type} is disabled and will not be used"
+                )
+                continue
 
             self.debug(f"Creating task for exporter: {exporter_type}")
             task = asyncio.create_task(exporter.export(console=console))

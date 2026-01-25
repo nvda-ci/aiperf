@@ -6,6 +6,7 @@ from typing import Annotated
 from pydantic import BeforeValidator, Field, model_validator
 from typing_extensions import Self
 
+from aiperf.common import plugin_registry
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.config.base_config import BaseConfig
 from aiperf.common.config.cli_parameter import CLIParameter
@@ -14,10 +15,9 @@ from aiperf.common.config.config_validators import parse_str_or_list
 from aiperf.common.config.groups import Groups
 from aiperf.common.enums import (
     ConnectionReuseStrategy,
-    EndpointType,
     ModelSelectionStrategy,
-    TransportType,
 )
+from aiperf.plugin.enums import EndpointType, TransportType
 
 _logger = AIPerfLogger(__name__)
 
@@ -35,13 +35,8 @@ class EndpointConfig(BaseConfig):
         if not self.streaming:
             return self
 
-        # Lazy import to avoid circular dependency
-        from aiperf.common.factories import EndpointFactory
-        from aiperf.module_loader import ensure_modules_loaded
-
-        ensure_modules_loaded()
-
-        metadata = EndpointFactory.get_metadata(self.type)
+        endpoint_class = plugin_registry.get_class("endpoint", self.type)
+        metadata = endpoint_class.metadata()
         if not metadata.supports_streaming:
             _logger.warning(
                 f"Streaming is not supported for --endpoint-type {self.type}, setting streaming to False"

@@ -8,11 +8,7 @@ import pytest
 
 from aiperf.common.config import EndpointConfig, InputConfig, ServiceConfig, UserConfig
 from aiperf.common.config.config_defaults import InputDefaults
-from aiperf.common.enums import (
-    CustomDatasetType,
-    DatasetSamplingStrategy,
-    PublicDatasetType,
-)
+from aiperf.common.enums import PublicDatasetType
 from aiperf.common.exceptions import ServiceError
 from aiperf.common.messages import (
     ConversationRequestMessage,
@@ -22,6 +18,10 @@ from aiperf.common.messages import (
 from aiperf.common.messages.command_messages import ProfileConfigureCommand
 from aiperf.common.models import Conversation, Text, Turn
 from aiperf.dataset.dataset_manager import DatasetManager
+from aiperf.plugin.enums import (
+    CustomDatasetType,
+    DatasetSamplingStrategy,
+)
 
 # ============================================================================
 # Shared Fixtures
@@ -29,13 +29,12 @@ from aiperf.dataset.dataset_manager import DatasetManager
 
 
 @pytest.fixture(autouse=True)
-async def cleanup_communication_factory():
-    """Clean up CommunicationFactory after each test to prevent shared state issues."""
+async def cleanup_communication_singletons():
+    """Clean up singleton instances after each test to prevent shared state issues."""
     yield
-    from aiperf.common.factories import CommunicationFactory
+    from aiperf.common.singleton import SingletonMeta
 
-    if hasattr(CommunicationFactory, "_instances"):
-        CommunicationFactory._instances.clear()
+    SingletonMeta._instances.clear()
 
 
 @pytest.fixture
@@ -56,7 +55,9 @@ def base_user_config():
 
 
 @pytest.fixture
-async def initialized_dataset_manager(mock_tokenizer, base_user_config):
+async def initialized_dataset_manager(
+    mock_tokenizer, base_user_config, mock_communication_layer
+):
     """Create an initialized DatasetManager with mocked publish."""
     service_config = ServiceConfig()
     dataset_manager = DatasetManager(service_config, base_user_config)

@@ -10,10 +10,14 @@
 
 from cyclopts import App
 
+from aiperf.cli_commands.plugins_cli import plugins_app
 from aiperf.cli_utils import exit_on_error
 from aiperf.common.config import ServiceConfig, UserConfig
 
 app = App(name="aiperf", help="NVIDIA AIPerf")
+
+# Add plugins subcommand
+app.command(plugins_app)
 
 
 def _register_trace_commands() -> None:

@@ -9,10 +9,8 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import on_command, on_stop
 from aiperf.common.messages import (
     ProfileCancelCommand,
@@ -29,7 +27,6 @@ from aiperf.server_metrics.data_collector import ServerMetricsDataCollector
 
 
 @implements_protocol(ServiceProtocol)
-@ServiceFactory.register(ServiceType.SERVER_METRICS_MANAGER)
 class ServerMetricsManager(BaseComponentService):
     """Coordinates multiple ServerMetricsDataCollector instances for server metrics collection.
 

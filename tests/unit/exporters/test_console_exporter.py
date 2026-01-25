@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
@@ -6,7 +6,6 @@ from rich.console import Console
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
 from aiperf.common.constants import NANOS_PER_MILLIS
-from aiperf.common.enums import EndpointType
 from aiperf.common.models import MetricResult, ProfileResults
 from aiperf.exporters import ConsoleMetricsExporter, ExporterConfig, to_display_unit
 from aiperf.metrics.metric_registry import MetricRegistry
@@ -17,6 +16,7 @@ from aiperf.metrics.types.inter_token_latency_metric import InterTokenLatencyMet
 from aiperf.metrics.types.output_token_count import OutputTokenCountMetric
 from aiperf.metrics.types.request_latency_metric import RequestLatencyMetric
 from aiperf.metrics.types.ttft_metric import TTFTMetric
+from aiperf.plugin.enums import EndpointType
 
 
 @pytest.fixture

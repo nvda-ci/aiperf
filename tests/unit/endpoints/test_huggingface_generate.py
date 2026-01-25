@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from aiperf.common.enums import EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import ModelSelectionStrategy
 from aiperf.common.models import ParsedResponse
 from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.model_endpoint_info import (
@@ -17,6 +17,7 @@ from aiperf.common.models.model_endpoint_info import (
 from aiperf.common.models.record_models import Turn
 from aiperf.common.protocols import InferenceServerResponse
 from aiperf.endpoints.huggingface_generate import HuggingFaceGenerateEndpoint
+from aiperf.plugin.enums import EndpointType
 from tests.unit.endpoints.conftest import create_request_info
 
 

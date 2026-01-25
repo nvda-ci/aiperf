@@ -9,6 +9,7 @@ from orjson import JSONDecodeError
 from pydantic import BeforeValidator, Field, model_validator
 from typing_extensions import Self
 
+from aiperf.common import plugin_registry
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.config.base_config import BaseConfig
 from aiperf.common.config.cli_parameter import CLIParameter, DisableCLI
@@ -23,10 +24,14 @@ from aiperf.common.config.input_config import InputConfig
 from aiperf.common.config.loadgen_config import LoadGeneratorConfig
 from aiperf.common.config.output_config import OutputConfig
 from aiperf.common.config.tokenizer_config import TokenizerConfig
-from aiperf.common.enums import CustomDatasetType, GPUTelemetryMode, ServerMetricsFormat
-from aiperf.common.enums.plugin_enums import EndpointType
-from aiperf.common.enums.timing_enums import ArrivalPattern, TimingMode
+from aiperf.common.enums import GPUTelemetryMode, ServerMetricsFormat
 from aiperf.common.utils import load_json_str
+from aiperf.plugin.enums import (
+    ArrivalPattern,
+    CustomDatasetType,
+    EndpointType,
+    TimingMode,
+)
 
 _logger = AIPerfLogger(__name__)
 
@@ -639,13 +644,8 @@ class UserConfig(BaseConfig):
 
     def _get_artifact_service_kind(self) -> str:
         """Get the service kind name based on the endpoint config."""
-        # Lazy import to avoid circular dependency
-        from aiperf.common.factories import EndpointFactory
-        from aiperf.module_loader import ensure_modules_loaded
-
-        ensure_modules_loaded()
-
-        metadata = EndpointFactory.get_metadata(self.endpoint.type)
+        endpoint_class = plugin_registry.get_class("endpoint", self.endpoint.type)
+        metadata = endpoint_class.metadata()
         return f"{metadata.service_kind}-{self.endpoint.type}"
 
     def _get_artifact_stimulus(self) -> str:

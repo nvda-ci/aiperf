@@ -9,15 +9,16 @@ Modes for inter-arrival time generation:
 - ConcurrencyBurst: Zero delay, throughput controlled by concurrency semaphore
 """
 
+from __future__ import annotations
+
 from typing import Protocol, runtime_checkable
 
 from pydantic import Field
 from typing_extensions import Self
 
 from aiperf.common import random_generator as rng
-from aiperf.common.enums import ArrivalPattern
-from aiperf.common.factories import AIPerfFactory
 from aiperf.common.models import AIPerfBaseModel
+from aiperf.plugin.enums import ArrivalPattern
 from aiperf.timing.config import CreditPhaseConfig
 
 # ==============================================================================
@@ -78,26 +79,6 @@ class IntervalGeneratorProtocol(Protocol):
 
 
 # ==============================================================================
-# Factory
-# ==============================================================================
-
-
-class IntervalGeneratorFactory(
-    AIPerfFactory[ArrivalPattern, IntervalGeneratorProtocol]
-):
-    """Factory for registering and creating IntervalGeneratorProtocol instances based on the specified ArrivalPattern.
-    see: :class:`aiperf.common.factories.AIPerfFactory` for more details.
-    """
-
-    @classmethod
-    def create_instance(  # type: ignore[override]
-        cls,
-        config: IntervalGeneratorConfig,
-    ) -> IntervalGeneratorProtocol:
-        return super().create_instance(config.arrival_pattern, config=config)
-
-
-# ==============================================================================
 # Implementations
 # ==============================================================================
 
@@ -111,7 +92,6 @@ def _validate_request_rate(
         )
 
 
-@IntervalGeneratorFactory.register(ArrivalPattern.POISSON)
 class PoissonIntervalGenerator:
     """Poisson process with exponential inter-arrival times.
 
@@ -143,7 +123,6 @@ class PoissonIntervalGenerator:
         return self._rng.expovariate(self._request_rate)
 
 
-@IntervalGeneratorFactory.register(ArrivalPattern.GAMMA)
 class GammaIntervalGenerator:
     """Gamma distribution with tunable smoothness for inter-arrival times.
 
@@ -195,7 +174,6 @@ class GammaIntervalGenerator:
         return self._rng.gammavariate(self._gamma_shape, self._gamma_scale)
 
 
-@IntervalGeneratorFactory.register(ArrivalPattern.CONSTANT)
 class ConstantIntervalGenerator:
     """Constant inter-arrival times with fixed intervals.
 
@@ -226,7 +204,6 @@ class ConstantIntervalGenerator:
         return self._period
 
 
-@IntervalGeneratorFactory.register(ArrivalPattern.CONCURRENCY_BURST)
 class ConcurrencyBurstIntervalGenerator:
     """Burst arrival pattern with zero delay (concurrency-driven throughput).
 

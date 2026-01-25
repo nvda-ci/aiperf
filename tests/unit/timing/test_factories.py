@@ -6,18 +6,18 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from aiperf.common.enums import ArrivalPattern, TimingMode
-from aiperf.common.exceptions import FactoryCreationError
-from aiperf.timing.intervals import (
-    IntervalGeneratorConfig,
-    IntervalGeneratorFactory,
+from aiperf.common import plugin_registry
+from aiperf.common.exceptions import PluginNotFoundError
+from aiperf.plugin.enums import (
+    ArrivalPattern,
+    TimingMode,
 )
+from aiperf.timing.intervals import IntervalGeneratorConfig
 from aiperf.timing.ramping import (
     RampConfig,
-    RampStrategyFactory,
     RampType,
 )
-from aiperf.timing.strategies.core import TimingStrategyFactory, TimingStrategyProtocol
+from aiperf.timing.strategies.core import TimingStrategyProtocol
 from tests.unit.timing.conftest import make_phase_config
 
 
@@ -107,32 +107,42 @@ def mk_ramp_cfg(rtype, start=1.0, target=10.0, dur=5.0, exp=None, step=None):
     )
 
 
+def create_interval_generator(config: IntervalGeneratorConfig):
+    """Create interval generator using plugin_registry."""
+    GeneratorClass = plugin_registry.get_class(
+        "arrival_pattern", config.arrival_pattern
+    )
+    return GeneratorClass(config=config)
+
+
+def create_timing_strategy(timing_mode, *, config, **deps):
+    """Create timing strategy using plugin_registry."""
+    StrategyClass = plugin_registry.get_class("timing_strategy", timing_mode)
+    return StrategyClass(config=config, **deps)
+
+
 class TestIntervalGeneratorFactory:
     @pytest.mark.parametrize("rate,exp_int", [(10.0, 0.1), (100.0, 0.01), (1.0, 1.0)])
     def test_constant_interval(self, rate, exp_int):
-        g = IntervalGeneratorFactory.create_instance(
-            mk_int_cfg(ArrivalPattern.CONSTANT, rate)
-        )
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.CONSTANT, rate))
         assert g.next_interval() == pytest.approx(exp_int)
         assert g.rate == rate
 
     def test_poisson_varies(self):
-        g = IntervalGeneratorFactory.create_instance(mk_int_cfg(ArrivalPattern.POISSON))
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.POISSON))
         ints = [g.next_interval() for _ in range(10)]
         assert g.rate == 10.0
         assert all(i > 0 for i in ints)
         assert len(set(ints)) > 1
 
     def test_gamma_smoothness(self):
-        g = IntervalGeneratorFactory.create_instance(
-            mk_int_cfg(ArrivalPattern.GAMMA, smooth=2.0)
-        )
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.GAMMA, smooth=2.0))
         ints = [g.next_interval() for _ in range(10)]
         assert g.rate == 10.0 and all(i > 0 for i in ints)
         assert hasattr(g, "smoothness") and g.smoothness == 2.0
 
     def test_burst_zero(self):
-        g = IntervalGeneratorFactory.create_instance(
+        g = create_interval_generator(
             mk_int_cfg(ArrivalPattern.CONCURRENCY_BURST, rate=None)
         )
         assert g.next_interval() == 0 and g.rate == 0.0
@@ -142,10 +152,9 @@ class TestIntervalGeneratorFactory:
         [ArrivalPattern.CONSTANT, ArrivalPattern.POISSON, ArrivalPattern.GAMMA],
     )
     def test_rate_required(self, pat):
-        with pytest.raises(FactoryCreationError) as exc:
-            IntervalGeneratorFactory.create_instance(mk_int_cfg(pat, rate=None))
-        assert isinstance(exc.value.__cause__, ValueError)
-        assert "must be set and greater than 0" in str(exc.value.__cause__)
+        with pytest.raises(Exception) as exc:
+            create_interval_generator(mk_int_cfg(pat, rate=None))
+        assert "must be set and greater than 0" in str(exc.value)
 
     @pytest.mark.parametrize(
         "pat",
@@ -153,34 +162,29 @@ class TestIntervalGeneratorFactory:
     )
     @pytest.mark.parametrize("bad_rate", [0.0, -1.0])
     def test_rate_positive(self, pat, bad_rate):
-        with pytest.raises(FactoryCreationError) as exc:
-            IntervalGeneratorFactory.create_instance(mk_int_cfg(pat, rate=bad_rate))
-        assert isinstance(exc.value.__cause__, ValueError)
+        with pytest.raises(Exception):
+            create_interval_generator(mk_int_cfg(pat, rate=bad_rate))
 
     def test_constant_rate_update(self):
-        g = IntervalGeneratorFactory.create_instance(
-            mk_int_cfg(ArrivalPattern.CONSTANT)
-        )
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.CONSTANT))
         assert g.next_interval() == pytest.approx(0.1)
         g.set_rate(20.0)
         assert g.rate == 20.0 and g.next_interval() == pytest.approx(0.05)
 
     def test_poisson_rate_update(self):
-        g = IntervalGeneratorFactory.create_instance(mk_int_cfg(ArrivalPattern.POISSON))
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.POISSON))
         g.set_rate(100.0)
         assert g.rate == 100.0
         avg = sum(g.next_interval() for _ in range(100)) / 100
         assert avg < 0.1
 
     def test_gamma_rate_update(self):
-        g = IntervalGeneratorFactory.create_instance(
-            mk_int_cfg(ArrivalPattern.GAMMA, smooth=2.0)
-        )
+        g = create_interval_generator(mk_int_cfg(ArrivalPattern.GAMMA, smooth=2.0))
         g.set_rate(50.0)
         assert g.rate == 50.0
 
     def test_burst_ignores_set_rate(self):
-        g = IntervalGeneratorFactory.create_instance(
+        g = create_interval_generator(
             mk_int_cfg(ArrivalPattern.CONCURRENCY_BURST, rate=None)
         )
         g.set_rate(100.0)
@@ -192,7 +196,7 @@ class TestIntervalGeneratorFactory:
     )
     @pytest.mark.parametrize("bad", [0.0, -1.0])
     def test_set_rate_validates(self, pat, bad):
-        g = IntervalGeneratorFactory.create_instance(
+        g = create_interval_generator(
             mk_int_cfg(pat, smooth=2.0 if pat == ArrivalPattern.GAMMA else None)
         )
         with pytest.raises(ValueError, match="must be > 0"):
@@ -201,20 +205,19 @@ class TestIntervalGeneratorFactory:
 
 class TestRampStrategyFactory:
     def test_creates_linear(self):
-        s = RampStrategyFactory.create_instance(mk_ramp_cfg(RampType.LINEAR))
+        cfg = mk_ramp_cfg(RampType.LINEAR)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == 1.0 and s.target == 10.0
 
     def test_creates_exponential(self):
-        s = RampStrategyFactory.create_instance(
-            mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
-        )
+        cfg = mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == 1.0 and s.target == 10.0
 
     @pytest.mark.parametrize("start,target,dir", [(1.0, 10.0, "inc"), (10.0, 1.0, "dec"), (5.0, 5.0, "const")])  # fmt: skip
     def test_linear_directions(self, start, target, dir):
-        s = RampStrategyFactory.create_instance(
-            mk_ramp_cfg(RampType.LINEAR, start=start, target=target)
-        )
+        cfg = mk_ramp_cfg(RampType.LINEAR, start=start, target=target)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.start == start and s.target == target
         r = s.next_step(start, 0.0)
         if dir == "const":
@@ -226,27 +229,29 @@ class TestRampStrategyFactory:
             assert (nv > start) if dir == "inc" else (nv < start)
 
     def test_linear_discrete_step(self):
-        s = RampStrategyFactory.create_instance(mk_ramp_cfg(RampType.LINEAR))
+        cfg = mk_ramp_cfg(RampType.LINEAR)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         r = s.next_step(1.0, 0.0)
         assert r is not None
         d, nv = r
         assert nv == 2.0 and d >= 0
 
     def test_linear_custom_step(self):
-        s = RampStrategyFactory.create_instance(mk_ramp_cfg(RampType.LINEAR, step=3.0))
+        cfg = mk_ramp_cfg(RampType.LINEAR, step=3.0)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         r = s.next_step(1.0, 0.0)
         assert r is not None and r[1] == 4.0
 
     def test_linear_value_at(self):
-        s = RampStrategyFactory.create_instance(mk_ramp_cfg(RampType.LINEAR))
+        cfg = mk_ramp_cfg(RampType.LINEAR)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.value_at(0.0) == pytest.approx(1.0)
         assert s.value_at(2.5) == pytest.approx(5.5)
         assert s.value_at(5.0) is None
 
     def test_exponential_ease_in(self):
-        s = RampStrategyFactory.create_instance(
-            mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
-        )
+        cfg = mk_ramp_cfg(RampType.EXPONENTIAL, exp=2.0)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.value_at(2.5) == pytest.approx(3.25)
 
     @pytest.mark.parametrize("bad_exp", [1.0, 0.5, 0.0, -1.0])
@@ -255,7 +260,8 @@ class TestRampStrategyFactory:
             mk_ramp_cfg(RampType.EXPONENTIAL, exp=bad_exp)
 
     def test_ramp_completion(self):
-        s = RampStrategyFactory.create_instance(mk_ramp_cfg(RampType.LINEAR))
+        cfg = mk_ramp_cfg(RampType.LINEAR)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         assert s.next_step(10.0, 0.0) is None
         assert s.value_at(10.0) is None
 
@@ -274,9 +280,7 @@ class TestTimingStrategyFactory:
     )
     def test_creates_strategy(self, mode, extra, ts_deps):
         cfg = make_phase_config(timing_mode=mode, request_count=100, **extra)
-        s = TimingStrategyFactory.create_instance(
-            timing_mode=mode, config=cfg, **ts_deps
-        )
+        s = create_timing_strategy(timing_mode=mode, config=cfg, **ts_deps)
         assert isinstance(s, TimingStrategyProtocol)
 
     def test_missing_deps_error(self):
@@ -285,16 +289,14 @@ class TestTimingStrategyFactory:
             request_rate=10.0,
             arrival_pattern=ArrivalPattern.POISSON,
         )
-        with pytest.raises((TypeError, FactoryCreationError)):
-            TimingStrategyFactory.create_instance(
-                timing_mode=TimingMode.REQUEST_RATE, config=cfg
-            )
+        with pytest.raises(TypeError):
+            create_timing_strategy(timing_mode=TimingMode.REQUEST_RATE, config=cfg)
 
     def test_unregistered_type_error(self, ts_deps):
         cfg = make_phase_config(timing_mode=TimingMode.REQUEST_RATE)
-        with pytest.raises(FactoryCreationError, match="No implementation registered"):
-            TimingStrategyFactory.create_instance(
-                timing_mode="not_real",  # type: ignore
+        with pytest.raises(PluginNotFoundError, match="not_real"):
+            create_timing_strategy(
+                timing_mode="not_real",
                 config=cfg,
                 **ts_deps,
             )
@@ -302,19 +304,22 @@ class TestTimingStrategyFactory:
 
 class TestFactoryRegistry:
     def test_interval_all_patterns(self):
-        types = IntervalGeneratorFactory.get_all_class_types()
+        impls = plugin_registry.list_types("arrival_pattern")
+        registered_names = [impl.impl_name for impl in impls]
         for p in ArrivalPattern:
-            assert p in types
+            assert p.value in registered_names
 
     def test_ramp_all_types(self):
-        types = RampStrategyFactory.get_all_class_types()
+        impls = plugin_registry.list_types("ramp")
+        registered_names = [impl.impl_name for impl in impls]
         for t in RampType:
-            assert t in types
+            assert t.value in registered_names
 
     def test_timing_all_modes(self):
-        types = TimingStrategyFactory.get_all_class_types()
+        impls = plugin_registry.list_types("timing_strategy")
+        registered_names = [impl.impl_name for impl in impls]
         for m in TimingMode:
-            assert m in types
+            assert m.value in registered_names
 
 
 class TestFactoryIntegration:
@@ -325,7 +330,7 @@ class TestFactoryIntegration:
         cfg = mk_int_cfg(
             pat, rate=10.0, smooth=1.0 if pat == ArrivalPattern.GAMMA else None
         )
-        g = IntervalGeneratorFactory.create_instance(cfg)
+        g = create_interval_generator(cfg)
         total = sum(g.next_interval() for _ in range(100))
         avg = total / 100
         assert 0.02 <= avg <= 0.8
@@ -333,7 +338,7 @@ class TestFactoryIntegration:
     @pytest.mark.parametrize("rtype", [RampType.LINEAR, RampType.EXPONENTIAL])
     def test_ramp_reaches_target(self, rtype):
         cfg = mk_ramp_cfg(rtype, exp=2.0 if rtype == RampType.EXPONENTIAL else None)
-        s = RampStrategyFactory.create_instance(cfg)
+        s = plugin_registry.get_class("ramp", cfg.ramp_type)(config=cfg)
         cur, elapsed, steps = s.start, 0.0, 0
         while steps < 1000:
             r = s.next_step(cur, elapsed)
@@ -345,10 +350,10 @@ class TestFactoryIntegration:
         assert cur == s.target
 
     def test_gamma_smoothness_variance(self):
-        bursty = IntervalGeneratorFactory.create_instance(
+        bursty = create_interval_generator(
             mk_int_cfg(ArrivalPattern.GAMMA, smooth=0.25)
         )
-        smooth = IntervalGeneratorFactory.create_instance(
+        smooth = create_interval_generator(
             mk_int_cfg(ArrivalPattern.GAMMA, smooth=10.0)
         )
         bi = [bursty.next_interval() for _ in range(2000)]

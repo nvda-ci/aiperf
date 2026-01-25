@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
@@ -6,8 +6,6 @@ from __future__ import annotations
 from typing import Any
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import EndpointType
-from aiperf.common.factories import EndpointFactory
 from aiperf.common.models import ParsedResponse
 from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.record_models import RequestInfo
@@ -16,7 +14,6 @@ from aiperf.endpoints.base_endpoint import BaseEndpoint
 
 
 @implements_protocol(EndpointProtocol)
-@EndpointFactory.register(EndpointType.HUGGINGFACE_GENERATE)
 class HuggingFaceGenerateEndpoint(BaseEndpoint):
     """Hugging Face TGI (Text Generation Inference) endpoint.
 

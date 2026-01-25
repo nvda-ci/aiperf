@@ -1,0 +1,123 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiperf-example-plugin"
+version = "1.0.0"
+description = "Example plugin demonstrating AIPerf extensibility with 2025 Python best practices"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "NVIDIA Inc.", email = "sw-dl-dynamo@nvidia.com"},
+]
+requires-python = ">=3.10"
+dependencies = [
+    "aiperf>=0.3.0",
+    "pydantic>=2.0.0",
+]
+keywords = ["aiperf", "plugin", "benchmark", "ai", "llm", "performance", "extensibility"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Benchmarking",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.4.0",
+]
+
+[project.urls]
+Documentation = "https://github.com/NVIDIA/aiperf/wiki"
+Repository = "https://github.com/NVIDIA/aiperf"
+Issues = "https://github.com/NVIDIA/aiperf/issues"
+Changelog = "https://github.com/NVIDIA/aiperf/releases"
+
+[project.entry-points."aiperf.plugins"]
+example = "aiperf_example_plugin:registry.yaml"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["aiperf_example_plugin"]
+
+[tool.hatchling.build.targets.wheel.force-include]
+"aiperf_example_plugin/registry.yaml" = "aiperf_example_plugin/registry.yaml"
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+target-version = "py310"
+exclude = ["__pycache__", "build", "dist", ".venv", "venv", ".eggs", "*.egg"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "FA",     # flake8-future-annotations
+    "ISC",    # flake8-implicit-str-concat
+    "PIE",    # flake8-pie
+    "T20",    # flake8-print
+    "RET",    # flake8-return
+    "TCH",    # flake8-type-checking
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "ASYNC",  # flake8-async
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "T201",   # print found (acceptable for examples/plugins)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S101"]  # Allow unused args and asserts in tests
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true

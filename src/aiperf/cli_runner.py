@@ -1,12 +1,12 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import contextlib
 
 from aiperf.cli_utils import raise_startup_error_and_exit
 from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.enums import AIPerfUIType
 from aiperf.gpu_telemetry.metrics_config import MetricsConfigLoader
+from aiperf.plugin.enums import UIType
 
 
 def run_system_controller(
@@ -27,7 +27,7 @@ def run_system_controller(
     import platform
 
     is_macos = platform.system() == "Darwin"
-    using_dashboard = service_config.ui_type == AIPerfUIType.DASHBOARD
+    using_dashboard = service_config.ui_type == UIType.DASHBOARD
 
     # Force spawn method on macOS to prevent fork-related issues.
     # This should already be the default, but we'll set it explicitly just in case.
@@ -35,10 +35,10 @@ def run_system_controller(
         with contextlib.suppress(RuntimeError):
             multiprocessing.set_start_method("spawn", force=True)
 
+    from aiperf.common import plugin_registry as plugin_registry
     from aiperf.common.aiperf_logger import AIPerfLogger
     from aiperf.common.bootstrap import bootstrap_and_run_service
     from aiperf.controller import SystemController
-    from aiperf.module_loader import ensure_modules_loaded
 
     logger = AIPerfLogger(__name__)
 
@@ -74,14 +74,6 @@ def run_system_controller(
 
     # Create and start the system controller
     logger.info("Starting AIPerf System")
-
-    try:
-        ensure_modules_loaded()
-    except Exception as e:
-        raise_startup_error_and_exit(
-            f"Error loading modules: {e}",
-            title="Error Loading Modules",
-        )
 
     # Validate custom GPU metrics CSV file
     if user_config.gpu_telemetry_metrics_file:

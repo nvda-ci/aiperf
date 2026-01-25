@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import multiprocessing
@@ -8,13 +8,13 @@ from multiprocessing.context import ForkProcess, SpawnProcess
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aiperf.common import plugin_registry
 from aiperf.common.bootstrap import bootstrap_and_run_service
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import ServiceRegistrationStatus, ServiceRunType
+from aiperf.common.enums import ServiceRegistrationStatus
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import AIPerfError
-from aiperf.common.factories import ServiceFactory, ServiceManagerFactory
 from aiperf.common.protocols import ServiceManagerProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
@@ -37,7 +37,6 @@ class MultiProcessRunInfo(BaseModel):
 
 
 @implements_protocol(ServiceManagerProtocol)
-@ServiceManagerFactory.register(ServiceRunType.MULTIPROCESSING)
 class MultiProcessServiceManager(BaseServiceManager):
     """
     Service Manager for starting and stopping services as multiprocessing processes.
@@ -59,7 +58,7 @@ class MultiProcessServiceManager(BaseServiceManager):
         self, service_type: ServiceTypeT, num_replicas: int = 1
     ) -> None:
         """Run a service with the given number of replicas."""
-        service_class = ServiceFactory.get_class_from_type(service_type)
+        service_class = plugin_registry.get_class("service", service_type)
 
         for _ in range(num_replicas):
             service_id = f"{service_type}_{uuid.uuid4().hex[:8]}"

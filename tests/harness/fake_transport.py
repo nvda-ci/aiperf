@@ -55,9 +55,8 @@ from aiperf_mock_server.utils import (
 )
 from pydantic import BaseModel
 
+from aiperf.common import plugin_registry
 from aiperf.common.constants import NANOS_PER_SECOND
-from aiperf.common.enums import EndpointType, TransportType
-from aiperf.common.factories import EndpointFactory, TransportFactory
 from aiperf.common.models import (
     ErrorDetails,
     RequestInfo,
@@ -68,6 +67,10 @@ from aiperf.common.models import (
 )
 from aiperf.common.types import RequestInputT
 from aiperf.common.utils import yield_to_event_loop
+from aiperf.plugin.enums import (
+    EndpointType,
+    TransportType,
+)
 from aiperf.transports.base_transports import BaseTransport, FirstTokenCallback
 
 if TYPE_CHECKING:
@@ -93,7 +96,6 @@ class HandlerInput:
 HandlerFn: TypeAlias = Callable[[HandlerInput], Awaitable[RequestRecord]]
 
 
-@TransportFactory.register(TransportType.HTTP, override_priority=sys.maxsize)
 class FakeTransport(BaseTransport):
     """In-process fake transport that bypasses HTTP (test double: Fake).
 
@@ -219,7 +221,8 @@ class FakeTransport(BaseTransport):
     ) -> RequestRecord:
         """Parse request, create context, and dispatch to handler."""
         start_perf_ns = time.perf_counter_ns()
-        endpoint_path = EndpointFactory.get_metadata(endpoint_type).endpoint_path
+        endpoint_class = plugin_registry.get_class("endpoint", endpoint_type)
+        endpoint_path = endpoint_class.metadata().endpoint_path
         req = self._parse_payload(payload, request_class)
         ctx = make_ctx(req, endpoint_path, time.perf_counter(), self.config)
         input = HandlerInput(
@@ -419,3 +422,17 @@ class FakeTransport(BaseTransport):
         return self._make_json_record(
             inp.start_perf_ns, inp.build_response(inp.ctx, ranked_scores)
         )
+
+
+# =============================================================================
+# Plugin Registration - Hot-swap production implementations when imported
+# =============================================================================
+
+# Register FakeTransport for HTTP transport at max priority
+plugin_registry.register(
+    "transport",
+    TransportType.HTTP,
+    FakeTransport,
+    priority=sys.maxsize,
+    is_builtin=False,
+)

@@ -15,31 +15,24 @@ import asyncio
 import sys
 import uuid
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     LifecycleState,
     ServiceRegistrationStatus,
-    ServiceRunType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import AIPerfError
-from aiperf.common.factories import (
-    CommunicationFactory,
-    ServiceFactory,
-    ServiceManagerFactory,
-)
 from aiperf.common.models import ServiceRunInfo
 from aiperf.common.protocols import ServiceManagerProtocol, ServiceProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
+from aiperf.plugin.enums import ServiceRunType
 from tests.harness.fake_communication import FakeCommunication
 
 
 @implements_protocol(ServiceManagerProtocol)
-@ServiceManagerFactory.register(
-    ServiceRunType.MULTIPROCESSING, override_priority=sys.maxsize
-)
 class FakeServiceManager(BaseServiceManager):
     """In-process service manager replacing multiprocessing (test double: Fake).
 
@@ -70,7 +63,7 @@ class FakeServiceManager(BaseServiceManager):
         self, service_type: ServiceTypeT, num_replicas: int = 1
     ) -> None:
         """Run a service with the given number of replicas in the current process."""
-        service_class = ServiceFactory.get_class_from_type(service_type)
+        service_class = plugin_registry.get_class("service", service_type)
         comm_backend = self.service_config.comm_config.comm_backend
 
         for _ in range(num_replicas):
@@ -78,7 +71,12 @@ class FakeServiceManager(BaseServiceManager):
 
             # Clear singleton cache to force new FakeCommunication per service
             # Each instance will connect to the shared_bus set above
-            CommunicationFactory._instances.pop(comm_backend, None)
+            import os
+
+            from aiperf.common.singleton import SingletonMeta
+
+            comm_class = plugin_registry.get_class("communication", comm_backend)
+            SingletonMeta._instances.pop((comm_class, os.getpid()), None)
 
             # Deep copy configs to simulate separate process behavior
             # (in production each process deserializes its own copy)
@@ -218,3 +216,17 @@ class FakeServiceManager(BaseServiceManager):
         except Exception as e:
             self.error(f"Error stopping service {service.service_id}: {e!r}")
             return e
+
+
+# =============================================================================
+# Plugin Registration - Hot-swap production implementations when imported
+# =============================================================================
+
+# Register FakeServiceManager for multiprocessing run type at max priority
+plugin_registry.register(
+    "service_manager",
+    ServiceRunType.MULTIPROCESSING,
+    FakeServiceManager,
+    priority=sys.maxsize,
+    is_builtin=False,
+)

@@ -9,7 +9,7 @@ from aiperf.common.config.base_config import BaseConfig
 from aiperf.common.config.cli_parameter import CLIParameter
 from aiperf.common.config.config_defaults import LoadGeneratorDefaults
 from aiperf.common.config.groups import Groups
-from aiperf.common.enums import ArrivalPattern
+from aiperf.plugin.enums import ArrivalPattern
 
 
 class LoadGeneratorConfig(BaseConfig):

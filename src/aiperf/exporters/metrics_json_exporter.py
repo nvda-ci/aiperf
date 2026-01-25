@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from collections.abc import Iterable
@@ -6,8 +6,6 @@ from datetime import datetime
 
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import DataExporterType
-from aiperf.common.factories import DataExporterFactory
 from aiperf.common.models import MetricResult
 from aiperf.common.models.export_models import (
     JsonExportData,
@@ -18,7 +16,6 @@ from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
 
 
-@DataExporterFactory.register(DataExporterType.JSON)
 @implements_protocol(DataExporterProtocol)
 class MetricsJsonExporter(MetricsBaseExporter):
     """

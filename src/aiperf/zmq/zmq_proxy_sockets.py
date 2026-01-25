@@ -1,13 +1,13 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import zmq
 from zmq import SocketType
 
+from aiperf.common import plugin_registry
 from aiperf.common.config import BaseZMQProxyConfig
-from aiperf.common.enums import ZMQProxyType
-from aiperf.common.factories import ZMQProxyFactory
 from aiperf.common.hooks import on_init
+from aiperf.plugin.enums import ZMQProxyType
 from aiperf.zmq.zmq_base_client import BaseZMQClient
 from aiperf.zmq.zmq_proxy_base import (
     BaseZMQProxy,
@@ -116,7 +116,7 @@ def define_proxy_class(
     ZMQProxy.__name__ = f"ZMQ_{proxy_type.name}_Proxy"
     ZMQProxy.__qualname__ = ZMQProxy.__name__
     ZMQProxy.__doc__ = f"A ZMQ Proxy for {proxy_type.name} communication."
-    ZMQProxyFactory.register(proxy_type)(ZMQProxy)
+    plugin_registry.register("zmq_proxy", proxy_type, ZMQProxy)
     return ZMQProxy
 
 

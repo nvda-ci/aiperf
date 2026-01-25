@@ -5,16 +5,43 @@ Shared fixtures for dataset manager testing.
 """
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 import aiperf.endpoints  # noqa: F401  # Import to register endpoints
 import aiperf.transports  # noqa: F401  # Import to register transports
 from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import EndpointType
 from aiperf.common.models import Conversation
 from aiperf.dataset.dataset_manager import DatasetManager
+from aiperf.plugin.enums import EndpointType
+
+
+def _mock_communication_init(self, service_config, **kwargs):
+    """Mock CommunicationMixin.__init__ to avoid real ZMQ connections."""
+    from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
+
+    AIPerfLifecycleMixin.__init__(self, service_config=service_config, **kwargs)
+    self.service_config = service_config
+    self.comms = MagicMock()
+    for method in [
+        "trace_or_debug",
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+    ]:
+        setattr(self, method, MagicMock())
+
+
+@pytest.fixture(autouse=True)
+def mock_communication_layer():
+    """Autouse fixture to mock communication layer for all dataset tests."""
+    with patch(
+        "aiperf.common.mixins.CommunicationMixin.__init__", _mock_communication_init
+    ):
+        yield
 
 
 @pytest.fixture

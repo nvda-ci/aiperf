@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from aiperf.common.factories import EndpointFactory, TransportFactory
+from aiperf.common import plugin_registry
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.models import (
     ErrorDetails,
@@ -29,8 +29,9 @@ class InferenceClient(AIPerfLifecycleMixin):
 
         # Detect and set transport type if not explicitly set
         if not model_endpoint.transport:
-            model_endpoint.transport = TransportFactory.detect_from_url(
-                model_endpoint.endpoint.base_url
+            model_endpoint.transport = plugin_registry.detect_type_from_url(
+                "transport",
+                model_endpoint.endpoint.base_url,
             )
             if not model_endpoint.transport:
                 raise ValueError(
@@ -38,14 +39,14 @@ class InferenceClient(AIPerfLifecycleMixin):
                 )
 
         # Create endpoint and transport instances
-        self.endpoint = EndpointFactory.create_instance(
-            self.model_endpoint.endpoint.type,
-            model_endpoint=self.model_endpoint,
+        EndpointClass = plugin_registry.get_class(
+            "endpoint", self.model_endpoint.endpoint.type
         )
-        self.transport = TransportFactory.create_instance(
-            self.model_endpoint.transport,
-            model_endpoint=self.model_endpoint,
+        self.endpoint = EndpointClass(model_endpoint=self.model_endpoint)
+        TransportClass = plugin_registry.get_class(
+            "transport", self.model_endpoint.transport
         )
+        self.transport = TransportClass(model_endpoint=self.model_endpoint)
         self.attach_child_lifecycle(self.transport)
 
     async def _send_request_to_transport(

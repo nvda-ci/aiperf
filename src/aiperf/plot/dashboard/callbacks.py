@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -27,6 +27,7 @@ from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from ruamel.yaml import YAML
 
+from aiperf.common import plugin_registry
 from aiperf.plot.config import PlotConfig
 from aiperf.plot.constants import (
     ALL_STAT_KEYS,
@@ -46,7 +47,6 @@ from aiperf.plot.core.data_preparation import (
 from aiperf.plot.core.mode_detector import VisualizationMode
 from aiperf.plot.core.plot_generator import PlotGenerator
 from aiperf.plot.core.plot_specs import PlotSpec, PlotType
-from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerFactory
 from aiperf.plot.dashboard.builder import EXCLUDED_METRIC_COLUMNS, DashboardBuilder
 from aiperf.plot.dashboard.cache import (
     CacheKey,
@@ -1309,11 +1309,8 @@ def register_export_png_callback(
 
         # Use handler factory (same as PNG exporter line 121)
         try:
-            handler = PlotTypeHandlerFactory.create_instance(
-                spec.plot_type,
-                plot_generator=plot_gen,
-                logger=None,
-            )
+            HandlerClass = plugin_registry.get_class("plot_type", spec.plot_type)
+            handler = HandlerClass(plot_generator=plot_gen, logger=None)
             return handler.create_plot(spec, run, available_metrics)
         except Exception as e:
             _logger.error(f"Error creating plot '{plot_id}': {e}")
@@ -4835,11 +4832,8 @@ def _generate_singlerun_figure(
             if not spec:
                 return None
 
-            handler = PlotTypeHandlerFactory.create_instance(
-                spec.plot_type,
-                plot_generator=plot_gen,
-                logger=None,
-            )
+            HandlerClass = plugin_registry.get_class("plot_type", spec.plot_type)
+            handler = HandlerClass(plot_generator=plot_gen, logger=None)
             available_metrics = _build_available_metrics_dict(plot_specs)
             fig = handler.create_plot(spec, run, available_metrics)
 

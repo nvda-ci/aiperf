@@ -5,17 +5,16 @@ import os
 import signal
 import uuid
 from abc import ABC
-from typing import ClassVar
 
 from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.enums import CommandType, LifecycleState, ServiceType
+from aiperf.common.enums import CommandType, LifecycleState
 from aiperf.common.exceptions import ServiceError
 from aiperf.common.hooks import on_command
 from aiperf.common.messages import CommandMessage
 from aiperf.common.messages.command_messages import CommandAcknowledgedResponse
 from aiperf.common.mixins import CommandHandlerMixin
 from aiperf.common.mixins.process_health_mixin import ProcessHealthMixin
-from aiperf.common.types import ServiceTypeT
+from aiperf.plugin.enums import ServiceType
 
 
 class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
@@ -29,8 +28,37 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
     are still required to be implemented by derived classes.
     """
 
-    service_type: ClassVar[ServiceTypeT]
-    """The type of service this class implements. This is set by the ServiceFactory.register decorator."""
+    _service_type_cache: ServiceType | None = None
+    """Cached service type (class-level)."""
+
+    @property
+    def service_type(self) -> ServiceType:
+        """The type of service this class implements.
+
+        This is derived from _registered_name which is set when the class is
+        loaded via plugin_registry. Falls back to reverse lookup if needed.
+        """
+        cls = self.__class__
+        # Check class-level cache first
+        if cls._service_type_cache is not None:
+            return cls._service_type_cache
+
+        # Try _registered_name (set when loaded via plugin_registry.get())
+        registered_name = getattr(cls, "_registered_name", None)
+        if not registered_name:
+            # Fallback: reverse lookup in the registry for direct instantiation
+            from aiperf.common import plugin_registry
+
+            registered_name = plugin_registry.find_registered_name("service", cls)
+
+        if registered_name:
+            cls._service_type_cache = ServiceType(registered_name)
+            return cls._service_type_cache
+
+        raise AttributeError(
+            f"Cannot determine service_type for {cls.__name__}. "
+            f"Class must be registered in registry.yaml or loaded via plugin_registry."
+        )
 
     def __init__(
         self,

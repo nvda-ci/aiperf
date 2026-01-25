@@ -6,7 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from aiperf.common.config import UserConfig
-from aiperf.common.enums import ArrivalPattern, CreditPhase, TimingMode
+from aiperf.common.enums import CreditPhase
+from aiperf.plugin.enums import (
+    ArrivalPattern,
+    TimingMode,
+)
 from aiperf.timing.config import (
     CreditPhaseConfig,
     RequestCancellationConfig,

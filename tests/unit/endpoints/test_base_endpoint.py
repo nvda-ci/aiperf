@@ -3,12 +3,12 @@
 
 import pytest
 
-from aiperf.common.enums import EndpointType
 from aiperf.common.models import ParsedResponse, TextResponse, TextResponseData
 from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.record_models import RequestInfo, RequestRecord
 from aiperf.common.protocols import InferenceServerResponse
 from aiperf.endpoints.base_endpoint import BaseEndpoint
+from aiperf.plugin.enums import EndpointType
 from tests.unit.endpoints.conftest import (
     create_endpoint_with_mock_transport,
     create_model_endpoint,

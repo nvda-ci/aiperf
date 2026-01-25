@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,10 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import DataExporterType, EndpointType
-from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
 from aiperf.common.models import MetricResult, ProfileResults
 from aiperf.exporters.exporter_manager import ExporterManager
+from aiperf.plugin.enums import (
+    ConsoleExporterType,
+    DataExporterType,
+    EndpointType,
+)
 
 
 @pytest.fixture
