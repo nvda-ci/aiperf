@@ -21,7 +21,7 @@
 		integration-tests integration-tests-ci integration-tests-verbose integration-tests-ci-macos \
 		test-integration test-integration-ci test-integration-verbose test-integration-ci-macos \
 		test-component-integration test-component-integration-ci test-component-integration-verbose \
-		generate-cli-docs generate-env-vars-docs generate-plugin-enums check-plugin-enums \
+		generate-cli-docs generate-env-vars-docs generate-plugin-enums \
 		test-stress stress-tests internal-help help
 
 
@@ -249,6 +249,3 @@ generate-env-vars-docs: #? generate the environment variables documentation.
 
 generate-plugin-enums: #? generate the plugin enum stubs (enums.py and enums.pyi).
 	$(activate_venv) && python tools/generate_plugin_enums.py
-
-check-plugin-enums: #? check if the plugin enum stubs are up-to-date.
-	$(activate_venv) && python tools/generate_plugin_enums.py --check
