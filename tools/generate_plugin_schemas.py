@@ -236,12 +236,7 @@ def generate_plugins_schema() -> dict[str, Any]:
         category_properties[category_name] = {
             "type": "object",
             "description": description,
-            "additionalProperties": {
-                "oneOf": [
-                    {"type": "string", "description": "Shorthand class path"},
-                    entry_schema,
-                ]
-            },
+            "additionalProperties": entry_schema,
         }
 
     # Build final schema with explicit category properties

@@ -349,35 +349,28 @@ class PluginRegistry(Singleton):
         self,
         category_name: str,
         type_name: str,
-        type_data: dict[str, Any] | str,
+        type_data: dict[str, Any],
         package_name: str,
         package_metadata: PackageMetadata,
         is_builtin: bool,
     ) -> None:
         """Register a single type with conflict resolution."""
-        # Normalize type data
-        match type_data:
-            case dict():
-                # Full format with class, description, priority, metadata
-                spec = type_data
-            case str():
-                # Simple format: "module:Class"
-                spec = {"class": type_data}
-            case _:
-                _logger.warning(
-                    f"Invalid type format for {category_name}:{type_name}: {type(type_data).__name__}"
-                )
-                return
+        if not isinstance(type_data, dict):
+            _logger.warning(
+                f"Invalid type format for {category_name}:{type_name}: expected dict with 'class' key, "
+                f"got {type(type_data).__name__}"
+            )
+            return
 
         # Extract required class path
-        class_path = spec.get("class")
+        class_path = type_data.get("class")
         if not class_path:
-            _logger.warning(f"Missing class path for {category_name}:{type_name}")
+            _logger.warning(f"Missing 'class' field for {category_name}:{type_name}")
             return
 
         # Extract optional fields with defaults
-        priority = spec.get("priority", 0)
-        description = spec.get("description", "")
+        priority = type_data.get("priority", 0)
+        description = type_data.get("description", "")
 
         # Create lazy type
         lazy_type = TypeEntry(

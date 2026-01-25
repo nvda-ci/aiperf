@@ -23,32 +23,57 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CategorySpec(BaseModel):
-    """Specification for a plugin category."""
+    """Specification for a plugin category.
+
+    Categories define extension points in AIPerf where plugins can provide
+    custom implementations. Each category has a protocol that plugins must
+    implement and an enum that lists all available plugin types.
+    """
 
     protocol: str = Field(
-        description="Fully qualified class path (module:ClassName) for the Protocol/ABC."
+        description=(
+            "The interface that plugins in this category must implement. "
+            "Use 'module.path:ClassName' format, e.g., 'aiperf.plugin.protocols:EndpointProtocol'."
+        )
     )
     metadata_class: str | None = Field(
         default=None,
-        description="Class path for the metadata model. Schema is introspected dynamically.",
+        description=(
+            "Optional Pydantic model for category-specific metadata. "
+            "When set, plugins can include typed metadata fields validated against this schema. "
+            "Use 'module.path:ClassName' format."
+        ),
     )
     enum: str = Field(
-        description="Name of the dynamic enum generated from registered plugins."
+        description=(
+            "Name of the enum that will be auto-generated from registered plugins. "
+            "This enum is used in config files and APIs to select plugin types, "
+            "e.g., 'EndpointType' generates EndpointType.CHAT, EndpointType.COMPLETIONS, etc."
+        )
     )
     description: str = Field(
-        description="Human-readable description of the category's purpose."
+        description="Brief explanation of what this category is for and when to use it."
     )
     internal: bool = Field(
         default=False,
-        description="Whether this category is internal infrastructure, not user-facing.",
+        description=(
+            "Set to true for infrastructure categories not meant for end users. "
+            "Internal categories are hidden from documentation and plugin listings."
+        ),
     )
 
 
 class CategoriesFile(BaseModel):
     """Root model for categories.yaml file.
 
-    Categories define plugin extension points with their protocols, enums,
-    and optional metadata schemas.
+    This file defines all plugin extension points in AIPerf. Each category
+    specifies a protocol interface and generates an enum for type selection.
+
+    Example:
+        endpoint:
+          protocol: aiperf.plugin.protocols:EndpointProtocol
+          enum: EndpointType
+          description: HTTP endpoint handlers for LLM APIs
     """
 
     # Categories are stored as additional fields beyond schema_version
@@ -57,7 +82,7 @@ class CategoriesFile(BaseModel):
 
     schema_version: str = Field(
         default="1.0",
-        description="Schema version for the categories file.",
+        description="Version of the categories.yaml schema format. Used for backwards compatibility.",
     )
 
     @classmethod
@@ -81,14 +106,30 @@ class CategoriesFile(BaseModel):
 
 
 class PluginPackageInfo(BaseModel):
-    """Metadata about the plugin package itself."""
+    """Metadata about the plugin package.
 
-    name: str = Field(description="Package name.")
-    version: str = Field(default="", description="Package version.")
-    description: str = Field(
-        default="", description="Human-readable package description."
+    This section identifies your plugin package and is displayed in
+    plugin listings and error messages.
+    """
+
+    name: str = Field(
+        description=(
+            "Unique identifier for your plugin package. "
+            "Use your Python package name, e.g., 'my-aiperf-plugins'."
+        )
     )
-    author: str = Field(default="", description="Package author or organization.")
+    version: str = Field(
+        default="",
+        description="Semantic version of your plugin package, e.g., '1.0.0' or '2.1.3-beta'.",
+    )
+    description: str = Field(
+        default="",
+        description="One-line summary of what your plugin package provides.",
+    )
+    author: str = Field(
+        default="",
+        description="Author name, team, or organization, e.g., 'NVIDIA' or 'Jane Doe <jane@example.com>'.",
+    )
 
     @property
     def builtin(self) -> bool:
@@ -97,35 +138,66 @@ class PluginPackageInfo(BaseModel):
 
 
 class PluginTypeEntry(BaseModel):
-    """Full specification for a plugin type entry."""
+    """Specification for a plugin type.
+
+    Each plugin type maps a name (like 'chat' or 'completions') to a Python
+    class that implements the category's protocol.
+
+    Example:
+        chat:
+          class: aiperf.endpoints.chat:ChatEndpoint
+          description: OpenAI-compatible chat completions endpoint
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
     class_: str = Field(
         alias="class",
-        description="Fully qualified class path (module:ClassName).",
+        description=(
+            "Python class that implements this plugin type. "
+            "Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'."
+        ),
     )
     description: str = Field(
         default="",
-        description="Human-readable description of this plugin type.",
+        description="Brief explanation of what this plugin type does and when to use it.",
     )
     priority: int = Field(
         default=0,
-        description="Priority for conflict resolution (higher wins).",
+        description=(
+            "Conflict resolution priority. When multiple packages register the same type name, "
+            "the one with higher priority wins. Use 0 for normal plugins, higher values to "
+            "override built-in implementations."
+        ),
     )
     metadata: dict[str, Any] | None = Field(
         default=None,
-        description="Category-specific metadata values, schema defined in categories.yaml.",
+        description=(
+            "Category-specific configuration for this plugin type. "
+            "The allowed fields depend on the category's metadata_class in categories.yaml."
+        ),
     )
 
 
 class PluginsFile(BaseModel):
     """Root model for plugins.yaml file.
 
-    Plugins files register concrete implementations for plugin categories.
-    Each category section maps type names to either:
-    - A full PluginTypeEntry with class, description, priority, metadata
-    - A simple string class path for shorthand notation
+    This file registers plugin implementations for AIPerf. Each section after
+    'plugin' corresponds to a category from categories.yaml and maps type names
+    to their implementing classes.
+
+    Example:
+        schema_version: "1.0"
+        plugin:
+          name: my-plugins
+          version: 1.0.0
+          description: Custom endpoints for my use case
+          author: My Team
+
+        endpoint:
+          my_custom:
+            class: my_package.endpoints:MyCustomEndpoint
+            description: Custom endpoint for my use case
     """
 
     # Plugin categories are stored as additional fields
@@ -133,10 +205,10 @@ class PluginsFile(BaseModel):
 
     schema_version: str = Field(
         default="1.0",
-        description="Schema version for the plugins file.",
+        description="Version of the plugins.yaml schema format. Use '1.0' for current format.",
     )
     plugin: PluginPackageInfo = Field(
-        description="Metadata about the plugin package.",
+        description="Required section identifying your plugin package. See PluginPackageInfo for fields.",
     )
 
     @classmethod
@@ -144,17 +216,10 @@ class PluginsFile(BaseModel):
         """Generate JSON Schema with additionalProperties for plugin categories."""
         schema = super().model_json_schema(**kwargs)
 
-        # Create a schema for category entries (dict of type name -> entry)
+        # Create a schema for category entries (dict of type name -> PluginTypeEntry)
         category_entry_schema = {
             "type": "object",
-            "additionalProperties": {
-                "oneOf": [
-                    # Short form: just a class path string
-                    {"type": "string", "description": "Shorthand class path"},
-                    # Full form: PluginTypeEntry
-                    PluginTypeEntry.model_json_schema(**kwargs),
-                ]
-            },
+            "additionalProperties": PluginTypeEntry.model_json_schema(**kwargs),
         }
 
         schema["additionalProperties"] = category_entry_schema

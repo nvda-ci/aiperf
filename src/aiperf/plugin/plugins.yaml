@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# yaml-language-server: $schema=plugins.schema.json
+# yaml-language-server: $schema=schema/plugins.schema.json
 
 # =============================================================================
 # AIPerf Built-in Plugin Registry
@@ -8,11 +8,9 @@
 # Schema version: 1.0
 #
 # Format:
-#   type_name: module.path:ClassName
-#   OR
 #   type_name:
 #     class: module.path:ClassName
-#     description: Human-readable description
+#     description: Human-readable description (required)
 #     priority: int (optional, default: 0, for conflict resolution only)
 #     metadata: (optional) Category-specific metadata values, schema defined in categories.yaml
 # =============================================================================

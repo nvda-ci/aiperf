@@ -3,28 +3,28 @@
   "$id": "plugins.schema.json",
   "$defs": {
     "PluginPackageInfo": {
-      "description": "Metadata about the plugin package itself.",
+      "description": "Metadata about the plugin package.\n\nThis section identifies your plugin package and is displayed in\nplugin listings and error messages.",
       "properties": {
         "name": {
-          "description": "Package name.",
+          "description": "Unique identifier for your plugin package. Use your Python package name, e.g., 'my-aiperf-plugins'.",
           "title": "Name",
           "type": "string"
         },
         "version": {
           "default": "",
-          "description": "Package version.",
+          "description": "Semantic version of your plugin package, e.g., '1.0.0' or '2.1.3-beta'.",
           "title": "Version",
           "type": "string"
         },
         "description": {
           "default": "",
-          "description": "Human-readable package description.",
+          "description": "One-line summary of what your plugin package provides.",
           "title": "Description",
           "type": "string"
         },
         "author": {
           "default": "",
-          "description": "Package author or organization.",
+          "description": "Author name, team, or organization, e.g., 'NVIDIA' or 'Jane Doe <jane@example.com>'.",
           "title": "Author",
           "type": "string"
         }
@@ -43,1244 +43,1076 @@
       "type": "string"
     }
   },
-  "description": "Root model for plugins.yaml file.\n\nPlugins files register concrete implementations for plugin categories.\nEach category section maps type names to either:\n- A full PluginTypeEntry with class, description, priority, metadata\n- A simple string class path for shorthand notation",
+  "description": "Root model for plugins.yaml file.\n\nThis file registers plugin implementations for AIPerf. Each section after\n'plugin' corresponds to a category from categories.yaml and maps type names\nto their implementing classes.\n\nExample:\n    schema_version: \"1.0\"\n    plugin:\n      name: my-plugins\n      version: 1.0.0\n      description: Custom endpoints for my use case\n      author: My Team\n\n    endpoint:\n      my_custom:\n        class: my_package.endpoints:MyCustomEndpoint\n        description: Custom endpoint for my use case",
   "properties": {
     "schema_version": {
       "default": "1.0",
-      "description": "Schema version for the plugins file.",
+      "description": "Version of the plugins.yaml schema format. Use '1.0' for current format.",
       "title": "Schema Version",
       "type": "string"
     },
     "plugin": {
       "$ref": "#/$defs/PluginPackageInfo",
-      "description": "Metadata about the plugin package."
+      "description": "Required section identifying your plugin package. See PluginPackageInfo for fields."
     },
     "timing_strategy": {
       "type": "object",
       "description": "Timing strategies control request scheduling and credit issuance.\nDetermines when requests are sent based on fixed schedules, request rates,\nor user-centric patterns. One-to-one mapping per benchmark run.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "arrival_pattern": {
       "type": "object",
       "description": "Interval generators determine inter-arrival times for request rate strategy.\nControls the distribution of request timing (constant, Poisson, gamma, etc.).\nOne-to-one mapping when using request_rate timing mode.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "ramp": {
       "type": "object",
       "description": "Ramp strategies control how values are gradually transitioned over time.\nUsed for ramping concurrency limits, request rates, and other numeric parameters.\nSupports linear, exponential, and stochastic ramping patterns.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "dataset_backing_store": {
       "type": "object",
       "description": "Dataset backing stores manage conversation data on the DatasetManager side.\nProvides efficient storage for dataset distribution to workers.\nHandles streaming writes and finalization for client access.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "dataset_client_store": {
       "type": "object",
       "description": "Dataset client stores read conversation data on the Worker side.\nProvides efficient access to datasets from backing stores.\nSupports zero-copy reads and O(1) lookup performance.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "dataset_sampler": {
       "type": "object",
       "description": "Dataset samplers control how conversations are selected from the dataset.\nSupports random, sequential, and shuffle sampling strategies.\nOne-to-one mapping based on sampling strategy configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "dataset_composer": {
       "type": "object",
       "description": "Dataset composers create conversation datasets from various sources.\nHandles synthetic generation, custom file loading, and specialized formats.\nOne-to-one mapping based on composer_type configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "custom_dataset_loader": {
       "type": "object",
       "description": "Custom dataset loaders parse different JSONL file formats into conversations.\nSupports single-turn, multi-turn, random-pool, and trace formats.\nAuto-detection: loaders are tried in priority order based on can_load().",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "endpoint": {
       "type": "object",
       "description": "Endpoints define how to format requests and parse responses for different APIs.\nSupports OpenAI-compatible, HuggingFace, Cohere, NIM, and custom API formats.\nOne-to-one mapping based on endpoint_type configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "additionalProperties": true,
+        "description": "Full specification for a plugin type entry.",
+        "properties": {
+          "class": {
+            "description": "Fully qualified class path (module:ClassName).",
+            "title": "Class",
+            "type": "string"
           },
-          {
+          "description": {
+            "description": "Human-readable description of this plugin type.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Priority for conflict resolution (higher wins).",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
             "additionalProperties": true,
-            "description": "Full specification for a plugin type entry.",
+            "description": "Endpoint metadata for discovery and documentation.",
             "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
-              },
-              "description": {
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "additionalProperties": true,
-                "description": "Endpoint metadata for discovery and documentation.",
-                "properties": {
-                  "endpoint_path": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "description": "API path (e.g., /v1/chat/completions).",
-                    "title": "Endpoint Path"
-                  },
-                  "streaming_path": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "description": "Streaming API path if different from the endpoint path (e.g., /generate_stream).",
-                    "title": "Streaming Path"
-                  },
-                  "service_kind": {
-                    "default": "openai",
-                    "description": "The service kind of the endpoint (used for artifact naming).",
-                    "title": "Service Kind",
+              "endpoint_path": {
+                "anyOf": [
+                  {
                     "type": "string"
                   },
-                  "supports_streaming": {
-                    "default": false,
-                    "description": "Whether endpoint supports streaming responses.",
-                    "title": "Supports Streaming",
-                    "type": "boolean"
-                  },
-                  "tokenizes_input": {
-                    "default": false,
-                    "description": "Whether endpoint tokenizes text inputs.",
-                    "title": "Tokenizes Input",
-                    "type": "boolean"
-                  },
-                  "produces_tokens": {
-                    "default": false,
-                    "description": "Whether endpoint produces token-based output.",
-                    "title": "Produces Tokens",
-                    "type": "boolean"
-                  },
-                  "supports_audio": {
-                    "default": false,
-                    "description": "Whether endpoint accepts audio input.",
-                    "title": "Supports Audio",
-                    "type": "boolean"
-                  },
-                  "supports_images": {
-                    "default": false,
-                    "description": "Whether endpoint accepts image input.",
-                    "title": "Supports Images",
-                    "type": "boolean"
-                  },
-                  "supports_videos": {
-                    "default": false,
-                    "description": "Whether endpoint accepts video input.",
-                    "title": "Supports Videos",
-                    "type": "boolean"
-                  },
-                  "produces_images": {
-                    "default": false,
-                    "description": "Whether endpoint produces image-based outputs.",
-                    "title": "Produces Images",
-                    "type": "boolean"
-                  },
-                  "metrics_title": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "description": "Display title for metrics dashboard.",
-                    "title": "Metrics Title"
+                  {
+                    "type": "null"
                   }
-                },
-                "title": "EndpointMetadata",
-                "type": "object"
+                ],
+                "default": null,
+                "description": "API path (e.g., /v1/chat/completions).",
+                "title": "Endpoint Path"
+              },
+              "streaming_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Streaming API path if different from the endpoint path (e.g., /generate_stream).",
+                "title": "Streaming Path"
+              },
+              "service_kind": {
+                "default": "openai",
+                "description": "The service kind of the endpoint (used for artifact naming).",
+                "title": "Service Kind",
+                "type": "string"
+              },
+              "supports_streaming": {
+                "default": false,
+                "description": "Whether endpoint supports streaming responses.",
+                "title": "Supports Streaming",
+                "type": "boolean"
+              },
+              "tokenizes_input": {
+                "default": false,
+                "description": "Whether endpoint tokenizes text inputs.",
+                "title": "Tokenizes Input",
+                "type": "boolean"
+              },
+              "produces_tokens": {
+                "default": false,
+                "description": "Whether endpoint produces token-based output.",
+                "title": "Produces Tokens",
+                "type": "boolean"
+              },
+              "supports_audio": {
+                "default": false,
+                "description": "Whether endpoint accepts audio input.",
+                "title": "Supports Audio",
+                "type": "boolean"
+              },
+              "supports_images": {
+                "default": false,
+                "description": "Whether endpoint accepts image input.",
+                "title": "Supports Images",
+                "type": "boolean"
+              },
+              "supports_videos": {
+                "default": false,
+                "description": "Whether endpoint accepts video input.",
+                "title": "Supports Videos",
+                "type": "boolean"
+              },
+              "produces_images": {
+                "default": false,
+                "description": "Whether endpoint produces image-based outputs.",
+                "title": "Produces Images",
+                "type": "boolean"
+              },
+              "metrics_title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Display title for metrics dashboard.",
+                "title": "Metrics Title"
               }
             },
-            "required": [
-              "class",
-              "description"
-            ],
-            "title": "PluginTypeEntry",
+            "title": "EndpointMetadata",
             "type": "object"
           }
-        ]
+        },
+        "required": [
+          "class",
+          "description"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "transport": {
       "type": "object",
       "description": "Transports handle the network layer for sending requests to inference servers.\nManages connection pooling, streaming, error handling, and TCP configuration.\nOne-to-one mapping based on transport_type configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "additionalProperties": true,
+        "description": "Full specification for a plugin type entry.",
+        "properties": {
+          "class": {
+            "description": "Fully qualified class path (module:ClassName).",
+            "title": "Class",
+            "type": "string"
           },
-          {
+          "description": {
+            "description": "Human-readable description of this plugin type.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Priority for conflict resolution (higher wins).",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
             "additionalProperties": true,
-            "description": "Full specification for a plugin type entry.",
+            "description": "Transport metadata for discovery and documentation.",
             "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
-              },
-              "description": {
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "additionalProperties": true,
-                "description": "Transport metadata for discovery and documentation.",
-                "properties": {
-                  "transport_type": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/TransportType"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ],
-                    "description": "Transport type identifier for this transport",
-                    "title": "Transport Type"
+              "transport_type": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TransportType"
                   },
-                  "url_schemes": {
-                    "description": "URL schemes this transport handles (for auto-detection and validation).",
-                    "items": {
-                      "type": "string"
-                    },
-                    "title": "Url Schemes",
-                    "type": "array"
+                  {
+                    "type": "string"
                   }
-                },
-                "required": [
-                  "transport_type"
                 ],
-                "title": "TransportMetadata",
-                "type": "object"
+                "description": "Transport type identifier for this transport",
+                "title": "Transport Type"
+              },
+              "url_schemes": {
+                "description": "URL schemes this transport handles (for auto-detection and validation).",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Url Schemes",
+                "type": "array"
               }
             },
             "required": [
-              "class",
-              "description"
+              "transport_type"
             ],
-            "title": "PluginTypeEntry",
+            "title": "TransportMetadata",
             "type": "object"
           }
-        ]
+        },
+        "required": [
+          "class",
+          "description"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "record_processor": {
       "type": "object",
       "description": "Record processors stream records and compute metrics in a distributed manner.\nFirst stage of metrics pipeline, handling per-record computations.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "results_processor": {
       "type": "object",
       "description": "Results processors aggregate results from record processors and compute derived metrics.\nFinal stage of metrics pipeline for aggregated statistics and summaries.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "data_exporter": {
       "type": "object",
       "description": "Data exporters write benchmark results to files in various formats.\nSupports CSV, JSON, Parquet, and specialized export formats.\nOne-to-many mapping: multiple exporters can be loaded simultaneously.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "console_exporter": {
       "type": "object",
       "description": "Console exporters display benchmark results and diagnostics to stdout.\nProvides formatted output for metrics, errors, telemetry, and traces.\nOne-to-many mapping: multiple console exporters can be loaded simultaneously.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "ui": {
       "type": "object",
       "description": "UI components provide progress tracking and visualization during benchmark execution.\nSupports rich terminal dashboards, simple progress bars, or headless execution.\nOne-to-one mapping based on ui configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "service": {
       "type": "object",
       "description": "Services are the core processes that make up the AIPerf distributed system.\nEach service runs in a separate process and communicates via ZMQ message bus.\nIncludes SystemController, Workers, Managers, and processing services.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "service_manager": {
       "type": "object",
       "description": "Service managers orchestrate how services are launched and managed.\nSupports multiprocessing (single-node) and Kubernetes (multi-node) deployments.\nOne-to-one mapping based on run_mode configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "communication": {
       "type": "object",
       "description": "Communication backends provide the underlying transport for inter-service messaging.\nSupports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.\nOne-to-one mapping based on deployment configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "communication_client": {
       "type": "object",
       "description": "Communication clients implement different ZMQ socket patterns for messaging.\nIncludes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.\nInternal infrastructure: automatically created by framework based on usage.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "zmq_proxy": {
       "type": "object",
       "description": "ZMQ proxies provide message routing between different socket patterns.\nIncludes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.\nInternal infrastructure: automatically created by framework based on configuration.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "description": "Specification for a plugin type.\n\nEach plugin type maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
+        "properties": {
+          "class": {
+            "description": "Python class that implements this plugin type. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
+            "type": "string"
           },
-          {
-            "description": "Full specification for a plugin type entry.",
-            "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
-                "type": "string"
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "default": "",
-                "description": "Human-readable description of this plugin type.",
-                "title": "Description",
-                "type": "string"
-              },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Category-specific metadata values, schema defined in categories.yaml.",
-                "title": "Metadata"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "class"
             ],
-            "title": "PluginTypeEntry",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
-        ]
+        },
+        "required": [
+          "class"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     },
     "plot": {
       "type": "object",
       "description": "Plot handlers create different types of visualizations from benchmark data.\nSupports scatter, histogram, timeline, percentile bands, and multi-run comparisons.\nOne-to-one mapping based on plot type selection.",
       "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string",
-            "description": "Shorthand class path"
+        "additionalProperties": true,
+        "description": "Full specification for a plugin type entry.",
+        "properties": {
+          "class": {
+            "description": "Fully qualified class path (module:ClassName).",
+            "title": "Class",
+            "type": "string"
           },
-          {
+          "description": {
+            "description": "Human-readable description of this plugin type.",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "description": "Priority for conflict resolution (higher wins).",
+            "title": "Priority",
+            "type": "integer"
+          },
+          "metadata": {
             "additionalProperties": true,
-            "description": "Full specification for a plugin type entry.",
+            "description": "Metadata for a plot type including display name and description.",
             "properties": {
-              "class": {
-                "description": "Fully qualified class path (module:ClassName).",
-                "title": "Class",
+              "display_name": {
+                "description": "Human-readable name for UI display.",
+                "title": "Display Name",
                 "type": "string"
               },
               "description": {
-                "description": "Human-readable description of this plugin type.",
+                "description": "Description of what this plot type shows.",
                 "title": "Description",
                 "type": "string"
               },
-              "priority": {
-                "default": 0,
-                "description": "Priority for conflict resolution (higher wins).",
-                "title": "Priority",
-                "type": "integer"
-              },
-              "metadata": {
-                "additionalProperties": true,
-                "description": "Metadata for a plot type including display name and description.",
-                "properties": {
-                  "display_name": {
-                    "description": "Human-readable name for UI display.",
-                    "title": "Display Name",
-                    "type": "string"
-                  },
-                  "description": {
-                    "description": "Description of what this plot type shows.",
-                    "title": "Description",
-                    "type": "string"
-                  },
-                  "category": {
-                    "description": "Plot category (per_request, aggregated, combined, comparison).",
-                    "title": "Category",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "display_name",
-                  "description",
-                  "category"
-                ],
-                "title": "PlotTypeInfo",
-                "type": "object"
+              "category": {
+                "description": "Plot category (per_request, aggregated, combined, comparison).",
+                "title": "Category",
+                "type": "string"
               }
             },
             "required": [
-              "class",
-              "description"
+              "display_name",
+              "description",
+              "category"
             ],
-            "title": "PluginTypeEntry",
+            "title": "PlotTypeInfo",
             "type": "object"
           }
-        ]
+        },
+        "required": [
+          "class",
+          "description"
+        ],
+        "title": "PluginTypeEntry",
+        "type": "object"
       }
     }
   },
