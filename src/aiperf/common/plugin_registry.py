@@ -3,85 +3,14 @@
 
 """Plugin registry singleton with lazy loading and priority-based conflict resolution.
 
-This module provides a modern, extensible plugin system for AIPerf that supports:
-- Lazy class loading for optimal startup performance (Python 3.10+ features)
-- Priority-based conflict resolution for package overrides
-- Entry point discovery for external packages
-- Type-safe APIs with comprehensive type hints and modern typing features
-- Rich error messages with actionable feedback
-- Pydantic validation for registry data
-- Structural pattern matching for elegant parsing
+Usage:
+    from aiperf.common import plugin_registry
 
-Basic Usage
------------
-```python
-from aiperf.common import plugin_registry
+    EndpointClass = plugin_registry.get_class('endpoint', 'openai')
+    for impl in plugin_registry.list_types('endpoint'):
+        print(f"{impl.type_name}: {impl.description}")
 
-# Get type class by name
-EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-endpoint = EndpointClass(model_endpoint=config)
-
-# Or by fully qualified class path
-EndpointClass = plugin_registry.get_class(
-    'endpoint',
-    'aiperf.endpoints.openai:OpenAIEndpoint'
-)
-
-# List available types
-for impl in plugin_registry.list_types('endpoint'):
-    print(f"{impl.type_name}: {impl.description}")
-
-# Get class and instantiate
-EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-endpoint = EndpointClass(model_endpoint=config)
-```
-
-Advanced Usage
---------------
-```python
-# Conditional loading based on metadata
-for impl in plugin_registry.list_types('endpoint'):
-    if impl.priority > 50 and not impl.is_builtin:
-        EndpointClass = impl.load()
-        endpoint = EndpointClass(...)
-
-# Testing with isolated registry
-plugin_registry.reset()
-plugin_registry.load_registry(test_registry_path)
-```
-
-Priority System
----------------
-- Built-ins: priority = 0 (default, don't specify in YAML)
-- External plugins: priority = 0 (default, can override)
-
-Conflict Resolution:
-1. If priorities differ → Higher priority wins
-2. If priorities equal → External plugin ALWAYS wins over built-in
-3. If both external plugins → First registered wins (warning issued)
-
-YAML Schema
------------
-```yaml
-schema_version: "1.0"
-
-plugin:
-  name: my-plugin
-  version: 1.0.0
-  description: Custom plugin
-  author: Your Name
-
-endpoint:
-  custom_endpoint:
-    class: my_plugin.endpoints:CustomEndpoint
-    description: Custom endpoint type
-    priority: 100  # Optional, default: 0
-
-timing_strategy:
-  custom_strategy:
-    class: my_plugin.timing:CustomStrategy
-    description: Custom timing strategy
-```
+Conflict resolution: higher priority wins; equal priority: external beats built-in.
 """
 
 from __future__ import annotations
@@ -102,31 +31,6 @@ if TYPE_CHECKING:
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.singleton import Singleton
-
-__all__ = [
-    # Main API
-    "get_class",
-    "list_types",
-    "list_categories",
-    "create_enum",
-    "register",
-    "detect_type_from_url",
-    "find_registered_name",
-    # Validation
-    "validate_all",
-    # Startup
-    "load_registry",
-    # Utilities
-    "list_packages",
-    "get_package_metadata",
-    "reset",
-    # Types
-    "TypeEntry",
-    "PluginRegistry",
-    # Exceptions
-    "PluginError",
-    "TypeNotFoundError",
-]
 
 _logger = AIPerfLogger(__name__)
 _yaml = YAML(typ="safe")
@@ -150,17 +54,7 @@ DEFAULT_ENTRY_POINT_GROUP: Final[str] = "aiperf.plugins"
 
 
 class PackageMetadata(TypedDict, total=False):
-    """Package metadata from YAML manifest or package metadata.
-
-    Attributes:
-        name: Package name
-        version: Version string
-        description: Human-readable description
-        author: Package author
-        license: License identifier
-        homepage: Package homepage URL
-        builtin: Whether this is a built-in package
-    """
+    """Package metadata from YAML manifest."""
 
     name: str
     version: str
@@ -172,20 +66,13 @@ class PackageMetadata(TypedDict, total=False):
 
 
 class ManifestData(TypedDict, total=False):
-    """YAML manifest structure.
-
-    Attributes:
-        schema_version: Schema version (e.g., "1.0")
-        plugin: Plugin metadata section
-    """
+    """YAML manifest structure."""
 
     schema_version: str
     plugin: dict[str, Any]
 
 
-# TypeSpec includes 'class' key which is a Python keyword.
-# We use the functional form to define it properly for type checking.
-# Usage: spec.get("class") to access the class path.
+# TypeSpec uses functional form because 'class' is a Python keyword.
 TypeSpec = TypedDict(
     "TypeSpec",
     {
@@ -195,17 +82,6 @@ TypeSpec = TypedDict(
     },
     total=False,
 )
-TypeSpec.__doc__ = """Type specification from YAML.
-
-Can be either:
-- Simple format: "module:Class"
-- Full format: {"class": "module:Class", "description": "...", "priority": 100}
-
-Attributes:
-    class: Fully qualified class path (module:Class) - access via spec.get("class")
-    description: Human-readable description
-    priority: Conflict resolution priority
-"""
 
 
 # ==============================================================================
@@ -214,36 +90,13 @@ Attributes:
 
 
 class PluginError(Exception):
-    """Base exception for plugin system errors.
-
-    All plugin-related exceptions inherit from this base class, allowing
-    callers to catch all plugin errors with a single except clause.
-
-    Example:
-        >>> try:
-        ...     plugin_registry.get_class('endpoint', 'unknown')
-        ... except PluginError as e:
-        ...     print(f"Plugin error: {e}")
-    """
+    """Base exception for plugin system errors."""
 
 
 class TypeNotFoundError(PluginError):
-    """Type not found in category.
-
-    Attributes:
-        category: Category name
-        type_name: Type name
-        available: List of available types
-    """
+    """Type not found in category. Includes available types in error message."""
 
     def __init__(self, category: str, type_name: str, available: list[str]) -> None:
-        """Initialize with rich error message.
-
-        Args:
-            category: Category name
-            type_name: Type name that was not found
-            available: List of available type names
-        """
         self.category = category
         self.type_name = type_name
         self.available = available
@@ -262,26 +115,7 @@ class TypeNotFoundError(PluginError):
 
 @dataclass(frozen=True, slots=True)
 class TypeEntry:
-    """Lazy-loading type entry with metadata.
-
-    This class represents a type that hasn't been loaded yet.
-    The actual class is only imported when load() is called, enabling fast
-    startup and minimal memory usage.
-
-    Attributes:
-        category: Category name (e.g., 'endpoint', 'timing_strategy')
-        type_name: Type name (e.g., 'openai', 'fixed_schedule')
-        package_name: Package name (e.g., 'aiperf', 'aiperf-custom-plugin')
-        class_path: Full class path (e.g., 'aiperf.endpoints.openai:OpenAIEndpoint')
-        priority: Priority for conflict resolution (higher = preferred, default: 0)
-        description: Human-readable description of type
-        metadata: Package metadata from installed package (version, author, etc.)
-        is_builtin: Whether this is a built-in type
-
-    Thread Safety:
-        This class is immutable (frozen=True) except for the cached loaded_class.
-        The load() method uses object.__setattr__ for thread-safe caching.
-    """
+    """Lazy-loading type entry with metadata. Call load() to import the class."""
 
     category: str = field(metadata={"description": "Category identifier"})
     type_name: str = field(metadata={"description": "Type name"})
@@ -306,30 +140,7 @@ class TypeEntry:
     )
 
     def load(self) -> type:
-        """Load the type class with lazy caching.
-
-        This method imports the module and retrieves the class on first call,
-        then caches the result for subsequent calls. The caching is thread-safe
-        due to the frozen dataclass and object.__setattr__ usage.
-
-        Returns:
-            The loaded class (not instantiated - caller must instantiate)
-
-        Raises:
-            ValueError: If class_path format is invalid
-            ImportError: If module cannot be imported
-            AttributeError: If class not found in module
-
-        Example:
-            >>> lazy_type = TypeEntry(
-            ...     category='endpoint',
-            ...     type_name='openai',
-            ...     package_name='aiperf',
-            ...     class_path='aiperf.endpoints.openai:OpenAIEndpoint'
-            ... )
-            >>> EndpointClass = lazy_type.load()
-            >>> endpoint = EndpointClass(model_endpoint=config)
-        """
+        """Import and return the class (cached after first call)."""
         # Return cached class if already loaded
         if self.loaded_class is not None:
             return self.loaded_class
@@ -351,10 +162,6 @@ class TypeEntry:
         try:
             module = importlib.import_module(module_path)
             cls = getattr(module, class_name)
-
-            # Store reverse mapping for lookups (avoids mutating the class itself)
-            # This allows finding the registered name for a class
-            _class_to_name[cls] = self.type_name
 
             # Cache for future calls (thread-safe with frozen dataclass)
             object.__setattr__(self, "loaded_class", cls)
@@ -381,31 +188,7 @@ class TypeEntry:
             ) from e
 
     def validate(self, check_class: bool = False) -> tuple[bool, str | None]:
-        """Validate that the class is loadable without actually importing it.
-
-        This performs static validation to catch configuration errors early:
-        1. Validates class_path format (module:ClassName)
-        2. Checks module exists using importlib.util.find_spec (no import)
-        3. Optionally parses AST to verify class is defined (no execution)
-
-        Args:
-            check_class: If True, also verify the class exists via AST parsing.
-                        This is slower but catches typos in class names.
-
-        Returns:
-            Tuple of (is_valid, error_message). If valid, error_message is None.
-
-        Example:
-            >>> entry = TypeEntry(
-            ...     category='endpoint',
-            ...     type_name='custom',
-            ...     package_name='my_plugin',
-            ...     class_path='my_plugin.endpoints:CustomEndpoint'
-            ... )
-            >>> valid, error = entry.validate(check_class=True)
-            >>> if not valid:
-            ...     print(f"Invalid plugin: {error}")
-        """
+        """Validate class is loadable without importing. Returns (is_valid, error_message)."""
         # Already loaded means it's valid
         if self.loaded_class is not None:
             return True, None
@@ -454,7 +237,7 @@ class TypeEntry:
                 return False, f"Syntax error in {module_path}: {e}"
             except Exception as e:
                 # AST parsing failed, but module exists - don't fail validation
-                _logger.debug(f"Could not verify class via AST: {e}")
+                _logger.debug(lambda err=e: f"Could not verify class via AST: {err}")
 
         return True, None
 
@@ -465,18 +248,7 @@ class TypeEntry:
 
 
 class PluginRegistry(Singleton):
-    """Plugin registry singleton with discovery and lazy loading.
-
-    This class manages the complete lifecycle of plugins:
-    - Discovery from built-in registry and external entry points
-    - Lazy loading of type classes
-    - Priority-based conflict resolution
-    - Metadata tracking for debugging and introspection
-
-    Thread Safety:
-        This class is NOT thread-safe. It should only be modified during
-        application startup before concurrent access begins.
-    """
+    """Plugin registry singleton with discovery and lazy loading."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -487,35 +259,15 @@ class PluginRegistry(Singleton):
         self._type_entries_by_class_path: dict[str, TypeEntry] = {}
         # Loaded plugin metadata: plugin_name -> metadata
         self._loaded_plugins: dict[str, PackageMetadata] = {}
+        # Reverse mapping from class to registered name (for find_registered_name)
+        self._class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
 
         # Load the builtin registry manifest and discover plugins once on startup
         self.load_registry(_get_builtins_path())
         self.discover_plugins()
 
     def load_registry(self, registry_path: Path | str | Traversable) -> None:
-        """Load built-in registry from YAML file.
-
-        This method loads the main registry.yaml file that defines all built-in
-        types. It uses importlib.resources for proper package resource
-        access when installed.
-
-        Args:
-            registry_path: Path to registry.yaml. If None, uses the built-in
-                registry from the aiperf package.
-
-        Raises:
-            FileNotFoundError: If registry file not found at specified path
-            RuntimeError: If built-in registry.yaml not found in package
-            ruamel.yaml.YAMLError: If YAML parsing fails
-
-        Example:
-            # Load built-in registry
-            >>> registry = PluginRegistry()
-            >>> registry.load_registry(builtins_path)
-
-            # Load custom registry for testing
-            >>> registry.load_registry("/path/to/test_registry.yaml")
-        """
+        """Load registry from YAML file."""
         # Load YAML content
         yaml_content = self._read_registry_file(registry_path)
 
@@ -548,37 +300,7 @@ class PluginRegistry(Singleton):
     def discover_plugins(
         self, entry_point_group: str = DEFAULT_ENTRY_POINT_GROUP
     ) -> None:
-        """Discover and load plugin registries via entry points.
-
-        This method scans for external plugins that have registered themselves
-        via setuptools entry points. Each entry point should return a path to
-        a registry.yaml file.
-
-        Args:
-            entry_point_group: Entry point group name for plugin discovery.
-                Plugins register themselves in setup.py/pyproject.toml:
-                [project.entry-points."aiperf.plugins"]
-                my_plugin = "my_plugin:get_registry_path"
-
-        Example:
-            # In plugin's setup.py or pyproject.toml:
-            entry_points={
-                "aiperf.plugins": [
-                    "my_plugin = my_plugin:get_registry_path"
-                ]
-            }
-
-            # In plugin's __init__.py:
-            def get_registry_path():
-                return str(Path(__file__).parent / "registry.yaml")
-
-            # In AIPerf:
-            >>> registry.discover_plugins()
-            # Automatically discovers and loads all registered plugins
-
-        Raises:
-            ruamel.yaml.YAMLError: If plugin YAML parsing fails (logged, not raised)
-        """
+        """Discover and load plugin registries via setuptools entry points."""
         _logger.debug(lambda: f"Discovering plugins in {entry_point_group}")
 
         # Discover entry points (Python 3.10+ API)
@@ -610,50 +332,7 @@ class PluginRegistry(Singleton):
         _logger.info(f"Plugin discovery complete: {len(plugin_eps)} plugins found")
 
     def get_class(self, category: str, name_or_class_path: str) -> type:
-        """Get type class by name or fully qualified class path.
-
-        This is the primary method for retrieving plugin types.
-        It supports both short names ('openai') and full class paths
-        ('aiperf.endpoints.openai:OpenAIEndpoint').
-
-        The class is lazy-loaded on first access and cached for subsequent calls.
-
-        Args:
-            category: Category name identifier (e.g., 'endpoint', 'timing_strategy').
-                See registry.yaml for available categories.
-            name_or_class_path: Either:
-                - Short name: 'openai', 'anthropic', 'fixed_schedule'
-                - Full class path: 'aiperf.endpoints.openai:OpenAIEndpoint'
-
-        Returns:
-            The type class (not instantiated). Caller must instantiate
-            with appropriate constructor arguments.
-
-        Raises:
-            KeyError: If category or type not found
-            ValueError: If class path category doesn't match requested category
-            ImportError: If module cannot be imported
-            AttributeError: If class not found in module
-            TypeNotFoundError: If type not found (with suggestions)
-
-        Example:
-            Get by name:
-            >>> EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-            >>> endpoint = EndpointClass(model_endpoint=config)
-
-            Get by class path:
-            >>> EndpointClass = plugin_registry.get_class(
-            ...     'endpoint',
-            ...     'aiperf.endpoints.openai:OpenAIEndpoint'
-            ... )
-            >>> endpoint = EndpointClass(model_endpoint=config)
-
-            Handle errors:
-            >>> try:
-            ...     cls = plugin_registry.get_class('endpoint', 'unknown')
-            ... except TypeNotFoundError as e:
-            ...     print(f"Available: {e.available}")
-        """
+        """Get type class by name or fully qualified class path (lazy-loaded, cached)."""
         # Check if it's a class path (contains ':')
         if ":" in name_or_class_path:
             return self._get_class_by_class_path(category, name_or_class_path)
@@ -661,35 +340,7 @@ class PluginRegistry(Singleton):
             return self._get_class_by_name(category, name_or_class_path)
 
     def list_types(self, category: str) -> list[TypeEntry]:
-        """List all types for a category.
-
-        Returns TypeEntry objects (NOT loaded classes). This allows
-        inspecting metadata without triggering imports. Caller can load classes
-        manually using impl.load().
-
-        Args:
-            category: Category name (e.g., 'endpoint', 'timing_strategy')
-
-        Returns:
-            List of TypeEntry objects, sorted alphabetically by name.
-            Returns empty list if category not found.
-
-        Example:
-            Inspect metadata:
-            >>> for impl in plugin_registry.list_types('endpoint'):
-            ...     print(f"{impl.type_name}: {impl.description}")
-            ...     print(f"  Priority: {impl.priority}")
-            ...     print(f"  Plugin: {impl.package_name}")
-
-            Conditional loading:
-            >>> for impl in plugin_registry.list_types('endpoint'):
-            ...     if impl.priority > 50 and not impl.is_builtin:
-            ...         EndpointClass = impl.load()
-            ...         endpoint = EndpointClass(...)
-
-            Get all names:
-            >>> names = [impl.type_name for impl in plugin_registry.list_types('endpoint')]
-        """
+        """List all TypeEntry objects for a category (sorted alphabetically)."""
         if category not in self._types:
             _logger.debug(
                 lambda cat=category: f"Category not found in list_types: {cat}"
@@ -706,27 +357,7 @@ class PluginRegistry(Singleton):
     def validate_all(
         self, check_class: bool = False
     ) -> dict[str, list[tuple[str, str]]]:
-        """Validate all registered types without loading them.
-
-        This is useful for startup validation to catch configuration errors
-        early without incurring the cost of importing all modules.
-
-        Args:
-            check_class: If True, also verify classes exist via AST parsing.
-                        This is slower but catches typos in class names.
-
-        Returns:
-            Dict mapping category to list of (type_name, error_message) tuples.
-            Empty dict means all types are valid.
-
-        Example:
-            >>> errors = plugin_registry.validate_all(check_class=True)
-            >>> if errors:
-            ...     for category, issues in errors.items():
-            ...         for type_name, error in issues:
-            ...             print(f"{category}/{type_name}: {error}")
-            ...     raise RuntimeError("Plugin validation failed")
-        """
+        """Validate all registered types without loading them. Returns {category: [(type, error)]}."""
         errors: dict[str, list[tuple[str, str]]] = {}
 
         for category, types in self._types.items():
@@ -740,20 +371,7 @@ class PluginRegistry(Singleton):
         return errors
 
     def list_packages(self, builtin_only: bool = False) -> list[str]:
-        """List all loaded plugin packages.
-
-        Args:
-            builtin_only: If True, only return built-in packages
-
-        Returns:
-            List of package names
-
-        Example:
-            >>> packages = registry.list_packages()
-            >>> print(f"Loaded packages: {', '.join(packages)}")
-
-            >>> builtins = registry.list_packages(builtin_only=True)
-        """
+        """List all loaded plugin package names."""
         if builtin_only:
             return [
                 name
@@ -767,19 +385,7 @@ class PluginRegistry(Singleton):
     # --------------------------------------------------------------------------
 
     def _get_class_by_class_path(self, category: str, class_path: str) -> type:
-        """Get type by class path with category validation.
-
-        Args:
-            category: Expected category
-            class_path: Fully qualified class path
-
-        Returns:
-            Loaded class
-
-        Raises:
-            KeyError: If class path not registered
-            ValueError: If category mismatch
-        """
+        """Get type by class path with category validation."""
         if class_path not in self._type_entries_by_class_path:
             raise KeyError(
                 f"No type with class path: {class_path}\n"
@@ -795,22 +401,10 @@ class PluginRegistry(Singleton):
                 f"'{lazy_type.category}', not '{category}'"
             )
 
-        return lazy_type.load()
+        return self._load_entry(lazy_type)
 
     def _get_class_by_name(self, category: str, type_name: str) -> type:
-        """Get type by short name.
-
-        Args:
-            category: Category name
-            type_name: Implementation name
-
-        Returns:
-            Loaded class
-
-        Raises:
-            KeyError: If category not found
-            TypeNotFoundError: If type not found
-        """
+        """Get type by short name."""
         if category not in self._types:
             raise KeyError(
                 f"Unknown category: {category}\n"
@@ -822,35 +416,22 @@ class PluginRegistry(Singleton):
             raise TypeNotFoundError(category, type_name, available)
 
         lazy_type = self._types[category][type_name]
-        return lazy_type.load()
+        return self._load_entry(lazy_type)
+
+    def _load_entry(self, entry: TypeEntry) -> type:
+        """Load a TypeEntry and update the reverse class-to-name mapping."""
+        cls = entry.load()
+        self._class_to_name[cls] = entry.type_name
+        return cls
 
     def find_registered_name(self, category: str, cls: type) -> str | None:
-        """Find the registered name for a class within a category.
-
-        This performs a reverse lookup to find what name a class is registered
-        under. Useful when a class is instantiated directly (not via the registry)
-        and needs to know its registered identity.
-
-        Uses a fast O(1) lookup if the class was loaded through the registry,
-        otherwise falls back to searching by class path.
-
-        Args:
-            category: Category name to search in (e.g., 'service', 'endpoint')
-            cls: The class to look up
-
-        Returns:
-            The registered type name, or None if not found
-
-        Example:
-            >>> name = registry.find_registered_name('service', DatasetManager)
-            >>> print(name)  # 'dataset_manager'
-        """
+        """Reverse lookup: find registered name for a class, or None if not found."""
         if category not in self._types:
             return None
 
         # Fast path: check reverse mapping for already-loaded classes
-        if cls in _class_to_name:
-            name = _class_to_name[cls]
+        if cls in self._class_to_name:
+            name = self._class_to_name[cls]
             # Verify it's in the requested category
             if name in self._types[category]:
                 return name
@@ -869,26 +450,7 @@ class PluginRegistry(Singleton):
     # --------------------------------------------------------------------------
 
     def _read_registry_file(self, registry_path: Path | str | Traversable) -> str:
-        """Read registry YAML file content with robust error handling.
-
-        This method handles different path types (Path, str, Traversable) and provides
-        clear error messages when files cannot be read.
-
-        Args:
-            registry_path: Path to registry file (Path, str, or Traversable)
-
-        Returns:
-            YAML content as string
-
-        Raises:
-            FileNotFoundError: If file not found (with helpful message)
-            RuntimeError: If built-in registry not found (critical error)
-            OSError: If file cannot be read due to permissions or I/O error
-
-        Example:
-            >>> content = registry._read_registry_file(Path("registry.yaml"))
-            >>> content = registry._read_registry_file("/path/to/registry.yaml")
-        """
+        """Read registry YAML file content."""
         try:
             if hasattr(registry_path, "read_text"):
                 # Traversable from importlib.resources
@@ -932,14 +494,7 @@ class PluginRegistry(Singleton):
             ) from e
 
     def _validate_manifest_schema(self, manifest_data: ManifestData) -> None:
-        """Validate manifest structure and schema version.
-
-        Args:
-            manifest_data: Parsed YAML data
-
-        Raises:
-            ValueError: If schema_version is not a string
-        """
+        """Validate manifest structure and schema version."""
         # Validate schema_version field
         schema_version = manifest_data.get("schema_version")
 
@@ -956,44 +511,18 @@ class PluginRegistry(Singleton):
                 f"schema_version must be string, got {type(schema_version).__name__}"
             )
 
-        # Check for supported versions using pattern matching
-        match schema_version:
-            case version if version in SUPPORTED_SCHEMA_VERSIONS:
-                # Supported version - continue
-                _logger.debug(lambda v=version: f"Using schema version {v}")
-            case _:
-                # Unsupported version - warn but continue for forward compatibility
-                _logger.warning(
-                    f"Unknown schema version {schema_version}, supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
-                )
+        # Check for supported versions
+        if schema_version in SUPPORTED_SCHEMA_VERSIONS:
+            _logger.debug(lambda: f"Using schema version {schema_version}")
+        else:
+            _logger.warning(
+                f"Unknown schema version {schema_version}, supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
+            )
 
     def _register_types_from_manifest(
         self, package_name: str, manifest_data: ManifestData, is_builtin: bool
     ) -> None:
-        """Register types from manifest with conflict resolution.
-
-        This method processes a YAML manifest and registers all types.
-        It handles conflicts using priority-based resolution:
-        1. Higher priority wins
-        2. Equal priority: package beats built-in
-        3. Both plugins: first registered wins (with warning)
-
-        Args:
-            package_name: Plugin name from manifest
-            manifest_data: Parsed YAML data
-            is_builtin: Whether this is a built-in plugin
-
-        Example Manifest:
-            schema_version: "1.0"
-            plugin:
-              name: my-plugin
-              version: 1.0.0
-            endpoint:
-              openai:
-                class: my_plugin.endpoints:OpenAI
-                description: Custom OpenAI endpoint
-                priority: 100
-        """
+        """Register types from manifest with conflict resolution."""
         # Load package metadata from installed package
         package_metadata = self._load_package_metadata(package_name, is_builtin)
         self._loaded_plugins[package_name] = package_metadata
@@ -1034,16 +563,7 @@ class PluginRegistry(Singleton):
         package_metadata: PackageMetadata,
         is_builtin: bool,
     ) -> None:
-        """Register a single type with conflict resolution.
-
-        Args:
-            category_name: Category name
-            type_name: Type name
-            type_data: Type spec (string or dict)
-            package_name: Package providing this type
-            package_metadata: Package metadata
-            is_builtin: Whether this is built-in
-        """
+        """Register a single type with conflict resolution."""
         # Normalize type data
         match type_data:
             case dict() | TypeSpec():
@@ -1092,18 +612,7 @@ class PluginRegistry(Singleton):
         type_name: str,
         lazy_type: TypeEntry,
     ) -> None:
-        """Resolve conflicts and register type.
-
-        Conflict Resolution Rules:
-        1. Higher priority wins
-        2. Equal priority: package beats built-in
-        3. Both plugins: first registered wins (warn)
-
-        Args:
-            category_name: Category name
-            type_name: Implementation name
-            lazy_type: New type to register
-        """
+        """Resolve conflicts and register type."""
         existing = self._types[category_name].get(type_name)
 
         if existing is None:
@@ -1138,15 +647,7 @@ class PluginRegistry(Singleton):
         existing: TypeEntry,
         new: TypeEntry,
     ) -> tuple[TypeEntry, str]:
-        """Resolve conflict between existing and new type.
-
-        Args:
-            existing: Currently registered type
-            new: New type attempting to register
-
-        Returns:
-            Tuple of (winner, reason)
-        """
+        """Resolve conflict between existing and new type. Returns (winner, reason)."""
         # Rule 1: Higher priority wins
         if new.priority > existing.priority:
             return new, f"priority {new.priority} > {existing.priority}"
@@ -1169,15 +670,7 @@ class PluginRegistry(Singleton):
     def _load_package_metadata(
         self, package_name: str, is_builtin: bool
     ) -> PackageMetadata:
-        """Load package metadata from installed package.
-
-        Args:
-            package_name: Package name
-            is_builtin: Whether this is built-in
-
-        Returns:
-            Metadata dict with version, author, etc.
-        """
+        """Load package metadata from installed package."""
         if is_builtin:
             return PackageMetadata(name="aiperf", builtin=True)
 
@@ -1213,14 +706,7 @@ class PluginRegistry(Singleton):
 
 
 def _get_builtins_path() -> Path | Traversable:
-    """Get path to built-in registry.yaml.
-
-    Returns:
-        Path to registry.yaml in aiperf package
-
-    Raises:
-        RuntimeError: If registry.yaml not found
-    """
+    """Get path to built-in registry.yaml."""
     try:
         from importlib.resources import files
 
@@ -1239,10 +725,6 @@ def _get_builtins_path() -> Path | Traversable:
 # Create singleton instance at module load
 _registry = PluginRegistry()
 
-# Reverse mapping from class to registered name (avoids mutating classes)
-# Uses WeakKeyDictionary so classes can be garbage collected when no longer referenced
-_class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
-
 
 # ==============================================================================
 # Public API: Module-Level Functions
@@ -1250,184 +732,52 @@ _class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
 
 
 def get_class(category: str, name_or_class_path: str) -> type:
-    """Get type class by name or fully qualified class path.
-
-    This is the primary API for retrieving plugin types.
-    See PluginRegistry.get() for full documentation.
-
-    Args:
-        category: Category name (e.g., 'endpoint', 'timing_strategy')
-        name_or_class_path: Implementation name or full class path
-
-    Returns:
-        Loaded class (not instantiated)
-
-    Raises:
-        KeyError: If category or type not found
-        TypeNotFoundError: If type not found (with suggestions)
-        ImportError: If module cannot be imported
-        AttributeError: If class not found in module
-
-    Example:
-        >>> EndpointClass = plugin_registry.get_class('endpoint', 'openai')
-        >>> endpoint = EndpointClass(model_endpoint=config)
-    """
+    """Get type class by name or class path. See PluginRegistry.get_class()."""
     return _registry.get_class(category, name_or_class_path)
 
 
 def list_types(category: str) -> list[TypeEntry]:
-    """List all types for a category.
-
-    See PluginRegistry.list_types() for full documentation.
-
-    Args:
-        category: Category name
-
-    Returns:
-        List of TypeEntry objects (sorted alphabetically)
-
-    Example:
-        >>> for impl in plugin_registry.list_types('endpoint'):
-        ...     print(f"{impl.type_name}: {impl.description}")
-    """
+    """List all TypeEntry objects for a category. See PluginRegistry.list_types()."""
     return _registry.list_types(category)
 
 
 def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
-    """Validate all registered types without loading them.
-
-    Checks that all registered class paths are valid:
-    1. Module exists (via importlib.util.find_spec - no import)
-    2. Optionally, class exists in module (via AST parsing - no execution)
-
-    This is useful for startup validation to catch configuration errors
-    early without incurring the cost of importing all modules.
-
-    Args:
-        check_class: If True, also verify classes exist via AST parsing.
-                    This is slower but catches typos in class names.
-
-    Returns:
-        Dict mapping category to list of (type_name, error_message) tuples.
-        Empty dict means all types are valid.
-
-    Example:
-        >>> errors = plugin_registry.validate_all(check_class=True)
-        >>> if errors:
-        ...     for category, issues in errors.items():
-        ...         for type_name, error in issues:
-        ...             print(f"{category}/{type_name}: {error}")
-        ...     raise RuntimeError("Plugin validation failed")
-    """
+    """Validate all registered types without loading. See PluginRegistry.validate_all()."""
     return _registry.validate_all(check_class=check_class)
 
 
 def find_registered_name(category: str, cls: type) -> str | None:
-    """Find the registered name for a class within a category.
-
-    Performs a reverse lookup to find what name a class is registered under.
-    Useful when a class is instantiated directly (not via the registry) and
-    needs to know its registered identity.
-
-    Args:
-        category: Category name to search in (e.g., 'service', 'endpoint')
-        cls: The class to look up
-
-    Returns:
-        The registered type name, or None if not found
-
-    Example:
-        >>> from aiperf.dataset import DatasetManager
-        >>> name = plugin_registry.find_registered_name('service', DatasetManager)
-        >>> print(name)  # 'dataset_manager'
-    """
+    """Reverse lookup: find registered name for a class. See PluginRegistry.find_registered_name()."""
     return _registry.find_registered_name(category, cls)
 
 
 def load_registry(registry_path: str | Path) -> None:
-    """Load built-in registry from YAML file.
-
-    See PluginRegistry.load_registry() for full documentation.
-
-    Args:
-        registry_path: Path to registry.yaml
-
-    Example:
-        >>> plugin_registry.load_registry("/path/to/custom.yaml")
-    """
+    """Load registry from YAML file. See PluginRegistry.load_registry()."""
     _registry.load_registry(registry_path)
 
 
 def list_packages(builtin_only: bool = False) -> list[str]:
-    """List all loaded plugin packages.
-
-    Args:
-        builtin_only: If True, only return built-in packages
-
-    Returns:
-        List of package names
-
-    Example:
-        >>> packages = plugin_registry.list_packages()
-        >>> print(f"Loaded: {', '.join(packages)}")
-    """
+    """List all loaded plugin package names. See PluginRegistry.list_packages()."""
     return _registry.list_packages(builtin_only)
 
 
 def get_package_metadata(package_name: str) -> PackageMetadata:
-    """Get metadata for a loaded plugin package.
-
-    Args:
-        package_name: Name of the package to get metadata for
-
-    Returns:
-        PackageMetadata dict with name, version, builtin flag, etc.
-
-    Raises:
-        KeyError: If package not found
-
-    Example:
-        >>> metadata = plugin_registry.get_package_metadata("aiperf")
-        >>> print(f"Built-in: {metadata.get('builtin', False)}")
-    """
+    """Get metadata for a loaded plugin package. Raises KeyError if not found."""
     if package_name not in _registry._loaded_plugins:
         raise KeyError(f"Package '{package_name}' not found in loaded plugins")
     return _registry._loaded_plugins[package_name]
 
 
 def list_categories() -> list[str]:
-    """List all registered category names.
-
-    Returns a list of all category names that have at least one
-    registered type. This is useful for dynamic enum generation
-    and introspection.
-
-    Returns:
-        List of category names sorted alphabetically
-
-    Example:
-        >>> categories = plugin_registry.list_categories()
-        >>> print(categories)
-        ['arrival_pattern', 'communication', 'endpoint', ...]
-    """
+    """List all registered category names (sorted alphabetically)."""
     return sorted(_registry._types.keys())
 
 
 def reset() -> None:
-    """Reset registry to empty state (for testing).
-
-    Clears the singleton and creates a fresh registry instance.
-    This is primarily useful for testing scenarios where you need an isolated
-    registry.
-
-    Example:
-        >>> plugin_registry.reset()
-        >>> plugin_registry.load_registry(test_registry_path)
-    """
+    """Reset registry to empty state (for testing)."""
     global _registry
     PluginRegistry._reset_singleton()
     _registry = PluginRegistry()
-    _class_to_name.clear()
     _logger.debug("Registry reset")
 
 
@@ -1439,23 +789,7 @@ def register(
     priority: int = 0,
     is_builtin: bool = True,
 ) -> None:
-    """Register a class for a category programmatically.
-
-    This is useful for dynamically generated classes that cannot be
-    registered via registry.yaml, and for test overrides.
-
-    Args:
-        category: Category name (e.g., 'zmq_proxy')
-        type_name: Implementation name (can be enum or string)
-        cls: The class to register
-        priority: Override priority (higher wins). Use sys.maxsize for test overrides.
-        is_builtin: Whether this is a built-in type (False for test fakes)
-
-    Example:
-        >>> plugin_registry.register('zmq_proxy', ZMQProxyType.XPUB_XSUB, MyProxyClass)
-        >>> # Test override with high priority:
-        >>> plugin_registry.register('communication', 'zmq_ipc', FakeComm, priority=sys.maxsize)
-    """
+    """Register a class programmatically (for dynamic classes or test overrides)."""
     # Convert enum to string if needed
     name = type_name.value if hasattr(type_name, "value") else str(type_name)
 
@@ -1485,44 +819,7 @@ def register(
 
 
 def create_enum(category: str, enum_name: str) -> type:
-    """Create an ExtensibleStrEnum from registered types in a category.
-
-    This creates a dynamic enum that:
-    - Works with Pydantic validation (it's a str subclass)
-    - Works with cyclopts CLI (has __iter__ for choices)
-    - Supports case-insensitive lookups
-    - Can be extended at runtime if new types are registered
-
-    The enum is created from the currently registered types in the category.
-    Member names are UPPER_SNAKE_CASE versions of the type names.
-
-    Args:
-        category: Category name (e.g., 'endpoint', 'ui')
-        enum_name: Name for the enum class (e.g., 'EndpointType')
-
-    Returns:
-        An ExtensibleStrEnum subclass with all registered types as members
-
-    Raises:
-        KeyError: If category has no registered types
-
-    Example:
-        >>> EndpointType = plugin_registry.create_enum('endpoint', 'EndpointType')
-        >>> EndpointType.CHAT
-        EndpointType.CHAT
-        >>> EndpointType('chat')  # case-insensitive
-        EndpointType.CHAT
-        >>> list(EndpointType)  # cyclopts uses this for --help
-        [EndpointType.CHAT, EndpointType.COMPLETIONS, ...]
-
-        # Use with Pydantic
-        >>> class Config(BaseModel):
-        ...     endpoint: EndpointType
-
-        # Use with cyclopts
-        >>> @app.command
-        ... def run(endpoint: EndpointType): ...
-    """
+    """Create an ExtensibleStrEnum from registered types in a category."""
     from aiperf.common.enums.base_enums import create_enum as _create_enum
 
     types = _registry.list_types(category)
@@ -1541,25 +838,7 @@ def create_enum(category: str, enum_name: str) -> type:
 
 
 def detect_type_from_url(category: str, url: str) -> str:
-    """Detect the type from a URL.
-
-    Queries all types for the category and returns the first
-    one whose metadata indicates it can handle the URL scheme.
-
-    Args:
-        category: Category name (e.g., 'transport')
-        url: URL to detect transport for
-
-    Returns:
-        Implementation name that can handle this URL
-
-    Raises:
-        ValueError: If no type can handle the URL
-
-    Example:
-        >>> transport_type = plugin_registry.detect_type_from_url('transport', 'http://example.com')
-        >>> # Returns 'http' or similar
-    """
+    """Detect the type from a URL by matching URL scheme to type metadata."""
     from urllib.parse import urlparse
 
     parsed = urlparse(url)
@@ -1572,7 +851,7 @@ def detect_type_from_url(category: str, url: str) -> str:
 
     for impl in list_types(category):
         try:
-            cls = impl.load()
+            cls = _registry._load_entry(impl)
             if hasattr(cls, "metadata"):
                 metadata = cls.metadata()
                 if hasattr(metadata, "url_schemes") and scheme in metadata.url_schemes:

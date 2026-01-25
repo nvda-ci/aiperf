@@ -16,20 +16,11 @@ from aiperf.common.plugin_registry import (
     PluginRegistry,
     TypeEntry,
     TypeNotFoundError,
-    _import_class_cached,
 )
 
 # ==============================================================================
 # Test Fixtures
 # ==============================================================================
-
-
-@pytest.fixture(autouse=True)
-def clear_import_cache():
-    """Clear the import cache before each test to ensure mock patches work."""
-    _import_class_cached.cache_clear()
-    yield
-    _import_class_cached.cache_clear()
 
 
 @pytest.fixture
@@ -80,7 +71,8 @@ def registry() -> Generator[PluginRegistry, None, None]:
     # Reset to empty state for clean test isolation
     reg._types = {}
     reg._loaded_plugins = {}
-    reg._by_class_path = {}
+    reg._type_entries_by_class_path = {}
+    reg._class_to_name.clear()
     yield reg
     # Restore registry to normal state with builtins loaded
     plugin_registry.reset()
