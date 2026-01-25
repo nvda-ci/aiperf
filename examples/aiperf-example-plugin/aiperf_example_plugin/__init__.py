@@ -31,8 +31,22 @@ Example:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 __version__ = "1.0.0"
 __author__ = "NVIDIA"
+
+
+def get_registry_path() -> str:
+    """Return the path to this plugin's registry.yaml.
+
+    This function is called by the AIPerf plugin discovery system
+    via the entry point defined in pyproject.toml.
+
+    Returns:
+        Absolute path to the registry.yaml file.
+    """
+    return str(Path(__file__).parent / "registry.yaml")
 
 from aiperf_example_plugin.hooks import (
     ExampleLoggingHook,
@@ -51,6 +65,8 @@ __all__ = [
     # Version info
     "__version__",
     "__author__",
+    # Plugin discovery
+    "get_registry_path",
     # Hooks
     "ExampleLoggingHook",
     "ExampleLoggingHookConfig",

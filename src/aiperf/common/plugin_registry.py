@@ -81,12 +81,14 @@ timing_strategy:
 from __future__ import annotations
 
 import importlib
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypedDict
+from weakref import WeakKeyDictionary
 
 import yaml
 
@@ -124,6 +126,7 @@ __all__ = [
     "clear_all_singletons",
     # Types
     "TypeEntry",
+    "ConfigParam",
     "PluginRegistry",
     # Exceptions
     "PluginError",
@@ -187,23 +190,53 @@ class ManifestData(TypedDict, total=False):
     plugin: dict[str, Any]
 
 
-class TypeSpec(TypedDict, total=False):
-    """Type specification from YAML.
-
-    Can be either:
-    - Simple format: "module:Class"
-    - Full format: {"class": "module:Class", "description": "...", "priority": 100}
-
-    Note: The YAML uses "class" as a key, but Python requires a workaround.
-    We use dict access (spec.get("class")) instead of attribute access.
+class ConfigParam(TypedDict, total=False):
+    """Configuration parameter specification from YAML.
 
     Attributes:
+        name: Parameter name
+        type: Parameter type (e.g., 'str', 'int', 'bool')
+        default: Default value
         description: Human-readable description
-        priority: Conflict resolution priority
+        required: Whether the parameter is required
     """
 
+    name: str
+    type: str
+    default: Any
     description: str
-    priority: int
+    required: bool
+
+
+# TypeSpec includes 'class' key which is a Python keyword.
+# We use the functional form to define it properly for type checking.
+# Usage: spec.get("class") to access the class path.
+TypeSpec = TypedDict(
+    "TypeSpec",
+    {
+        "class": str,  # Fully qualified class path (module:Class)
+        "description": str,
+        "priority": int,
+        "tags": list[str],
+        "auto_load": bool,
+        "config_params": list[ConfigParam],
+    },
+    total=False,
+)
+TypeSpec.__doc__ = """Type specification from YAML.
+
+Can be either:
+- Simple format: "module:Class"
+- Full format: {"class": "module:Class", "description": "...", "priority": 100}
+
+Attributes:
+    class: Fully qualified class path (module:Class) - access via spec.get("class")
+    description: Human-readable description
+    priority: Conflict resolution priority
+    tags: List of tags for categorization and filtering
+    auto_load: Whether to automatically load this type at startup
+    config_params: List of configuration parameters
+"""
 
 
 # ==============================================================================
@@ -219,7 +252,7 @@ class PluginError(Exception):
 
     Example:
         >>> try:
-        ...     plugin_registry.get('endpoint', 'unknown')
+        ...     plugin_registry.get_class('endpoint', 'unknown')
         ... except PluginError as e:
         ...     print(f"Plugin error: {e}")
     """
@@ -397,6 +430,9 @@ class TypeEntry:
     │ • class_path: str            │
     │ • priority: int              │
     │ • description: str           │
+    │ • tags: tuple[str, ...]      │
+    │ • auto_load: bool            │
+    │ • config_params: tuple       │
     │ • loaded_class: type | None  │
     │                              │
     │ load() → class (lazy!)       │
@@ -409,6 +445,9 @@ class TypeEntry:
         class_path: Full class path (e.g., 'aiperf.endpoints.openai:OpenAIEndpoint')
         priority: Priority for conflict resolution (higher = preferred, default: 0)
         description: Human-readable description of type
+        tags: Tags for categorization and filtering (e.g., ['example', 'logging'])
+        auto_load: Whether to automatically load this type at startup
+        config_params: Configuration parameter specifications for this type
         metadata: Package metadata from installed package (version, author, etc.)
         is_builtin: Whether this is a built-in type
 
@@ -428,6 +467,15 @@ class TypeEntry:
     )
     description: str = field(
         default="", metadata={"description": "Human-readable description"}
+    )
+    tags: tuple[str, ...] = field(
+        default_factory=tuple, metadata={"description": "Tags for categorization"}
+    )
+    auto_load: bool = field(
+        default=False, metadata={"description": "Auto-load at startup"}
+    )
+    config_params: tuple[ConfigParam, ...] = field(
+        default_factory=tuple, metadata={"description": "Configuration parameters"}
     )
     metadata: PackageMetadata = field(
         default_factory=dict, metadata={"description": "Package metadata"}
@@ -484,9 +532,9 @@ class TypeEntry:
         try:
             cls = _import_class_cached(module_path, class_name)
 
-            # Set registration metadata on class for reverse lookup
-            # This allows classes to know their registered name (e.g., for service_type)
-            cls._registered_name = self.type_name
+            # Store reverse mapping for lookups (avoids mutating the class itself)
+            # This allows finding the registered name for a class
+            _class_to_name[cls] = self.type_name
 
             # Cache for future calls (thread-safe with frozen dataclass)
             object.__setattr__(self, "loaded_class", cls)
@@ -707,11 +755,11 @@ class PluginRegistry(Singleton):
 
         Example:
             Get by name:
-            >>> EndpointClass = plugin_registry.get('endpoint', 'openai')
+            >>> EndpointClass = plugin_registry.get_class('endpoint', 'openai')
             >>> endpoint = EndpointClass(model_endpoint=config)
 
             Get by class path:
-            >>> EndpointClass = plugin_registry.get(
+            >>> EndpointClass = plugin_registry.get_class(
             ...     'endpoint',
             ...     'aiperf.endpoints.openai:OpenAIEndpoint'
             ... )
@@ -719,7 +767,7 @@ class PluginRegistry(Singleton):
 
             Handle errors:
             >>> try:
-            ...     cls = plugin_registry.get('endpoint', 'unknown')
+            ...     cls = plugin_registry.get_class('endpoint', 'unknown')
             ... except TypeNotFoundError as e:
             ...     print(f"Available: {e.available}")
         """
@@ -864,6 +912,9 @@ class PluginRegistry(Singleton):
         under. Useful when a class is instantiated directly (not via the registry)
         and needs to know its registered identity.
 
+        Uses a fast O(1) lookup if the class was loaded through the registry,
+        otherwise falls back to searching by class path.
+
         Args:
             category: Category name to search in (e.g., 'service', 'endpoint')
             cls: The class to look up
@@ -878,10 +929,16 @@ class PluginRegistry(Singleton):
         if category not in self._types:
             return None
 
-        # Build class path for the class we're looking for
+        # Fast path: check reverse mapping for already-loaded classes
+        if cls in _class_to_name:
+            name = _class_to_name[cls]
+            # Verify it's in the requested category
+            if name in self._types[category]:
+                return name
+
+        # Slow path: search by class path for classes not loaded via registry
         target_class_path = f"{cls.__module__}:{cls.__name__}"
 
-        # Search through types
         for type_name, lazy_type in self._types[category].items():
             if lazy_type.class_path == target_class_path:
                 return type_name
@@ -1096,6 +1153,17 @@ class PluginRegistry(Singleton):
 
         description = spec.get("description", "")
 
+        # Extract tags (convert list to tuple for immutability)
+        tags_list = spec.get("tags", [])
+        tags = tuple(tags_list) if tags_list else ()
+
+        # Extract auto_load flag
+        auto_load = spec.get("auto_load", False)
+
+        # Extract config_params (convert list to tuple for immutability)
+        config_params_list = spec.get("config_params", [])
+        config_params = tuple(config_params_list) if config_params_list else ()
+
         # Create lazy type
         lazy_type = TypeEntry(
             category=category_name,
@@ -1104,6 +1172,9 @@ class PluginRegistry(Singleton):
             class_path=class_path,
             priority=priority,
             description=description,
+            tags=tags,
+            auto_load=auto_load,
+            config_params=config_params,
             metadata=package_metadata,
             is_builtin=is_builtin,
         )
@@ -1239,7 +1310,7 @@ class PluginRegistry(Singleton):
 # This pattern follows the random_generator module design.
 # Usage:
 #   from aiperf.common import plugin_registry
-#   EndpointClass = plugin_registry.get('endpoint', 'openai')
+#   EndpointClass = plugin_registry.get_class('endpoint', 'openai')
 # ==============================================================================
 
 
@@ -1269,6 +1340,11 @@ def _get_builtins_path() -> Path | TraversableType:
 
 # Create singleton instance at module load
 _registry = PluginRegistry()
+_registry_lock = threading.Lock()
+
+# Reverse mapping from class to registered name (avoids mutating classes)
+# Uses WeakKeyDictionary so classes can be garbage collected when no longer referenced
+_class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
 
 
 # ==============================================================================
@@ -1417,13 +1493,18 @@ def reset() -> None:
     This is primarily useful for testing scenarios where you need an isolated
     registry.
 
+    Thread Safety:
+        This function is thread-safe and uses a lock to ensure atomic reset.
+
     Example:
         >>> plugin_registry.reset()
         >>> plugin_registry.load_builtins(test_registry_path)
     """
     global _registry
-    PluginRegistry._reset_singleton()
-    _registry = PluginRegistry()
+    with _registry_lock:
+        PluginRegistry._reset_singleton()
+        _registry = PluginRegistry()
+        _class_to_name.clear()
     _logger.debug("Registry reset")
 
 

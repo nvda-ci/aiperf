@@ -38,9 +38,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import aiofiles
 import orjson
 from aiperf.timing.phase_lifecycle_hooks import BasePhaseLifecycleHook
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from aiperf.common.config import BaseConfig
 
 if TYPE_CHECKING:
     from aiperf.common.enums import CreditPhase
@@ -58,7 +61,7 @@ __all__ = [
 ]
 
 
-class ExampleLoggingHookConfig(BaseModel):
+class ExampleLoggingHookConfig(BaseConfig):
     """Configuration for ExampleLoggingHook.
 
     This demonstrates Pydantic-based configuration with validation.
@@ -94,8 +97,6 @@ class ExampleLoggingHookConfig(BaseModel):
             Path object for log file
         """
         return Path(v) if isinstance(v, str) else v
-
-    model_config = {"frozen": False}
 
 
 class ExampleLoggingHook(BasePhaseLifecycleHook):
@@ -255,15 +256,15 @@ class ExampleLoggingHook(BasePhaseLifecycleHook):
     async def _write_log(self, message: str) -> None:
         """Write message to log file.
 
-        Uses append mode with automatic flushing for thread safety.
+        Uses aiofiles for non-blocking async file I/O.
 
         Args:
             message: Log message to write
         """
         try:
-            with self.config.log_file.open("a") as f:
-                f.write(message + "\n")
-                f.flush()
+            async with aiofiles.open(self.config.log_file, "a") as f:
+                await f.write(message + "\n")
+                await f.flush()
         except OSError as e:
             print(f"Warning: Failed to write to log file {self.config.log_file}: {e}")
 
@@ -290,7 +291,7 @@ class ExampleLoggingHook(BasePhaseLifecycleHook):
         return self._phase_metrics.copy()
 
 
-class ExampleMetricsCollectorHookConfig(BaseModel):
+class ExampleMetricsCollectorHookConfig(BaseConfig):
     """Configuration for ExampleMetricsCollectorHook.
 
     Attributes:
@@ -329,8 +330,6 @@ class ExampleMetricsCollectorHookConfig(BaseModel):
             Path object for metrics file
         """
         return Path(v) if isinstance(v, str) else v
-
-    model_config = {"frozen": False}
 
 
 class ExampleMetricsCollectorHook(BasePhaseLifecycleHook):
@@ -497,6 +496,7 @@ class ExampleMetricsCollectorHook(BasePhaseLifecycleHook):
     async def _write_metrics_checkpoint(self) -> None:
         """Write current metrics to JSON file.
 
+        Uses aiofiles for non-blocking async file I/O.
         Uses orjson for fast, correct JSON serialization.
         """
         try:
@@ -512,7 +512,8 @@ class ExampleMetricsCollectorHook(BasePhaseLifecycleHook):
                 option=orjson.OPT_INDENT_2 if self.config.indent else 0,
             )
 
-            self.config.metrics_file.write_bytes(json_bytes)
+            async with aiofiles.open(self.config.metrics_file, "wb") as f:
+                await f.write(json_bytes)
         except OSError as e:
             print(f"Warning: Failed to write metrics file {self.config.metrics_file}: {e}")
 

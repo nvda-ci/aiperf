@@ -49,7 +49,7 @@ Issues = "https://github.com/NVIDIA/aiperf/issues"
 Changelog = "https://github.com/NVIDIA/aiperf/releases"
 
 [project.entry-points."aiperf.plugins"]
-example = "aiperf_example_plugin:registry.yaml"
+aiperf-example-plugin = "aiperf_example_plugin:get_registry_path"
 
 [tool.hatchling.build.targets.wheel]
 packages = ["aiperf_example_plugin"]

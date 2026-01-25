@@ -33,8 +33,12 @@ import statistics
 from pathlib import Path
 from typing import Any
 
+import aiofiles
 import orjson
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from aiperf.common.config import BaseConfig
+from aiperf.common.models import AIPerfBaseModel
 
 # Type aliases for better readability
 ResultRecord = dict[str, Any]
@@ -50,7 +54,7 @@ __all__ = [
 ]
 
 
-class ProcessingResult(BaseModel):
+class ProcessingResult(AIPerfBaseModel):
     """Result of processing operations.
 
     This is an immutable frozen model to ensure result integrity.
@@ -69,10 +73,10 @@ class ProcessingResult(BaseModel):
     metrics: dict[str, Any] | None = Field(default=None, description="Calculated metrics")
     output_path: str | None = Field(default=None, description="Output file path")
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True}  # type: ignore[typeddict-item]
 
 
-class ExampleMetricsProcessorConfig(BaseModel):
+class ExampleMetricsProcessorConfig(BaseConfig):
     """Configuration for ExampleMetricsProcessor.
 
     Attributes:
@@ -129,8 +133,6 @@ class ExampleMetricsProcessorConfig(BaseModel):
         if not all(0 <= p <= 100 for p in v):
             raise ValueError("Percentiles must be between 0 and 100")
         return sorted(set(v))  # Remove duplicates and sort
-
-    model_config = {"frozen": False}
 
 
 class ExampleMetricsProcessor:
@@ -390,6 +392,7 @@ class ExampleMetricsProcessor:
     async def _write_metrics(self, metrics: dict[str, Any]) -> None:
         """Write metrics to output file.
 
+        Uses aiofiles for non-blocking async file I/O.
         Uses orjson for fast, correct JSON serialization.
 
         Args:
@@ -401,7 +404,8 @@ class ExampleMetricsProcessor:
             # Write header and metrics
             output = "=== AIPerf Example Plugin Metrics ===\n\n" + json_bytes.decode("utf-8") + "\n"
 
-            self.config.output_file.write_text(output, encoding="utf-8")
+            async with aiofiles.open(self.config.output_file, "w", encoding="utf-8") as f:
+                await f.write(output)
         except OSError as e:
             print(f"Warning: Failed to write metrics file {self.config.output_file}: {e}")
 
