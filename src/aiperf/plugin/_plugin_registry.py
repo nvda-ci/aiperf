@@ -134,6 +134,10 @@ class PluginRegistry(Singleton):
 
     def get_class(self, category: str, name_or_class_path: str) -> type:
         """See module-level get_class() for details."""
+        # Handle enum values by extracting their string value
+        if hasattr(name_or_class_path, "value"):
+            name_or_class_path = name_or_class_path.value
+
         # Check if it's a class path (contains ':')
         if ":" in name_or_class_path:
             return self._get_class_by_class_path(category, name_or_class_path)

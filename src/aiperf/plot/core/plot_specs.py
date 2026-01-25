@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Plot specifications for configurable plot generation."""
@@ -11,6 +11,7 @@ from pydantic import Field, field_validator
 
 from aiperf.common.config import BaseConfig
 from aiperf.common.models import AIPerfBaseModel
+from aiperf.plugin.enums import PlotType
 
 
 class Style(AIPerfBaseModel):
@@ -74,7 +75,7 @@ class ExperimentClassificationConfig(BaseConfig):
     )
 
 
-class DataSource(Enum):
+class DataSource(str, Enum):
     """Data sources for plot metrics."""
 
     REQUESTS = "requests"
@@ -83,21 +84,6 @@ class DataSource(Enum):
     AGGREGATED = "aggregated"
     SERVER_METRICS = "server_metrics"
     SERVER_METRICS_AGGREGATED = "server_metrics_aggregated"
-
-
-class PlotType(Enum):
-    """Types of plots that can be generated."""
-
-    SCATTER = "scatter"
-    AREA = "area"
-    HISTOGRAM = "histogram"
-    TIMESLICE = "timeslice"
-    PARETO = "pareto"
-    SCATTER_LINE = "scatter_line"
-    DUAL_AXIS = "dual_axis"
-    SCATTER_WITH_PERCENTILES = "scatter_with_percentiles"
-    REQUEST_TIMELINE = "request_timeline"
-    PERCENTILE_BANDS = "percentile_bands"
 
 
 @dataclass
