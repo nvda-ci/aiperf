@@ -1,4 +1,6 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugins.schema.json",
   "$defs": {
     "PluginPackageInfo": {
       "additionalProperties": true,
@@ -41,59 +43,6 @@
       "type": "object"
     }
   },
-  "additionalProperties": {
-    "type": "object",
-    "additionalProperties": {
-      "oneOf": [
-        {
-          "type": "string",
-          "description": "Shorthand class path"
-        },
-        {
-          "additionalProperties": true,
-          "description": "Full specification for a plugin type entry.",
-          "properties": {
-            "class": {
-              "description": "Fully qualified class path (module:ClassName).",
-              "title": "Class",
-              "type": "string"
-            },
-            "description": {
-              "description": "Human-readable description of this plugin type.",
-              "title": "Description",
-              "type": "string"
-            },
-            "priority": {
-              "default": 0,
-              "description": "Priority for conflict resolution (higher wins).",
-              "title": "Priority",
-              "type": "integer"
-            },
-            "metadata": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Category-specific metadata values, schema defined in categories.yaml.",
-              "title": "Metadata"
-            }
-          },
-          "required": [
-            "class",
-            "description"
-          ],
-          "title": "PluginTypeEntry",
-          "type": "object"
-        }
-      ]
-    }
-  },
   "description": "Root model for plugins.yaml file.\n\nPlugins files register concrete implementations for plugin categories.\nEach category section maps type names to either:\n- A full PluginTypeEntry with class, description, priority, metadata\n- A simple string class path for shorthand notation",
   "properties": {
     "schema_version": {
@@ -105,11 +54,1267 @@
     "plugin": {
       "$ref": "#/$defs/PluginPackageInfo",
       "description": "Metadata about the plugin package."
+    },
+    "timing_strategy": {
+      "type": "object",
+      "description": "Timing strategies control request scheduling and credit issuance.\nDetermines when requests are sent based on fixed schedules, request rates,\nor user-centric patterns. One-to-one mapping per benchmark run.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "arrival_pattern": {
+      "type": "object",
+      "description": "Interval generators determine inter-arrival times for request rate strategy.\nControls the distribution of request timing (constant, Poisson, gamma, etc.).\nOne-to-one mapping when using request_rate timing mode.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "ramp": {
+      "type": "object",
+      "description": "Ramp strategies control how values are gradually transitioned over time.\nUsed for ramping concurrency limits, request rates, and other numeric parameters.\nSupports linear, exponential, and stochastic ramping patterns.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "dataset_backing_store": {
+      "type": "object",
+      "description": "Dataset backing stores manage conversation data on the DatasetManager side.\nProvides efficient storage for dataset distribution to workers.\nHandles streaming writes and finalization for client access.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "dataset_client_store": {
+      "type": "object",
+      "description": "Dataset client stores read conversation data on the Worker side.\nProvides efficient access to datasets from backing stores.\nSupports zero-copy reads and O(1) lookup performance.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "dataset_sampler": {
+      "type": "object",
+      "description": "Dataset samplers control how conversations are selected from the dataset.\nSupports random, sequential, and shuffle sampling strategies.\nOne-to-one mapping based on sampling strategy configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "dataset_composer": {
+      "type": "object",
+      "description": "Dataset composers create conversation datasets from various sources.\nHandles synthetic generation, custom file loading, and specialized formats.\nOne-to-one mapping based on composer_type configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "custom_dataset_loader": {
+      "type": "object",
+      "description": "Custom dataset loaders parse different JSONL file formats into conversations.\nSupports single-turn, multi-turn, random-pool, and trace formats.\nAuto-detection: loaders are tried in priority order based on can_load().",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "description": "Endpoints define how to format requests and parse responses for different APIs.\nSupports OpenAI-compatible, HuggingFace, Cohere, NIM, and custom API formats.\nOne-to-one mapping based on endpoint_type configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "additionalProperties": true,
+                "description": "Endpoint metadata for discovery and documentation.",
+                "properties": {
+                  "endpoint_path": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "API path (e.g., /v1/chat/completions).",
+                    "title": "Endpoint Path"
+                  },
+                  "streaming_path": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Streaming API path if different from the endpoint path (e.g., /generate_stream).",
+                    "title": "Streaming Path"
+                  },
+                  "service_kind": {
+                    "default": "openai",
+                    "description": "The service kind of the endpoint (used for artifact naming).",
+                    "title": "Service Kind",
+                    "type": "string"
+                  },
+                  "supports_streaming": {
+                    "default": false,
+                    "description": "Whether endpoint supports streaming responses.",
+                    "title": "Supports Streaming",
+                    "type": "boolean"
+                  },
+                  "tokenizes_input": {
+                    "default": false,
+                    "description": "Whether endpoint tokenizes text inputs.",
+                    "title": "Tokenizes Input",
+                    "type": "boolean"
+                  },
+                  "produces_tokens": {
+                    "default": false,
+                    "description": "Whether endpoint produces token-based output.",
+                    "title": "Produces Tokens",
+                    "type": "boolean"
+                  },
+                  "supports_audio": {
+                    "default": false,
+                    "description": "Whether endpoint accepts audio input.",
+                    "title": "Supports Audio",
+                    "type": "boolean"
+                  },
+                  "supports_images": {
+                    "default": false,
+                    "description": "Whether endpoint accepts image input.",
+                    "title": "Supports Images",
+                    "type": "boolean"
+                  },
+                  "supports_videos": {
+                    "default": false,
+                    "description": "Whether endpoint accepts video input.",
+                    "title": "Supports Videos",
+                    "type": "boolean"
+                  },
+                  "produces_images": {
+                    "default": false,
+                    "description": "Whether endpoint produces image-based outputs.",
+                    "title": "Produces Images",
+                    "type": "boolean"
+                  },
+                  "metrics_title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Display title for metrics dashboard.",
+                    "title": "Metrics Title"
+                  }
+                },
+                "title": "EndpointMetadata",
+                "type": "object"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "transport": {
+      "type": "object",
+      "description": "Transports handle the network layer for sending requests to inference servers.\nManages connection pooling, streaming, error handling, and TCP configuration.\nOne-to-one mapping based on transport_type configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "$defs": {
+                  "TransportType": {
+                    "enum": [
+                      "http"
+                    ],
+                    "title": "TransportType",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true,
+                "description": "Transport metadata for discovery and documentation.",
+                "properties": {
+                  "transport_type": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransportType"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Transport type identifier for this transport",
+                    "title": "Transport Type"
+                  },
+                  "url_schemes": {
+                    "description": "URL schemes this transport handles (for auto-detection and validation).",
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Url Schemes",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "transport_type"
+                ],
+                "title": "TransportMetadata",
+                "type": "object"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "record_processor": {
+      "type": "object",
+      "description": "Record processors stream records and compute metrics in a distributed manner.\nFirst stage of metrics pipeline, handling per-record computations.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "results_processor": {
+      "type": "object",
+      "description": "Results processors aggregate results from record processors and compute derived metrics.\nFinal stage of metrics pipeline for aggregated statistics and summaries.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "data_exporter": {
+      "type": "object",
+      "description": "Data exporters write benchmark results to files in various formats.\nSupports CSV, JSON, Parquet, and specialized export formats.\nOne-to-many mapping: multiple exporters can be loaded simultaneously.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "console_exporter": {
+      "type": "object",
+      "description": "Console exporters display benchmark results and diagnostics to stdout.\nProvides formatted output for metrics, errors, telemetry, and traces.\nOne-to-many mapping: multiple console exporters can be loaded simultaneously.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI components provide progress tracking and visualization during benchmark execution.\nSupports rich terminal dashboards, simple progress bars, or headless execution.\nOne-to-one mapping based on ui configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "service": {
+      "type": "object",
+      "description": "Services are the core processes that make up the AIPerf distributed system.\nEach service runs in a separate process and communicates via ZMQ message bus.\nIncludes SystemController, Workers, Managers, and processing services.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "service_manager": {
+      "type": "object",
+      "description": "Service managers orchestrate how services are launched and managed.\nSupports multiprocessing (single-node) and Kubernetes (multi-node) deployments.\nOne-to-one mapping based on run_mode configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "communication": {
+      "type": "object",
+      "description": "Communication backends provide the underlying transport for inter-service messaging.\nSupports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.\nOne-to-one mapping based on deployment configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "communication_client": {
+      "type": "object",
+      "description": "Communication clients implement different ZMQ socket patterns for messaging.\nIncludes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.\nInternal infrastructure: automatically created by framework based on usage.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "zmq_proxy": {
+      "type": "object",
+      "description": "ZMQ proxies provide message routing between different socket patterns.\nIncludes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.\nInternal infrastructure: automatically created by framework based on configuration.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Category-specific metadata values, schema defined in categories.yaml.",
+                "title": "Metadata"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "plot": {
+      "type": "object",
+      "description": "Plot handlers create different types of visualizations from benchmark data.\nSupports scatter, histogram, timeline, percentile bands, and multi-run comparisons.\nOne-to-one mapping based on plot type selection.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Shorthand class path"
+          },
+          {
+            "additionalProperties": true,
+            "description": "Full specification for a plugin type entry.",
+            "properties": {
+              "class": {
+                "description": "Fully qualified class path (module:ClassName).",
+                "title": "Class",
+                "type": "string"
+              },
+              "description": {
+                "description": "Human-readable description of this plugin type.",
+                "title": "Description",
+                "type": "string"
+              },
+              "priority": {
+                "default": 0,
+                "description": "Priority for conflict resolution (higher wins).",
+                "title": "Priority",
+                "type": "integer"
+              },
+              "metadata": {
+                "additionalProperties": true,
+                "description": "Metadata for a plot type including display name and description.",
+                "properties": {
+                  "display_name": {
+                    "description": "Human-readable name for UI display.",
+                    "title": "Display Name",
+                    "type": "string"
+                  },
+                  "description": {
+                    "description": "Description of what this plot type shows.",
+                    "title": "Description",
+                    "type": "string"
+                  },
+                  "category": {
+                    "description": "Plot category (per_request, aggregated, combined, comparison).",
+                    "title": "Category",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "display_name",
+                  "description",
+                  "category"
+                ],
+                "title": "PlotTypeInfo",
+                "type": "object"
+              }
+            },
+            "required": [
+              "class",
+              "description"
+            ],
+            "title": "PluginTypeEntry",
+            "type": "object"
+          }
+        ]
+      }
     }
   },
   "required": [
     "plugin"
   ],
   "title": "PluginsFile",
-  "type": "object"
+  "type": "object",
+  "additionalProperties": false
 }

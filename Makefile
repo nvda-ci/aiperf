@@ -262,4 +262,4 @@ check-plugin-overloads: #? check if the get_class() overloads are up-to-date.
 	$(activate_venv) && python tools/generate_plugin_overloads.py --check
 
 generate-plugin-schemas: #? generate JSON schemas for categories.yaml and plugins.yaml.
-	$(activate_venv) && python -m aiperf.plugin.schemas src/aiperf/plugin
+	$(activate_venv) && python tools/generate_plugin_schemas.py
