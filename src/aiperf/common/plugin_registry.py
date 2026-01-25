@@ -95,13 +95,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, TypedDict
 from weakref import WeakKeyDictionary
 
-import yaml
+from ruamel.yaml import YAML
+
+if TYPE_CHECKING:
+    from importlib.abc import Traversable
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.singleton import Singleton
-
-if TYPE_CHECKING:
-    from types import TraversableType
 
 __all__ = [
     # Main API
@@ -120,8 +120,6 @@ __all__ = [
     "list_packages",
     "get_package_metadata",
     "reset",
-    "clear_singleton",
-    "clear_all_singletons",
     # Types
     "TypeEntry",
     "PluginRegistry",
@@ -131,6 +129,7 @@ __all__ = [
 ]
 
 _logger = AIPerfLogger(__name__)
+_yaml = YAML(typ="safe")
 
 # ==============================================================================
 # Constants
@@ -350,7 +349,8 @@ class TypeEntry:
 
         # Import and cache the class
         try:
-            cls = _import_class(module_path, class_name)
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
 
             # Store reverse mapping for lookups (avoids mutating the class itself)
             # This allows finding the registered name for a class
@@ -484,7 +484,7 @@ class PluginRegistry(Singleton):
         # Nested dict: category -> type_name -> TypeEntry
         self._types: dict[str, dict[str, TypeEntry]] = {}
         # Reverse lookup: class_path -> TypeEntry
-        self._by_class_path: dict[str, TypeEntry] = {}
+        self._type_entries_by_class_path: dict[str, TypeEntry] = {}
         # Loaded plugin metadata: plugin_name -> metadata
         self._loaded_plugins: dict[str, PackageMetadata] = {}
 
@@ -492,23 +492,7 @@ class PluginRegistry(Singleton):
         self.load_registry(_get_builtins_path())
         self.discover_plugins()
 
-    @classmethod
-    def _reset_singleton(cls) -> None:
-        """Reset the singleton instance (for testing only).
-
-        This clears the singleton instance, allowing a fresh one to be
-        created on the next instantiation. This is primarily useful for
-        testing scenarios where you need an isolated registry.
-        """
-        import os
-
-        from aiperf.common.singleton import SingletonMeta
-
-        # Remove from the metaclass's instances dict
-        key = (cls, os.getpid())
-        SingletonMeta._instances.pop(key, None)
-
-    def load_registry(self, registry_path: Path | str | TraversableType) -> None:
+    def load_registry(self, registry_path: Path | str | Traversable) -> None:
         """Load built-in registry from YAML file.
 
         This method loads the main registry.yaml file that defines all built-in
@@ -522,7 +506,7 @@ class PluginRegistry(Singleton):
         Raises:
             FileNotFoundError: If registry file not found at specified path
             RuntimeError: If built-in registry.yaml not found in package
-            yaml.YAMLError: If YAML parsing fails
+            ruamel.yaml.YAMLError: If YAML parsing fails
 
         Example:
             # Load built-in registry
@@ -536,7 +520,7 @@ class PluginRegistry(Singleton):
         yaml_content = self._read_registry_file(registry_path)
 
         # Parse YAML
-        data: ManifestData = yaml.safe_load(yaml_content)
+        data: ManifestData = _yaml.load(yaml_content)
 
         if not data:
             _logger.warning(f"Empty registry YAML: {registry_path}")
@@ -555,7 +539,7 @@ class PluginRegistry(Singleton):
         )
 
         # Register types from manifest
-        self._register_manifest(package_name, data, is_builtin)
+        self._register_types_from_manifest(package_name, data, is_builtin)
 
         _logger.info(
             f"Loaded registry: {package_name} with {len([k for k in data if k not in ('plugin', 'schema_version')])} categories"
@@ -593,7 +577,7 @@ class PluginRegistry(Singleton):
             # Automatically discovers and loads all registered plugins
 
         Raises:
-            yaml.YAMLError: If plugin YAML parsing fails (logged, not raised)
+            ruamel.yaml.YAMLError: If plugin YAML parsing fails (logged, not raised)
         """
         _logger.debug(lambda: f"Discovering plugins in {entry_point_group}")
 
@@ -625,7 +609,7 @@ class PluginRegistry(Singleton):
 
         _logger.info(f"Plugin discovery complete: {len(plugin_eps)} plugins found")
 
-    def get(self, category: str, name_or_class_path: str) -> type:
+    def get_class(self, category: str, name_or_class_path: str) -> type:
         """Get type class by name or fully qualified class path.
 
         This is the primary method for retrieving plugin types.
@@ -648,7 +632,8 @@ class PluginRegistry(Singleton):
         Raises:
             KeyError: If category or type not found
             ValueError: If class path category doesn't match requested category
-            TypeLoadError: If class cannot be imported
+            ImportError: If module cannot be imported
+            AttributeError: If class not found in module
             TypeNotFoundError: If type not found (with suggestions)
 
         Example:
@@ -671,9 +656,9 @@ class PluginRegistry(Singleton):
         """
         # Check if it's a class path (contains ':')
         if ":" in name_or_class_path:
-            return self._get_by_class_path(category, name_or_class_path)
+            return self._get_class_by_class_path(category, name_or_class_path)
         else:
-            return self._get_by_name(category, name_or_class_path)
+            return self._get_class_by_name(category, name_or_class_path)
 
     def list_types(self, category: str) -> list[TypeEntry]:
         """List all types for a category.
@@ -781,7 +766,7 @@ class PluginRegistry(Singleton):
     # Private: Class Path Operations
     # --------------------------------------------------------------------------
 
-    def _get_by_class_path(self, category: str, class_path: str) -> type:
+    def _get_class_by_class_path(self, category: str, class_path: str) -> type:
         """Get type by class path with category validation.
 
         Args:
@@ -795,13 +780,13 @@ class PluginRegistry(Singleton):
             KeyError: If class path not registered
             ValueError: If category mismatch
         """
-        if class_path not in self._by_class_path:
+        if class_path not in self._type_entries_by_class_path:
             raise KeyError(
                 f"No type with class path: {class_path}\n"
                 f"Hint: Class path must be registered in a registry.yaml"
             )
 
-        lazy_type = self._by_class_path[class_path]
+        lazy_type = self._type_entries_by_class_path[class_path]
 
         # Verify category matches
         if lazy_type.category != category:
@@ -812,7 +797,7 @@ class PluginRegistry(Singleton):
 
         return lazy_type.load()
 
-    def _get_by_name(self, category: str, type_name: str) -> type:
+    def _get_class_by_name(self, category: str, type_name: str) -> type:
         """Get type by short name.
 
         Args:
@@ -883,7 +868,7 @@ class PluginRegistry(Singleton):
     # Private: Registry Loading
     # --------------------------------------------------------------------------
 
-    def _read_registry_file(self, registry_path: Path | str | TraversableType) -> str:
+    def _read_registry_file(self, registry_path: Path | str | Traversable) -> str:
         """Read registry YAML file content with robust error handling.
 
         This method handles different path types (Path, str, Traversable) and provides
@@ -953,8 +938,7 @@ class PluginRegistry(Singleton):
             manifest_data: Parsed YAML data
 
         Raises:
-            ValueError: If schema is invalid or incompatible
-            SchemaVersionError: If schema version is unsupported
+            ValueError: If schema_version is not a string
         """
         # Validate schema_version field
         schema_version = manifest_data.get("schema_version")
@@ -983,7 +967,7 @@ class PluginRegistry(Singleton):
                     f"Unknown schema version {schema_version}, supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
                 )
 
-    def _register_manifest(
+    def _register_types_from_manifest(
         self, package_name: str, manifest_data: ManifestData, is_builtin: bool
     ) -> None:
         """Register types from manifest with conflict resolution.
@@ -1125,12 +1109,10 @@ class PluginRegistry(Singleton):
         if existing is None:
             # No conflict - register directly
             self._types[category_name][type_name] = lazy_type
-            self._by_class_path[lazy_type.class_path] = lazy_type
+            self._type_entries_by_class_path[lazy_type.class_path] = lazy_type
 
             _logger.debug(
-                lambda cat=category_name,
-                t=type_name,
-                lt=lazy_type: f"Registered {cat}:{t} from {lt.package_name} (priority={lt.priority})"
+                lambda: f"Registered {category_name}:{type_name} from {lazy_type.package_name} (priority={lazy_type.priority})"
             )
             return
 
@@ -1140,7 +1122,7 @@ class PluginRegistry(Singleton):
         if winner is lazy_type:
             # New type wins
             self._types[category_name][type_name] = lazy_type
-            self._by_class_path[lazy_type.class_path] = lazy_type
+            self._type_entries_by_class_path[lazy_type.class_path] = lazy_type
 
             _logger.info(
                 f"Override registered {category_name}:{type_name}: {lazy_type.package_name} beats {existing.package_name} ({reason})"
@@ -1148,11 +1130,7 @@ class PluginRegistry(Singleton):
         else:
             # Existing type wins
             _logger.debug(
-                lambda cat=category_name,
-                t=type_name,
-                ex=existing,
-                lt=lazy_type,
-                r=reason: f"Override rejected {cat}:{t}: {ex.package_name} beats {lt.package_name} ({r})"
+                lambda: f"Override rejected {category_name}:{type_name}: {existing.package_name} beats {lazy_type.package_name} ({reason})"
             )
 
     def _resolve_conflict(
@@ -1234,7 +1212,7 @@ class PluginRegistry(Singleton):
 # ==============================================================================
 
 
-def _get_builtins_path() -> Path | TraversableType:
+def _get_builtins_path() -> Path | Traversable:
     """Get path to built-in registry.yaml.
 
     Returns:
@@ -1287,13 +1265,14 @@ def get_class(category: str, name_or_class_path: str) -> type:
     Raises:
         KeyError: If category or type not found
         TypeNotFoundError: If type not found (with suggestions)
-        TypeLoadError: If class cannot be imported
+        ImportError: If module cannot be imported
+        AttributeError: If class not found in module
 
     Example:
         >>> EndpointClass = plugin_registry.get_class('endpoint', 'openai')
         >>> endpoint = EndpointClass(model_endpoint=config)
     """
-    return _registry.get(category, name_or_class_path)
+    return _registry.get_class(category, name_or_class_path)
 
 
 def list_types(category: str) -> list[TypeEntry]:
@@ -1452,44 +1431,6 @@ def reset() -> None:
     _logger.debug("Registry reset")
 
 
-def clear_all_singletons() -> None:
-    """Clear all singleton instances cached by SingletonMeta.
-
-    This is useful for test cleanup to ensure singleton communication
-    backends and other singleton instances don't leak between tests.
-    """
-    import os
-
-    from aiperf.common.singleton import SingletonMeta
-
-    pid = os.getpid()
-    keys_to_remove = [key for key in SingletonMeta._instances if key[1] == pid]
-    for key in keys_to_remove:
-        SingletonMeta._instances.pop(key, None)
-    _logger.debug(f"Cleared {len(keys_to_remove)} singleton instances")
-
-
-def clear_singleton(category: str, type_name: str) -> None:
-    """Clear a specific singleton instance by category and type.
-
-    Args:
-        category: Category name (e.g., 'communication')
-        type_name: Type name (e.g., 'zmq_ipc')
-    """
-    import os
-
-    from aiperf.common.singleton import SingletonMeta
-
-    try:
-        cls = _registry.get(category, type_name)
-        key = (cls, os.getpid())
-        if key in SingletonMeta._instances:
-            SingletonMeta._instances.pop(key, None)
-            _logger.debug(f"Cleared singleton for {category}:{type_name}")
-    except TypeNotFoundError:
-        pass  # Type doesn't exist, nothing to clear
-
-
 def register(
     category: str,
     type_name: str,
@@ -1644,27 +1585,3 @@ def detect_type_from_url(category: str, url: str) -> str:
     )
 
 
-# ==============================================================================
-# Private Module Functions
-# ==============================================================================
-
-
-def _import_class(module_path: str, class_name: str) -> type:
-    """Import a class from a module path.
-
-    Note: importlib.import_module already caches modules in sys.modules,
-    so no additional caching is needed here.
-
-    Args:
-        module_path: Module path (e.g., 'aiperf.endpoints.openai')
-        class_name: Class name (e.g., 'OpenAIEndpoint')
-
-    Returns:
-        The class object (not instantiated)
-
-    Raises:
-        ImportError: If module cannot be imported
-        AttributeError: If class not found in module
-    """
-    module = importlib.import_module(module_path)
-    return getattr(module, class_name)
