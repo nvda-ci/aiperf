@@ -571,8 +571,8 @@ class PluginRegistry(Singleton):
         """Register a single type with conflict resolution."""
         # Normalize type data
         match type_data:
-            case dict() | TypeSpec():
-                # Full format with metadata
+            case dict():
+                # Full format with metadata (TypeSpec is a TypedDict, which is a dict at runtime)
                 spec = type_data  # type: ignore[assignment]
             case str():
                 # Simple format: "module:Class"
