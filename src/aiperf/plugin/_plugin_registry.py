@@ -472,9 +472,6 @@ class PluginRegistry(Singleton):
         self, package_name: str, is_builtin: bool
     ) -> PackageMetadata:
         """Load package metadata from installed package."""
-        if is_builtin:
-            return PackageMetadata(name="aiperf", builtin=True)
-
         try:
             import importlib.metadata
 
@@ -487,10 +484,10 @@ class PluginRegistry(Singleton):
                 author=pkg_metadata.get("Author", ""),
                 license=pkg_metadata.get("License", ""),
                 homepage=pkg_metadata.get("Home-page", ""),
-                builtin=False,
+                builtin=is_builtin,
             )
         except Exception as e:
             _logger.warning(
                 f"Failed to load package metadata for {package_name}: {e!r}"
             )
-            return PackageMetadata(name=package_name, builtin=False)
+            return PackageMetadata(name=package_name, builtin=is_builtin)

@@ -17,7 +17,7 @@ Conflict resolution: higher priority wins; equal priority: external beats built-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, TypedDict, overload
 
 if TYPE_CHECKING:
     from aiperf.plugin.enums import PluginCategory
@@ -37,6 +37,7 @@ _logger = AIPerfLogger(__name__)
 #   from aiperf.plugin import plugins
 #   from aiperf.plugin.enums import PluginCategory
 #   EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
+#   endpoint = EndpointClass(...)
 # ==============================================================================
 
 # Create singleton instance at module load
@@ -46,7 +47,9 @@ _registry = PluginRegistry()
 # ==============================================================================
 # Generated Type Overloads (AUTO-GENERATED - DO NOT EDIT)
 # ==============================================================================
-# Run `python tools/generate_plugin_overloads.py` to regenerate.
+# These overloads provide type safety by returning the correct protocol or base
+# class for each plugin category. Run `python tools/generate_plugin_overloads.py`
+# to regenerate.
 # ==============================================================================
 
 if TYPE_CHECKING:
@@ -363,8 +366,11 @@ def get_package_metadata(package_name: str) -> PackageMetadata:
     return _registry._loaded_plugins[package_name]
 
 
-def list_categories() -> list[str]:
+def list_categories(*, include_internal: bool = True) -> list[str]:
     """List all registered category names (sorted alphabetically).
+
+    Args:
+        include_internal: If False, exclude internal categories (default: True).
 
     Returns:
         Sorted list of category names (e.g., ['endpoint', 'transport', ...]).
@@ -374,7 +380,96 @@ def list_categories() -> list[str]:
         >>> print(categories)
         ['arrival_pattern', 'communication', 'endpoint', ...]
     """
-    return sorted(_registry._types.keys())
+    categories = sorted(_registry._types.keys())
+    if not include_internal:
+        categories = [c for c in categories if not is_internal_category(c)]
+    return categories
+
+
+# Category metadata cache (loaded from categories.yaml)
+_category_metadata: dict[str, dict] | None = None
+
+
+class CategoryMetadata(TypedDict, total=False):
+    """Metadata for a plugin category from categories.yaml."""
+
+    protocol: str
+    enum: str
+    description: str
+    internal: bool
+
+
+def _load_category_metadata() -> dict[str, dict]:
+    """Load category metadata from categories.yaml."""
+    global _category_metadata
+    if _category_metadata is not None:
+        return _category_metadata
+
+    from ruamel.yaml import YAML
+
+    try:
+        from importlib.resources import files
+
+        categories_path = files("aiperf.plugin") / "categories.yaml"
+        content = categories_path.read_text(encoding="utf-8")
+    except Exception:
+        # Fallback to relative path
+        fallback = Path(__file__).parent / "categories.yaml"
+        if not fallback.exists():
+            _logger.warning("categories.yaml not found")
+            _category_metadata = {}
+            return _category_metadata
+        content = fallback.read_text(encoding="utf-8")
+
+    yaml = YAML(typ="safe")
+    data = yaml.load(content) or {}
+
+    # Filter out non-category keys
+    _category_metadata = {
+        k: v
+        for k, v in data.items()
+        if k not in ("schema_version",) and isinstance(v, dict)
+    }
+    return _category_metadata
+
+
+def get_category_metadata(category: str) -> CategoryMetadata | None:
+    """Get metadata for a plugin category.
+
+    Args:
+        category: Category name (e.g., 'endpoint').
+
+    Returns:
+        CategoryMetadata dict with protocol, enum, description, internal fields,
+        or None if category not found.
+
+    Example:
+        >>> meta = plugins.get_category_metadata('endpoint')
+        >>> print(meta['description'])
+    """
+    metadata = _load_category_metadata()
+    return metadata.get(category)
+
+
+def is_internal_category(category: str) -> bool:
+    """Check if a category is internal (not user-facing).
+
+    Args:
+        category: Category name to check.
+
+    Returns:
+        True if the category is marked as internal, False otherwise.
+
+    Example:
+        >>> plugins.is_internal_category('zmq_proxy')
+        True
+        >>> plugins.is_internal_category('endpoint')
+        False
+    """
+    meta = get_category_metadata(category)
+    if meta is None:
+        return False
+    return meta.get("internal", False)
 
 
 def reset() -> None:

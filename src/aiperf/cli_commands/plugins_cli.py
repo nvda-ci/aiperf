@@ -40,9 +40,13 @@ console = Console()
 # ==============================================================================
 
 
-def get_all_categories() -> list[str]:
-    """Get all category names from registry."""
-    return plugin_registry.list_categories()
+def get_all_categories(*, include_internal: bool = False) -> list[str]:
+    """Get all category names from registry.
+
+    Args:
+        include_internal: If True, include internal categories (default: False).
+    """
+    return plugin_registry.list_categories(include_internal=include_internal)
 
 
 def ensure_registry_loaded() -> None:
@@ -50,39 +54,78 @@ def ensure_registry_loaded() -> None:
     _ = plugin_registry.list_categories()
 
 
+def _format_category_name(category: str) -> str:
+    """Format category name for display (snake_case to Title Case with acronyms)."""
+    # Known acronyms that should be uppercase
+    acronyms = {"ui", "api", "gpu", "cpu", "http", "zmq", "csv", "json", "hf", "tei"}
+    words = category.split("_")
+    return " ".join(w.upper() if w.lower() in acronyms else w.title() for w in words)
+
+
+def _get_short_description(category: str) -> str:
+    """Get a short one-line description for a category."""
+    meta = plugin_registry.get_category_metadata(category)
+    if not meta or not meta.get("description"):
+        return ""
+    # Take just the first line/sentence of the description
+    return meta["description"].strip().split("\n")[0]
+
+
+def _count_types_per_package() -> dict[str, int]:
+    """Count total implementation types provided by each package."""
+    counts: dict[str, int] = {}
+    for category in plugin_registry.list_categories():
+        for type_entry in plugin_registry.list_types(category):
+            pkg = type_entry.package_name
+            counts[pkg] = counts.get(pkg, 0) + 1
+    return counts
+
+
 def show_overview() -> None:
-    """Show all categories with type counts."""
+    """Show all categories with type counts, plus installed packages."""
     all_categories = get_all_categories()
 
     if not all_categories:
         console.print("[yellow]No categories found[/yellow]")
         return
 
-    table = Table(title="Plugin Categories")
-    table.add_column("Category", style="cyan", no_wrap=True)
-    table.add_column("Types", style="green", justify="right")
-    table.add_column("Description", style="dim")
-
-    descriptions = {
-        "arrival_pattern": "Request timing intervals",
-        "endpoint": "LLM API endpoint types",
-        "timing_strategy": "Request scheduling",
-        "data_exporter": "Export formats (CSV, JSON)",
-        "transport": "HTTP transport types",
-        "dataset_composer": "Dataset creation",
-        "dataset_sampler": "Conversation sampling",
-        "record_processor": "Record processing",
-        "results_processor": "Results aggregation",
-        "service": "AIPerf services",
-        "ui": "User interfaces",
-    }
+    # Show categories table
+    cat_table = Table(title="Plugin Categories", show_lines=True, expand=True)
+    cat_table.add_column("Category", style="cyan", no_wrap=True)
+    cat_table.add_column("Plugins", ratio=1)
 
     for cat in all_categories:
-        type_count = len(plugin_registry.list_types(cat))
-        desc = descriptions.get(cat, "")
-        table.add_row(cat, str(type_count), desc)
+        types = plugin_registry.list_types(cat)
+        type_names = ", ".join(f"[italic]{t.type_name}[/]" for t in types)
+        cat_table.add_row(_format_category_name(cat), type_names)
 
-    console.print(table)
+    console.print(cat_table)
+
+    # Show installed packages table
+    packages = plugin_registry.list_packages()
+    if packages:
+        console.print()
+        type_counts = _count_types_per_package()
+        pkg_table = Table(title="Installed Packages", show_lines=True, expand=True)
+        pkg_table.add_column("Package", style="cyan", no_wrap=True)
+        pkg_table.add_column("Version", style="green", no_wrap=True)
+        pkg_table.add_column("Plugins", style="green", justify="right", no_wrap=True)
+        pkg_table.add_column(
+            "Description", style="dim", overflow="ellipsis", no_wrap=True, ratio=1
+        )
+
+        for pkg in packages:
+            try:
+                metadata = plugin_registry.get_package_metadata(pkg)
+                version = metadata.get("version", "-")
+                description = metadata.get("description", "")
+            except KeyError:
+                version = "-"
+                description = ""
+            pkg_table.add_row(pkg, version, str(type_counts.get(pkg, 0)), description)
+
+        console.print(pkg_table)
+
     console.print(
         "\n[dim]Usage: aiperf plugins <category> to see available types[/dim]"
     )
@@ -99,9 +142,16 @@ def show_category_types(category: str) -> None:
             console.print(f"  {cat}")
         return
 
-    table = Table(title=f"{category} types")
+    # Show category description if available
+    meta = plugin_registry.get_category_metadata(category)
+    if meta and meta.get("description"):
+        console.print(f"[dim]{meta['description'].strip()}[/dim]\n")
+
+    table = Table(
+        title=f"{_format_category_name(category)} Types", show_lines=True, expand=True
+    )
     table.add_column("Type", style="cyan", no_wrap=True)
-    table.add_column("Description")
+    table.add_column("Description", overflow="ellipsis", no_wrap=True, ratio=1)
 
     for lt in lazy_types:
         table.add_row(lt.type_name, lt.description or "[dim]-[/dim]")
@@ -141,17 +191,24 @@ def show_packages(builtin_only: bool = False) -> None:
         console.print("[yellow]No plugins found[/yellow]")
         return
 
-    table = Table(title="Installed Plugins")
-    table.add_column("Plugin", style="cyan")
-    table.add_column("Source", style="magenta")
+    type_counts = _count_types_per_package()
+    table = Table(title="Installed Plugins", show_lines=True, expand=True)
+    table.add_column("Plugin", style="cyan", no_wrap=True)
+    table.add_column("Version", style="green", no_wrap=True)
+    table.add_column("Plugins", style="green", justify="right", no_wrap=True)
+    table.add_column(
+        "Description", style="dim", overflow="ellipsis", no_wrap=True, ratio=1
+    )
 
     for pkg in packages:
         try:
             metadata = plugin_registry.get_package_metadata(pkg)
-            source = "built-in" if metadata.get("builtin", False) else "external"
+            version = metadata.get("version", "-")
+            description = metadata.get("description", "")
         except KeyError:
-            source = "unknown"
-        table.add_row(pkg, source)
+            version = "-"
+            description = ""
+        table.add_row(pkg, version, str(type_counts.get(pkg, 0)), description)
 
     console.print(table)
 

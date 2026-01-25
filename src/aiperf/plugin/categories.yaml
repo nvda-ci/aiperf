@@ -9,6 +9,8 @@
 #   - protocol: Fully qualified class path (module:ClassName) for the Protocol/ABC
 #   - enum: The dynamic enum generated from registered plugins
 #   - description: Human-readable description of the category's purpose
+#   - internal: (optional) Boolean indicating this category is internal infrastructure,
+#               not user-facing. Defaults to false if not specified.
 #
 # Used by tools/generate_plugin_overloads.py to generate type stubs.
 # =============================================================================
@@ -186,6 +188,7 @@ service_manager:
 communication:
   protocol: aiperf.common.protocols:CommunicationProtocol
   enum: CommunicationBackend
+  internal: true
   description: |
     Communication backends provide the underlying transport for inter-service messaging.
     Supports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.
@@ -194,6 +197,7 @@ communication:
 communication_client:
   protocol: aiperf.common.protocols:CommunicationClientProtocol
   enum: CommClientType
+  internal: true
   description: |
     Communication clients implement different ZMQ socket patterns for messaging.
     Includes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.
@@ -202,6 +206,7 @@ communication_client:
 zmq_proxy:
   protocol: aiperf.zmq:BaseZMQProxy
   enum: ZMQProxyType
+  internal: true
   description: |
     ZMQ proxies provide message routing between different socket patterns.
     Includes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.
