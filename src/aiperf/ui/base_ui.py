@@ -26,7 +26,7 @@ class BaseAIPerfUI(
     :class:`WorkerTrackerMixin`, :class:`RealtimeMetricsMixin`, and
     :class:`RealtimeTelemetryMetricsMixin` to create a UI for AIPerf components.
 
-    To register a custom UI, add an entry to registry.yaml:
+    To register a custom UI, add an entry to plugins.yaml:
 
     ```yaml
     ui:

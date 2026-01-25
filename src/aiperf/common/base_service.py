@@ -57,7 +57,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
 
         raise AttributeError(
             f"Cannot determine service_type for {cls.__name__}. "
-            f"Class must be registered in registry.yaml or loaded via plugin_registry."
+            f"Class must be registered in plugins.yaml or loaded via plugin_registry."
         )
 
     def __init__(

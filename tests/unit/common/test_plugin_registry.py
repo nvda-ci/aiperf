@@ -402,8 +402,8 @@ class TestPluginRegistryBasics:
     def test_load_registry_nonexistent_file(self, registry):
         """Test that loading nonexistent file raises RuntimeError."""
         # Should raise RuntimeError for missing registry
-        with pytest.raises(RuntimeError, match="Built-in registry.yaml not found"):
-            registry.load_registry("/nonexistent/path/registry.yaml")
+        with pytest.raises(RuntimeError, match="Built-in plugins.yaml not found"):
+            registry.load_registry("/nonexistent/path/plugins.yaml")
 
     def test_load_registry_priority_conflict(self, registry):
         """Test that higher priority wins in conflicts."""
@@ -850,7 +850,9 @@ class TestFindRegisteredName:
         name = registry.find_registered_name("nonexistent", mock_class)
         assert name is None
 
-    def test_find_registered_name_unregistered_class(self, registry, temp_registry_file):
+    def test_find_registered_name_unregistered_class(
+        self, registry, temp_registry_file
+    ):
         """Test finding name for unregistered class returns None."""
         registry.load_registry(temp_registry_file)
 
@@ -1516,6 +1518,7 @@ class TestModuleLevelFunctions:
 
     def test_find_registered_name_module_level(self):
         """Test find_registered_name at module level."""
+
         # Register a known type
         class KnownClass:
             pass
@@ -1557,6 +1560,7 @@ class TestCreateEnum:
 
     def test_create_enum_hyphen_to_underscore(self):
         """Test create_enum converts hyphens to underscores."""
+
         # Register a type with hyphens
         class HyphenClass:
             pass

@@ -45,7 +45,7 @@ List installed plugin packages.
 
 #### `-v`, `--validate`, `--no-validate`
 
-Validate built-in registry.yaml.
+Validate built-in plugins.yaml.
 
 <hr>
 

@@ -154,7 +154,7 @@ def load_registry(registry_path: str | Path) -> None:
         RuntimeError: If the file cannot be read.
 
     Example:
-        >>> plugin_registry.load_registry('/path/to/custom/registry.yaml')
+        >>> plugin_registry.load_registry('/path/to/custom/plugins.yaml')
     """
     _registry.load_registry(registry_path)
 

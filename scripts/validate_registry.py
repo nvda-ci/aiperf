@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Validation script for src/aiperf/registry.yaml
+Validation script for src/aiperf/plugin/plugins.yaml
 
 Checks:
 1. Valid YAML syntax
@@ -122,12 +122,6 @@ def validate_no_duplicates(registry: dict[str, Any]) -> list[str]:
                 seen_impls[impl_name] = []
             seen_impls[impl_name].append(protocol_name)
 
-    # Report duplicates across different protocols (this is actually OK, just informational)
-    for impl_name, protocols in seen_impls.items():
-        if len(protocols) > 1:
-            # This is actually fine - same name can exist in different protocols
-            pass
-
     return errors
 
 
@@ -166,9 +160,9 @@ def validate_plugin_metadata(registry: dict[str, Any]) -> list[str]:
 
 def main() -> int:
     """Run all validation checks."""
-    # Find registry.yaml
+    # Find plugins.yaml
     script_dir = Path(__file__).parent
-    registry_path = script_dir.parent / "src" / "aiperf" / "registry.yaml"
+    registry_path = script_dir.parent / "src" / "aiperf" / "plugin" / "plugins.yaml"
 
     if not registry_path.exists():
         print(f"ERROR: Registry file not found at {registry_path}")

@@ -8,7 +8,7 @@ Simple interface to explore AIPerf plugins:
     aiperf plugins endpoint              # List endpoint types
     aiperf plugins endpoint openai       # Details about openai endpoint
     aiperf plugins --packages            # List installed plugin packages
-    aiperf plugins --validate            # Validate registry.yaml
+    aiperf plugins --validate            # Validate plugins.yaml
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ def show_packages(builtin_only: bool = False) -> None:
 
 
 def run_validate(registry_file: Path | None) -> None:
-    """Validate a registry.yaml file."""
+    """Validate a plugins.yaml file."""
     import sys
 
     try:
@@ -176,7 +176,7 @@ def run_validate(registry_file: Path | None) -> None:
         return
 
     if registry_file is None:
-        registry_file = Path(__file__).parent.parent / "registry.yaml"
+        registry_file = Path(__file__).parent.parent / "plugin" / "plugins.yaml"
 
     if not registry_file.exists():
         console.print(f"[red]File not found: {registry_file}[/red]")
@@ -243,7 +243,7 @@ def plugins(
     validate: Annotated[
         bool,
         cyclopts.Parameter(
-            name=["--validate", "-v"], help="Validate built-in registry.yaml"
+            name=["--validate", "-v"], help="Validate built-in plugins.yaml"
         ),
     ] = False,
 ) -> None:

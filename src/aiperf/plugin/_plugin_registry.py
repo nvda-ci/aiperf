@@ -27,17 +27,17 @@ _yaml = YAML(typ="safe")
 
 
 def _get_builtins_path() -> Path | Traversable:
-    """Get path to built-in registry.yaml."""
+    """Get path to built-in plugins.yaml."""
     try:
         from importlib.resources import files
 
-        return files("aiperf") / "registry.yaml"
+        return files("aiperf.plugin") / "plugins.yaml"
     except Exception as e:
         # Fallback to relative path if running from source
-        fallback = Path(__file__).parent.parent / "registry.yaml"
+        fallback = Path(__file__).parent / "plugins.yaml"
         if not fallback.exists():
             raise RuntimeError(
-                "Built-in registry.yaml not found in aiperf package.\n"
+                "Built-in plugins.yaml not found in aiperf.plugin package.\n"
                 "This is a critical error - the package system cannot function without it."
             ) from e
         return fallback
@@ -112,7 +112,7 @@ class PluginRegistry(Singleton):
 
         for ep in plugin_eps:
             try:
-                # Load entry point (should return path to registry.yaml)
+                # Load entry point (should return path to plugins.yaml)
                 registry_path = ep.load()
 
                 if not isinstance(registry_path, str | Path):
@@ -190,7 +190,7 @@ class PluginRegistry(Singleton):
         if class_path not in self._type_entries_by_class_path:
             raise KeyError(
                 f"No type with class path: {class_path}\n"
-                f"Hint: Class path must be registered in a registry.yaml"
+                f"Hint: Class path must be registered in a plugins.yaml"
             )
 
         lazy_type = self._type_entries_by_class_path[class_path]
@@ -267,7 +267,7 @@ class PluginRegistry(Singleton):
                 if not path.exists():
                     raise FileNotFoundError(
                         f"Registry file not found: {path.absolute()}\n"
-                        f"Please ensure the registry.yaml file exists at this location.\n"
+                        f"Please ensure the plugins.yaml file exists at this location.\n"
                         f"Tip: Check your package installation or path configuration"
                     )
 
@@ -282,7 +282,7 @@ class PluginRegistry(Singleton):
         except FileNotFoundError:
             # Re-raise with context for debugging
             raise RuntimeError(
-                f"Built-in registry.yaml not found at {registry_path}.\n"
+                f"Built-in plugins.yaml not found at {registry_path}.\n"
                 "This is a critical error - the package system cannot function without it.\n"
                 "Tip: Reinstall the aiperf package or check your installation"
             ) from None
