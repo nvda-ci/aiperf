@@ -42,7 +42,7 @@ console = Console()
 
 def get_all_categories() -> list[str]:
     """Get all category names from registry."""
-    return sorted(plugin_registry._registry._types.keys())
+    return plugin_registry.list_categories()
 
 
 def ensure_registry_loaded() -> None:
@@ -146,8 +146,11 @@ def show_packages(builtin_only: bool = False) -> None:
     table.add_column("Source", style="magenta")
 
     for pkg in packages:
-        metadata = plugin_registry._registry._loaded_plugins.get(pkg, {})
-        source = "built-in" if metadata.get("builtin", False) else "external"
+        try:
+            metadata = plugin_registry.get_package_metadata(pkg)
+            source = "built-in" if metadata.get("builtin", False) else "external"
+        except KeyError:
+            source = "unknown"
         table.add_row(pkg, source)
 
     console.print(table)

@@ -80,7 +80,7 @@ def registry() -> Generator[PluginRegistry, None, None]:
     # Reset to empty state for clean test isolation
     reg._types = {}
     reg._loaded_plugins = {}
-    reg._class_path_to_type = {}
+    reg._by_class_path = {}
     yield reg
     # Restore registry to normal state with builtins loaded
     plugin_registry.reset()

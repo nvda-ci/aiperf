@@ -544,12 +544,21 @@ class PluginLoader:
     # Private Methods - Plugin Loading
     # ==========================================================================
 
+    # Mapping from config key (plural) to registry category (singular)
+    _CONFIG_TO_CATEGORY: dict[str, str] = {
+        "phase_hooks": "phase_hook",
+        "post_processors": "post_processor",
+        "results_processors": "results_processor",
+    }
+
     def _load_configured_plugins(self, plugin_config: dict[str, Any]) -> None:
         """Load plugins specified in configuration.
 
         Parses the plugin configuration and loads each enabled plugin type.
-        Currently supports:
+        Supports:
         - phase_hooks: Phase lifecycle hooks
+        - post_processors: Post-processing plugins
+        - results_processors: Results processing plugins
 
         Args:
             plugin_config: Plugin configurations with structure:
@@ -558,105 +567,129 @@ class PluginLoader:
                   - name: hook_name
                     config: {...}
                     enabled: true
+                post_processors:
+                  - name: processor_name
+                    config: {...}
                 ```
 
         Examples:
             >>> plugin_config = {
             ...     'phase_hooks': [
             ...         {'name': 'example_logging_hook', 'config': {'verbose': True}},
-            ...         {'name': 'metrics_collector', 'config': {...}}
+            ...     ],
+            ...     'post_processors': [
+            ...         {'name': 'example_metrics_processor', 'config': {...}}
             ...     ]
             ... }
             >>> loader._load_configured_plugins(plugin_config)
         """
-        # Load phase hooks
-        if "phase_hooks" in plugin_config:
-            self._load_phase_hooks(plugin_config["phase_hooks"])
+        for config_key, category in self._CONFIG_TO_CATEGORY.items():
+            if config_key in plugin_config:
+                self._load_plugins_by_category(
+                    category=category,
+                    plugin_configs=plugin_config[config_key],
+                    config_key=config_key,
+                )
 
-        # Future: Add other plugin types here
-        # if 'post_processors' in plugin_config:
-        #     self._load_post_processors(plugin_config['post_processors'])
+    def _load_plugins_by_category(
+        self,
+        category: str,
+        plugin_configs: list[dict[str, Any]],
+        config_key: str,
+    ) -> None:
+        """Load plugins for a specific category with validation and error handling.
 
-    def _load_phase_hooks(self, hook_configs: list[dict[str, Any]]) -> None:
-        """Load configured phase hooks with validation and error handling.
-
-        Each hook config is validated, loaded from the registry, instantiated,
+        Each plugin config is validated, loaded from the registry, instantiated,
         and registered with the global registry. Failures are logged but don't
-        stop processing of remaining hooks.
+        stop processing of remaining plugins.
 
         Args:
-            hook_configs: List of hook configurations. Each should contain:
-                - name: Hook implementation name (required)
-                - config: Hook initialization config (optional)
-                - enabled: Whether to load this hook (optional, default: True)
+            category: Registry category name (e.g., "phase_hook", "post_processor")
+            plugin_configs: List of plugin configurations. Each should contain:
+                - name: Plugin implementation name (required)
+                - config: Plugin initialization config (optional)
+                - enabled: Whether to load this plugin (optional, default: True)
+            config_key: Config key name for logging (e.g., "phase_hooks")
 
         Examples:
             >>> configs = [
             ...     {'name': 'example_logging_hook', 'config': {'verbose': True}},
-            ...     {'name': 'metrics_collector', 'config': {'output': '/tmp/metrics.json'}}
             ... ]
-            >>> loader._load_phase_hooks(configs)
+            >>> loader._load_plugins_by_category("phase_hook", configs, "phase_hooks")
         """
-        for hook_config_dict in hook_configs:
+        for plugin_config_dict in plugin_configs:
             try:
                 # Validate configuration
-                hook_config = PluginConfig(**hook_config_dict)
+                plugin_config = PluginConfig(**plugin_config_dict)
 
                 # Skip disabled plugins
-                if not hook_config.enabled:
-                    logger.debug("Skipping disabled phase hook: %s", hook_config.name)
+                if not plugin_config.enabled:
+                    logger.debug(
+                        "Skipping disabled %s: %s", category, plugin_config.name
+                    )
                     continue
 
-                # Load and instantiate hook
-                self._load_single_phase_hook(hook_config)
+                # Load and instantiate plugin
+                self._load_single_plugin(category, plugin_config)
 
             except ValidationError as e:
-                logger.error("Invalid phase hook configuration: %s", e)
+                logger.error("Invalid %s configuration: %s", config_key, e)
                 self._failed_plugins.append(
-                    (hook_config_dict.get("name", "unknown"), e)
+                    (plugin_config_dict.get("name", "unknown"), e)
                 )
 
             except Exception as e:
                 logger.error(
-                    "Unexpected error processing phase hook config: %r",
+                    "Unexpected error processing %s config: %r",
+                    config_key,
                     e,
                     exc_info=True,
                 )
                 self._failed_plugins.append(
-                    (hook_config_dict.get("name", "unknown"), e)
+                    (plugin_config_dict.get("name", "unknown"), e)
                 )
 
-    def _load_single_phase_hook(self, hook_config: PluginConfig) -> None:
-        """Load a single phase hook with comprehensive error handling.
+    def _load_phase_hooks(self, hook_configs: list[dict[str, Any]]) -> None:
+        """Load configured phase hooks (convenience wrapper).
 
-        This method handles the full lifecycle of loading a single hook:
-        1. Get hook class from registry (lazy load)
+        Args:
+            hook_configs: List of hook configurations
+        """
+        self._load_plugins_by_category("phase_hook", hook_configs, "phase_hooks")
+
+    def _load_single_plugin(self, category: str, plugin_config: PluginConfig) -> None:
+        """Load a single plugin with comprehensive error handling.
+
+        This method handles the full lifecycle of loading a single plugin:
+        1. Get plugin class from registry (lazy load)
         2. Instantiate with config
-        3. Register with global registry
+        3. Register with global registry (if applicable)
         4. Add to loaded plugins list
 
         Args:
-            hook_config: Validated plugin configuration
+            category: Registry category name
+            plugin_config: Validated plugin configuration
 
         Raises:
-            KeyError: If hook not found in registry (caught by caller)
+            KeyError: If plugin not found in registry (caught by caller)
             Exception: Any error during loading (caught by caller)
         """
-        name = hook_config.name
-        init_config = hook_config.config
+        name = plugin_config.name
+        init_config = plugin_config.config
 
         try:
-            # Get hook class via registry (LAZY LOAD!)
+            # Get plugin class via registry (LAZY LOAD!)
             logger.debug(
-                "Loading phase hook: %s with config keys: %s",
+                "Loading %s: %s with config keys: %s",
+                category,
                 name,
                 list(init_config.keys()),
             )
-            HookClass = plugin_registry.get_class("phase_hook", name)
+            PluginClass = plugin_registry.get_class(category, name)
 
-            # Manually instantiate the hook
+            # Manually instantiate the plugin
             try:
-                hook = HookClass(**init_config)
+                plugin = PluginClass(**init_config)
             except TypeError as e:
                 # Invalid config parameters
                 msg = f"Invalid configuration parameters: {e}"
@@ -664,16 +697,16 @@ class PluginLoader:
                     msg, plugin_name=name, original_error=e
                 ) from e
 
-            # Let hook register its callbacks
-            self._register_hook_callbacks(hook, name)
+            # Let plugin register its callbacks (if it has registration methods)
+            self._register_plugin_callbacks(plugin, name, category)
 
             # Add to loaded plugins
-            self._loaded_plugins.append(hook)
-            logger.info("✓ Loaded phase hook: %s", name)
+            self._loaded_plugins.append(plugin)
+            logger.info("✓ Loaded %s: %s", category, name)
 
         except KeyError as e:
             logger.error(
-                "✗ Failed to load phase hook '%s': hook not found in registry", name
+                "✗ Failed to load %s '%s': not found in registry", category, name
             )
             self._failed_plugins.append((name, e))
 
@@ -683,38 +716,46 @@ class PluginLoader:
 
         except Exception as e:
             logger.error(
-                "✗ Failed to load phase hook '%s': %r",
+                "✗ Failed to load %s '%s': %r",
+                category,
                 name,
                 e,
                 exc_info=True,
             )
             self._failed_plugins.append((name, e))
 
-    def _register_hook_callbacks(self, hook: Any, name: str) -> None:
-        """Register hook callbacks with global registry.
+    def _register_plugin_callbacks(
+        self, plugin: Any, name: str, category: str
+    ) -> None:
+        """Register plugin callbacks with global registry.
 
         Tries multiple registration methods in order of preference:
         1. register_with_global_registry() - New standard method
         2. register_hooks() - Backward compatibility method
 
         Args:
-            hook: Hook instance to register
-            name: Hook name for logging
+            plugin: Plugin instance to register
+            name: Plugin name for logging
+            category: Category name for logging
 
         Note:
-            If hook has no registration method, a warning is logged but
-            the hook is still added to loaded plugins list.
+            If plugin has no registration method, a warning is logged but
+            the plugin is still added to loaded plugins list.
         """
-        if hasattr(hook, "register_with_global_registry"):
-            hook.register_with_global_registry()
-        elif hasattr(hook, "register_hooks"):
-            hook.register_hooks()
+        if hasattr(plugin, "register_with_global_registry"):
+            plugin.register_with_global_registry()
+        elif hasattr(plugin, "register_hooks"):
+            plugin.register_hooks()
         else:
             logger.warning(
-                "Phase hook '%s' has no register_with_global_registry() or "
+                "%s '%s' has no register_with_global_registry() or "
                 "register_hooks() method, skipping registration",
+                category,
                 name,
             )
+
+    # Backward compatibility alias
+    _register_hook_callbacks = _register_plugin_callbacks
 
 
 # ==============================================================================

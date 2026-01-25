@@ -118,6 +118,7 @@ __all__ = [
     "load_registry",
     # Utilities
     "list_packages",
+    "get_package_metadata",
     "reset",
     "clear_singleton",
     "clear_all_singletons",
@@ -1368,6 +1369,27 @@ def list_packages(builtin_only: bool = False) -> list[str]:
         >>> print(f"Loaded: {', '.join(packages)}")
     """
     return _registry.list_packages(builtin_only)
+
+
+def get_package_metadata(package_name: str) -> PackageMetadata:
+    """Get metadata for a loaded plugin package.
+
+    Args:
+        package_name: Name of the package to get metadata for
+
+    Returns:
+        PackageMetadata dict with name, version, builtin flag, etc.
+
+    Raises:
+        KeyError: If package not found
+
+    Example:
+        >>> metadata = plugin_registry.get_package_metadata("aiperf")
+        >>> print(f"Built-in: {metadata.get('builtin', False)}")
+    """
+    if package_name not in _registry._loaded_plugins:
+        raise KeyError(f"Package '{package_name}' not found in loaded plugins")
+    return _registry._loaded_plugins[package_name]
 
 
 def list_categories() -> list[str]:
