@@ -17,76 +17,36 @@ endpoint:
       OpenAI Chat Completions endpoint. Supports multi-modal inputs (text, images,
       audio, video) and both streaming and non-streaming responses. Uses
       /v1/chat/completions path.
-    metadata:
-      endpoint_path: /v1/chat/completions
-      supports_streaming: true
-      produces_tokens: true
-      tokenizes_input: true
-      supports_audio: true
-      supports_images: true
-      supports_videos: true
-      metrics_title: LLM Metrics
 
   cohere_rankings:
     class: aiperf.endpoints.cohere_rankings:CohereRankingsEndpoint
     description: |
       Cohere Rankings endpoint. Provides document ranking capabilities using
       Cohere's reranking API.
-    metadata:
-      endpoint_path: /v2/rerank
-      supports_streaming: false
-      produces_tokens: false
-      tokenizes_input: true
-      metrics_title: Ranking Metrics
 
   completions:
     class: aiperf.endpoints.openai_completions:CompletionsEndpoint
     description: |
       OpenAI Completions endpoint. Supports text completions with streaming for
       legacy completion-based models. Uses /v1/completions path.
-    metadata:
-      endpoint_path: /v1/completions
-      supports_streaming: true
-      produces_tokens: true
-      tokenizes_input: true
-      metrics_title: LLM Metrics
 
   embeddings:
     class: aiperf.endpoints.openai_embeddings:EmbeddingsEndpoint
     description: |
       OpenAI Embeddings endpoint. Generates vector embeddings for text inputs using
       embedding models. Uses /v1/embeddings path. Non-streaming only.
-    metadata:
-      endpoint_path: /v1/embeddings
-      supports_streaming: false
-      produces_tokens: false
-      tokenizes_input: true
-      metrics_title: Embeddings Metrics
 
   hf_tei_rankings:
     class: aiperf.endpoints.hf_tei_rankings:HFTeiRankingsEndpoint
     description: |
       Hugging Face TEI (Text Embeddings Inference) Rankings endpoint. Provides
       ranking using TEI reranking models.
-    metadata:
-      endpoint_path: /rerank
-      supports_streaming: false
-      produces_tokens: false
-      tokenizes_input: true
-      metrics_title: Ranking Metrics
 
   huggingface_generate:
     class: aiperf.endpoints.huggingface_generate:HuggingFaceGenerateEndpoint
     description: |
       Hugging Face TGI (Text Generation Inference) endpoint. Supports both streaming
       (/generate_stream) and non-streaming (/generate) text generation.
-    metadata:
-      endpoint_path: /generate
-      streaming_path: /generate_stream
-      supports_streaming: true
-      produces_tokens: true
-      tokenizes_input: true
-      metrics_title: LLM Metrics
 
   image_generation:
     class: aiperf.endpoints.openai_image_generation:ImageGenerationEndpoint
@@ -94,48 +54,21 @@ endpoint:
       OpenAI Image Generation endpoint. Generates images from text prompts using
       models like DALL-E. Supports streaming responses. Uses /v1/images/generations
       path.
-    metadata:
-      endpoint_path: /v1/images/generations
-      supports_streaming: true
-      produces_tokens: false
-      produces_images: true
-      tokenizes_input: true
-      metrics_title: Image Generation Metrics
 
   nim_rankings:
     class: aiperf.endpoints.nim_rankings:NIMRankingsEndpoint
     description: |
       NVIDIA NIM Rankings endpoint. Processes ranking requests by taking a query
       and passages, returning relevance scores. Uses /v1/ranking path.
-    metadata:
-      endpoint_path: /v1/ranking
-      supports_streaming: false
-      produces_tokens: false
-      tokenizes_input: true
-      metrics_title: Rankings Metrics
 
   solido_rag:
     class: aiperf.endpoints.solido_rag:SolidoEndpoint
     description: |
       Solido RAG endpoint. Custom endpoint for Solido RAG pipeline integration with
       retrieval-augmented generation.
-    metadata:
-      endpoint_path: /rag/api/prompt
-      supports_streaming: true
-      produces_tokens: true
-      tokenizes_input: true
-      metrics_title: SOLIDO RAG Metrics
 
   template:
     class: aiperf.endpoints.template_endpoint:TemplateEndpoint
     description: |
       Template endpoint for creating custom endpoint implementations. Serves as a
       starting point for plugin developers to implement new API formats.
-    metadata:
-      supports_streaming: true
-      produces_tokens: true
-      tokenizes_input: true
-      supports_audio: true
-      supports_images: true
-      supports_videos: true
-      metrics_title: LLM Metrics
