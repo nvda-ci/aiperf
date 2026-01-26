@@ -17,9 +17,12 @@ Conflict resolution: higher priority wins; equal priority: external beats built-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Any, overload
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from aiperf.plugin.container import PluginContainer
     from aiperf.plugin.enums import PluginCategory
 
 from aiperf.common.aiperf_logger import AIPerfLogger
@@ -573,3 +576,110 @@ def detect_type_from_url(category: str, url: str) -> str:
     raise ValueError(
         f"No {category} type found for URL scheme '{scheme}' in URL: {url}"
     )
+
+
+# ==============================================================================
+# Dependency Injection Container API
+# ==============================================================================
+
+
+# Module-level container (lazy initialized)
+_container: PluginContainer | None = None
+
+
+def get_container() -> PluginContainer:
+    """Get or create the global plugin container.
+
+    Returns the singleton PluginContainer instance, creating it on first access.
+    Use this for module-level dependency injection across the application.
+
+    Returns:
+        The global PluginContainer instance.
+
+    Example:
+        >>> container = plugins.get_container()
+        >>> container.register(ModelEndpointInfo, model_endpoint)
+    """
+    global _container
+    if _container is None:
+        from aiperf.plugin.container import PluginContainer
+
+        _container = PluginContainer()
+    return _container
+
+
+def register_dependency(
+    type_: type,
+    instance: Any | None = None,
+    *,
+    factory: Callable[[], Any] | None = None,
+    singleton: bool = True,
+) -> None:
+    """Register a dependency for auto-injection in the global container.
+
+    Convenience function that registers a dependency in the global container.
+    Dependencies are matched against constructor parameter type hints when
+    creating plugin instances via create_instance().
+
+    Args:
+        type_: The type to register (matched against constructor type hints).
+        instance: Concrete instance to use (singleton behavior).
+        factory: Callable that creates instances.
+        singleton: If True with factory, cache the result after first call.
+
+    Raises:
+        ValueError: If neither instance nor factory is provided.
+
+    Example:
+        >>> plugins.register_dependency(ModelEndpointInfo, model_endpoint)
+        >>> plugins.register_dependency(UserConfig, user_config)
+    """
+    get_container().register(type_, instance, factory=factory, singleton=singleton)
+
+
+def create_instance(
+    category: PluginCategory | str,
+    name: str,
+    **overrides: Any,
+) -> Any:
+    """Create a plugin instance with auto-injected dependencies.
+
+    Convenience function that creates a plugin instance using the global
+    container. Dependencies registered via register_dependency() are
+    automatically injected based on constructor type hints.
+
+    Args:
+        category: Plugin category (e.g., 'endpoint', PluginCategory.ENDPOINT).
+        name: Plugin name (e.g., 'chat').
+        **overrides: Explicit values that override auto-injection.
+
+    Returns:
+        Instantiated plugin with dependencies injected.
+
+    Raises:
+        TypeNotFoundError: If the plugin name is not found in the category.
+        Exception: If required dependencies cannot be resolved.
+
+    Example:
+        >>> # First register dependencies
+        >>> plugins.register_dependency(ModelEndpointInfo, model_endpoint)
+        >>>
+        >>> # Then create instances with auto-injection
+        >>> endpoint = plugins.create_instance("endpoint", "chat")
+        >>> transport = plugins.create_instance("transport", "aiohttp")
+    """
+    return get_container().create(category, name, **overrides)
+
+
+def reset_container() -> None:
+    """Reset the global container to a fresh state.
+
+    Clears all registered dependencies from the global container.
+    Intended primarily for testing to ensure test isolation.
+
+    Warning:
+        This will invalidate any cached dependencies. Use with caution
+        in production code.
+    """
+    global _container
+    _container = None
