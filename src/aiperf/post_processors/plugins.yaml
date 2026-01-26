@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Record Processors
+# =============================================================================
+# Record processors stream records and compute metrics in a distributed manner.
+# One-to-many mapping: multiple processors can be loaded simultaneously.
+# =============================================================================
+record_processor:
+  metric_record:
+    class: aiperf.post_processors.metric_record_processor:MetricRecordProcessor
+    description: |
+      Streaming record processor that computes metrics from MetricType.RECORD and
+      MetricType.AGGREGATE. First stage of distributed processing pipeline.
+      Always loaded.
+
+  raw_record_writer:
+    class: aiperf.post_processors.raw_record_writer_processor:RawRecordWriterProcessor
+    description: |
+      Raw record writer that streams raw request/response data to JSONL files
+      for detailed analysis and debugging. Enabled when export_level is RAW.
+
+# =============================================================================
+# Results Processors
+# =============================================================================
+# Results processors aggregate results from record processors and compute derived metrics.
+# One-to-many mapping: multiple processors can be loaded simultaneously.
+# =============================================================================
+results_processor:
+  metric_results:
+    class: aiperf.post_processors.metric_results_processor:MetricResultsProcessor
+    description: |
+      Results processor that computes metrics from MetricType.DERIVED and
+      aggregates results from all record processors. Final stage of metrics
+      pipeline. Always loaded.
+
+  record_export:
+    class: aiperf.post_processors.record_export_results_processor:RecordExportResultsProcessor
+    description: |
+      Record export processor that writes per-record metrics to JSONL files with
+      display unit conversion and filtering. Enabled when export_level is RECORDS.
+
+  timeslice:
+    class: aiperf.post_processors.timeslice_metric_results_processor:TimesliceMetricResultsProcessor
+    description: |
+      Timeslice results processor that computes metrics for user-configurable
+      time slices, enabling time-series analysis of benchmark performance.
+      Enabled when timeslice config is set.
+
+# =============================================================================
+# Data Exporters
+# =============================================================================
+# Data exporters write benchmark results to files in various formats.
+# One-to-many mapping: multiple exporters can be loaded simultaneously.
+# =============================================================================
+data_exporter:
+  raw_record_aggregator:
+    class: aiperf.post_processors.raw_record_writer_processor:RawRecordAggregator
+    description: |
+      Raw record aggregator that consolidates raw JSONL files from multiple
+      record processors into final output files. Enabled when export_level is RAW.

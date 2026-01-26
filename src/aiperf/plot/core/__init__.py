@@ -38,7 +38,6 @@ from aiperf.plot.core.plot_generator import (
     get_nvidia_color_scheme,
 )
 from aiperf.plot.core.plot_specs import (
-    PLOT_TYPE_METADATA,
     DataSource,
     ExperimentClassificationConfig,
     MetricSpec,
@@ -67,7 +66,6 @@ __all__ = [
     "ExperimentClassificationConfig",
     "MetricSpec",
     "ModeDetector",
-    "PLOT_TYPE_METADATA",
     "PlotGenerator",
     "PlotSpec",
     "PlotTypeHandlerProtocol",

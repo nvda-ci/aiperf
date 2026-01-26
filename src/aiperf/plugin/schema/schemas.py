@@ -145,7 +145,7 @@ class PackageInfo(BaseModel):
 
         A built-in plugin package is one that is included in the AIPerf core distribution.
         """
-        return self.name == "aiperf"
+        return self.name.startswith("aiperf")
 
 
 class PluginSpec(BaseModel):

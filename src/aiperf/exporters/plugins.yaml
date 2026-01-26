@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Data Exporters
+# =============================================================================
+# Data exporters write benchmark results to files in various formats.
+# One-to-many mapping: multiple exporters can be loaded simultaneously.
+# =============================================================================
+data_exporter:
+  csv:
+    class: aiperf.exporters.metrics_csv_exporter:MetricsCsvExporter
+    description: |
+      CSV exporter for aggregated metrics. Exports benchmark results to CSV format
+      for spreadsheet analysis and data processing. Always loaded.
+
+  json:
+    class: aiperf.exporters.metrics_json_exporter:MetricsJsonExporter
+    description: |
+      JSON exporter for aggregated metrics. Exports benchmark results to JSON
+      format with full metric details and structured data. Always loaded.
+
+  timeslice_csv:
+    class: aiperf.exporters.timeslice_metrics_csv_exporter:TimesliceMetricsCsvExporter
+    description: |
+      CSV exporter for timeslice metrics. Exports time-series metric data to CSV
+      format for spreadsheet analysis and plotting.
+
+  timeslice_json:
+    class: aiperf.exporters.timeslice_metrics_json_exporter:TimesliceMetricsJsonExporter
+    description: |
+      JSON exporter for timeslice metrics. Exports time-series metric data to JSON
+      format for temporal analysis and visualization.
+
+# =============================================================================
+# Console Exporters
+# =============================================================================
+# Console exporters display benchmark results and diagnostics to stdout.
+# One-to-many mapping: multiple console exporters can be loaded simultaneously.
+# =============================================================================
+console_exporter:
+  api_errors:
+    class: aiperf.exporters.console_api_error_exporter:ConsoleApiErrorExporter
+    description: |
+      Console exporter for API error details. Displays detailed error information
+      for API request failures with grouped error analysis.
+
+  errors:
+    class: aiperf.exporters.console_error_exporter:ConsoleErrorExporter
+    description: |
+      Console exporter for error summary. Displays error counts and details to
+      help diagnose failures during benchmark execution. Always loaded.
+
+  experimental_metrics:
+    class: aiperf.exporters.experimental_metrics_console_exporter:ConsoleExperimentalMetricsExporter
+    description: |
+      Console exporter for experimental metrics. Displays metrics under development
+      or evaluation that may change in future releases. Not loaded by default.
+
+  http_trace:
+    class: aiperf.exporters.http_trace_console_exporter:HttpTraceConsoleExporter
+    description: |
+      Console exporter for HTTP trace information. Displays detailed HTTP
+      request/response traces for debugging network issues.
+
+  internal_metrics:
+    class: aiperf.exporters.internal_metrics_console_exporter:ConsoleInternalMetricsExporter
+    description: |
+      Console exporter for internal system metrics. Displays AIPerf framework
+      performance metrics for debugging and optimization. Loaded by default.
+
+  metrics:
+    class: aiperf.exporters.console_metrics_exporter:ConsoleMetricsExporter
+    description: |
+      Console exporter for primary benchmark metrics. Displays formatted metric
+      tables to stdout for user-facing results. Always loaded.
+
+  usage_discrepancy_warning:
+    class: aiperf.exporters.console_usage_discrepancy_exporter:ConsoleUsageDiscrepancyExporter
+    description: |
+      Console exporter for usage discrepancy warnings. Alerts when token counts
+      from server differ significantly from client calculations. Always loaded.

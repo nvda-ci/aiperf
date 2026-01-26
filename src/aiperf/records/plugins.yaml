@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  record_processor:
+    class: aiperf.records.record_processor_service:RecordProcessor
+    description: |
+      Record processing service for metric computation. Scales with load to process
+      streaming records and compute per-record and aggregate metrics in a
+      distributed manner.
+
+  records_manager:
+    class: aiperf.records.records_manager:RecordsManager
+    description: |
+      Record aggregation and results management service. Aggregates metrics from all
+      record processors, manages results processors, and coordinates final results
+      export.

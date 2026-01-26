@@ -81,8 +81,8 @@ class PluginEntry(BaseModel):
 
     @property
     def is_builtin(self) -> bool:
-        """Whether this is a built-in type."""
-        return self.package == "aiperf"
+        """Whether this is a built-in type (aiperf core package)."""
+        return self.package.startswith("aiperf")
 
     @classmethod
     def from_type_spec(

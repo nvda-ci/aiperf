@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  server_metrics_manager:
+    class: aiperf.server_metrics.manager:ServerMetricsManager
+    description: |
+      Server metrics collection service using Prometheus. Monitors server-side
+      metrics from inference servers during benchmark execution.
+
+# =============================================================================
+# Results Processors
+# =============================================================================
+# Results processors aggregate results from record processors and compute derived metrics.
+# One-to-many mapping: multiple processors can be loaded simultaneously.
+# =============================================================================
+results_processor:
+  server_metrics_accumulator:
+    class: aiperf.server_metrics.accumulator:ServerMetricsAccumulator
+    description: |
+      Server metrics accumulator that aggregates Prometheus server metrics records
+      and computes summary statistics. Supports Gauge, Counter, and Histogram metrics.
+
+  server_metrics_jsonl_writer:
+    class: aiperf.server_metrics.jsonl_writer:ServerMetricsJSONLWriter
+    description: |
+      Server metrics JSONL writer that exports per-record server metrics data to
+      JSONL files in slim format.
+
+# =============================================================================
+# Data Exporters
+# =============================================================================
+# Data exporters write benchmark results to files in various formats.
+# One-to-many mapping: multiple exporters can be loaded simultaneously.
+# =============================================================================
+data_exporter:
+  server_metrics_csv:
+    class: aiperf.server_metrics.csv_exporter:ServerMetricsCsvExporter
+    description: |
+      CSV exporter for server metrics. Exports Prometheus server metrics to CSV
+      format for spreadsheet analysis.
+
+  server_metrics_json:
+    class: aiperf.server_metrics.json_exporter:ServerMetricsJsonExporter
+    description: |
+      JSON exporter for server metrics. Exports Prometheus server metrics to JSON
+      format with full metric details.
+
+  server_metrics_parquet:
+    class: aiperf.server_metrics.parquet_exporter:ServerMetricsParquetExporter
+    description: |
+      Parquet exporter for server metrics. Exports Prometheus server metrics to
+      Parquet format for efficient columnar storage and analysis.

@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Transports
+# =============================================================================
+# Transports handle the network layer for sending requests to inference servers.
+# One-to-one mapping: exactly one transport is selected based on transport_type.
+# =============================================================================
+transport:
+  http:
+    class: aiperf.transports.aiohttp_transport:AioHttpTransport
+    description: |
+      HTTP/1.1 transport implementation using aiohttp.
+      Provides high-performance async HTTP client with connection pooling,
+      SSE streaming support, automatic error handling, and custom TCP connector configuration.
+    metadata:
+      transport_type: http
+      url_schemes: [http, https]

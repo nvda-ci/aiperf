@@ -1,7 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
 schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  dataset_manager:
+    class: aiperf.dataset.dataset_manager:DatasetManager
+    description: |
+      Dataset management service. Handles prompt/token generation, dataset loading
+      and composition, conversation sampling, and distribution to timing manager.
 
 # =============================================================================
 # Dataset Composers
@@ -12,15 +26,23 @@ schema_version: "1.0"
 dataset_composer:
   custom:
     class: aiperf.dataset.composer.custom:CustomDatasetComposer
-    description: Custom dataset composer that loads conversations from JSONL files. Supports single-turn, multi-turn, random-pool, and mooncake-trace formats with automatic format detection.
+    description: |
+      Custom dataset composer that loads conversations from JSONL files. Supports
+      single-turn, multi-turn, random-pool, and mooncake-trace formats with
+      automatic format detection.
 
   synthetic:
     class: aiperf.dataset.composer.synthetic:SyntheticDatasetComposer
-    description: Synthetic dataset composer that generates multi-turn conversations with synthetic text, image, and audio payloads using configurable distributions. Supports variable turn counts and delays.
+    description: |
+      Synthetic dataset composer that generates multi-turn conversations with
+      synthetic text, image, and audio payloads using configurable distributions.
+      Supports variable turn counts and delays.
 
   synthetic_rankings:
     class: aiperf.dataset.composer.synthetic_rankings:SyntheticRankingsDatasetComposer
-    description: Synthetic rankings dataset composer that generates ranking tasks with query and passage pairs for ranking model evaluation and benchmarking.
+    description: |
+      Synthetic rankings dataset composer that generates ranking tasks with query
+      and passage pairs for ranking model evaluation and benchmarking.
 
 # =============================================================================
 # Custom Dataset Loaders
@@ -31,19 +53,30 @@ dataset_composer:
 custom_dataset_loader:
   mooncake_trace:
     class: aiperf.dataset.loader.mooncake_trace:MooncakeTraceDatasetLoader
-    description: Mooncake trace dataset loader for loading Alibaba Mooncake trace format with timestamp-based replay support. Designed for fixed_schedule timing mode.
+    description: |
+      Mooncake trace dataset loader for loading Alibaba Mooncake trace format with
+      timestamp-based replay support. Designed for fixed_schedule timing mode.
 
   multi_turn:
     class: aiperf.dataset.loader.multi_turn:MultiTurnDatasetLoader
-    description: Multi-turn dataset loader supporting conversation sessions with turn delays and multi-modal content. Enables realistic multi-turn conversation replay with session management.
+    description: |
+      Multi-turn dataset loader supporting conversation sessions with turn delays
+      and multi-modal content. Enables realistic multi-turn conversation replay
+      with session management.
 
   random_pool:
     class: aiperf.dataset.loader.random_pool:RandomPoolDatasetLoader
-    description: Random pool dataset loader that creates conversations by randomly sampling from predefined pools of system/user/assistant messages with configurable distributions.
+    description: |
+      Random pool dataset loader that creates conversations by randomly sampling
+      from predefined pools of system/user/assistant messages with configurable
+      distributions.
 
   single_turn:
     class: aiperf.dataset.loader.single_turn:SingleTurnDatasetLoader
-    description: Single-turn dataset loader supporting multi-modal data and client-side batching. Supports text, images, audio with optional timestamps or delays. Does NOT support multi-turn features.
+    description: |
+      Single-turn dataset loader supporting multi-modal data and client-side
+      batching. Supports text, images, audio with optional timestamps or delays.
+      Does NOT support multi-turn features.
 
 # =============================================================================
 # Dataset Samplers
@@ -54,15 +87,24 @@ custom_dataset_loader:
 dataset_sampler:
   random:
     class: aiperf.dataset.dataset_samplers:RandomSampler
-    description: Random sampler that randomly selects conversation IDs with replacement. Can return the same conversation ID multiple times before seeing all IDs. Uses derived RNG for reproducibility.
+    description: |
+      Random sampler that randomly selects conversation IDs with replacement. Can
+      return the same conversation ID multiple times before seeing all IDs. Uses
+      derived RNG for reproducibility.
 
   sequential:
     class: aiperf.dataset.dataset_samplers:SequentialSampler
-    description: Sequential sampler that iterates through conversation IDs in order. When reaching the end, wraps around to the beginning indefinitely. Completely deterministic with no randomness.
+    description: |
+      Sequential sampler that iterates through conversation IDs in order. When
+      reaching the end, wraps around to the beginning indefinitely. Completely
+      deterministic with no randomness.
 
   shuffle:
     class: aiperf.dataset.dataset_samplers:ShuffleSampler
-    description: Shuffle sampler that randomly samples without replacement, then repeats. Ensures all conversations are seen before any repetition, similar to music shuffle. Uses derived RNG for reproducibility.
+    description: |
+      Shuffle sampler that randomly samples without replacement, then repeats.
+      Ensures all conversations are seen before any repetition, similar to music
+      shuffle. Uses derived RNG for reproducibility.
 
 # =============================================================================
 # Dataset Backing Store
@@ -73,7 +115,9 @@ dataset_sampler:
 dataset_backing_store:
   memory_map:
     class: aiperf.dataset.memory_map_utils:MemoryMapDatasetBackingStore
-    description: Memory-mapped file backing store for zero-copy worker access. Stores dataset in memory-mapped files for efficient sharing across processes.
+    description: |
+      Memory-mapped file backing store for zero-copy worker access. Stores dataset
+      in memory-mapped files for efficient sharing across processes.
 
 # =============================================================================
 # Dataset Client Store
@@ -84,4 +128,6 @@ dataset_backing_store:
 dataset_client_store:
   memory_map:
     class: aiperf.dataset.memory_map_utils:MemoryMapDatasetClientStore
-    description: Memory-mapped file client store for zero-copy reads. Reads from memory-mapped files with O(1) lookup performance.
+    description: |
+      Memory-mapped file client store for zero-copy reads. Reads from memory-mapped
+      files with O(1) lookup performance.

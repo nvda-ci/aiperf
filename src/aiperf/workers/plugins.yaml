@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  worker:
+    class: aiperf.workers.worker:Worker
+    description: |
+      Worker service that executes LLM API calls and maintains conversation state.
+      Scaled horizontally for throughput. Handles sticky routing for multi-turn
+      conversations.
+
+  worker_manager:
+    class: aiperf.workers.worker_manager:WorkerManager
+    description: |
+      Worker lifecycle and health monitoring service. Manages worker pool, monitors
+      health metrics, handles worker failures, and coordinates worker scaling.

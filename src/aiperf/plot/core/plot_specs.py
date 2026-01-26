@@ -3,14 +3,20 @@
 
 """Plot specifications for configurable plot generation."""
 
+from __future__ import annotations
+
 from enum import Enum
-from typing import Literal
+from functools import lru_cache
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field, field_validator
 
 from aiperf.common.config import BaseConfig
 from aiperf.common.models import AIPerfBaseModel
 from aiperf.plugin.enums import PlotType
+
+if TYPE_CHECKING:
+    from aiperf.plugin.types import PluginEntry
 
 
 class Style(AIPerfBaseModel):
@@ -95,63 +101,21 @@ class PlotTypeInfo(AIPerfBaseModel):
     )
 
 
-PLOT_TYPE_METADATA: dict[PlotType, PlotTypeInfo] = {
-    PlotType.SCATTER: PlotTypeInfo(
-        display_name="Per-Request Scatter",
-        description="Individual data points for each request",
-        category="per_request",
-    ),
-    PlotType.SCATTER_WITH_PERCENTILES: PlotTypeInfo(
-        display_name="Scatter with Trends",
-        description="Per-request points with rolling p50/p95/p99 trend lines",
-        category="per_request",
-    ),
-    PlotType.REQUEST_TIMELINE: PlotTypeInfo(
-        display_name="Request Phase Breakdown",
-        description="Gantt-style view showing TTFT vs generation time per request",
-        category="per_request",
-    ),
-    PlotType.TIMESLICE: PlotTypeInfo(
-        display_name="Time Window Summary",
-        description="Aggregated averages per time window (e.g., every 10s)",
-        category="aggregated",
-    ),
-    PlotType.HISTOGRAM: PlotTypeInfo(
-        display_name="Time Window Bars",
-        description="Bar chart of aggregated values per time window",
-        category="aggregated",
-    ),
-    PlotType.AREA: PlotTypeInfo(
-        display_name="Throughput Over Time",
-        description="Filled area showing token throughput distribution",
-        category="combined",
-    ),
-    PlotType.DUAL_AXIS: PlotTypeInfo(
-        display_name="Dual Metric Overlay",
-        description="Two metrics on separate Y-axes (e.g., throughput + GPU util)",
-        category="combined",
-    ),
-    PlotType.PARETO: PlotTypeInfo(
-        display_name="Pareto Curve",
-        description="Trade-off frontier showing optimal configurations",
-        category="comparison",
-    ),
-    PlotType.SCATTER_LINE: PlotTypeInfo(
-        display_name="Scatter + Trend Line",
-        description="Points connected by lines, grouped by configuration",
-        category="comparison",
-    ),
-    PlotType.PERCENTILE_BANDS: PlotTypeInfo(
-        display_name="Percentile Bands Over Time",
-        description="p50 line with p95/p99 shaded uncertainty bands for SLA monitoring",
-        category="aggregated",
-    ),
-}
+def _get_plugin_entry(plot_type: PlotType) -> PluginEntry | None:
+    """Get the plugin entry for a plot type from the registry."""
+    from aiperf.plugin import plugins
+    from aiperf.plugin.enums import PluginCategory
+
+    try:
+        return plugins.get(PluginCategory.PLOT, plot_type.value)
+    except Exception:
+        return None
 
 
+@lru_cache(maxsize=32)
 def get_plot_type_info(plot_type: PlotType) -> PlotTypeInfo:
     """
-    Get metadata for a plot type.
+    Get metadata for a plot type from the plugin registry.
 
     Args:
         plot_type: The PlotType enum value
@@ -159,10 +123,17 @@ def get_plot_type_info(plot_type: PlotType) -> PlotTypeInfo:
     Returns:
         PlotTypeInfo with display name, description, and category
     """
-    return PLOT_TYPE_METADATA.get(
-        plot_type,
-        PlotTypeInfo(display_name=plot_type.value, description="", category="other"),
-    )
+    entry = _get_plugin_entry(plot_type)
+    if entry is not None:
+        metadata = entry.metadata
+        return PlotTypeInfo(
+            display_name=metadata.get("display_name", plot_type.value),
+            description=entry.description or metadata.get("description", ""),
+            category=metadata.get("category", "other"),
+        )
+
+    # Fallback for unknown plot types
+    return PlotTypeInfo(display_name=plot_type.value, description="", category="other")
 
 
 class MetricSpec(AIPerfBaseModel):

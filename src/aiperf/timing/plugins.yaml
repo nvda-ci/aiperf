@@ -5,6 +5,19 @@
 schema_version: "1.0"
 
 # =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  timing_manager:
+    class: aiperf.timing.manager:TimingManager
+    description: |
+      Request scheduling and credit issuance service. Controls timing of requests
+      using fixed schedule or request rate strategies with credit-based flow control.
+
+# =============================================================================
 # Timing Strategies
 # =============================================================================
 # Timing strategies control request scheduling and credit issuance.

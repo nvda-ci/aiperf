@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  system_controller:
+    class: aiperf.controller.system_controller:SystemController
+    description: |
+      System orchestration and lifecycle management service. Coordinates all other
+      services, manages benchmark phases (warmup/profiling), and controls overall
+      execution flow.
+
+# =============================================================================
+# Service Managers
+# =============================================================================
+# Service managers orchestrate how services are launched and managed.
+# One-to-one mapping: exactly one service manager is selected based on run_mode.
+# =============================================================================
+service_manager:
+  kubernetes:
+    class: aiperf.controller.kubernetes_service_manager:KubernetesServiceManager
+    description: |
+      Kubernetes service manager for multi-node deployments. Runs each service as
+      a Kubernetes pod with ZMQ TCP communication for distributed cloud execution.
+
+  multiprocessing:
+    class: aiperf.controller.multiprocess_service_manager:MultiProcessServiceManager
+    description: |
+      Multiprocess service manager for single-node deployments. Runs each service
+      as a separate process with ZMQ IPC communication for high-performance local
+      execution.

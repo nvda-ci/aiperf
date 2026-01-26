@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Services
+# =============================================================================
+# Services are the core processes that make up the AIPerf distributed system.
+# Each service runs in a separate process and communicates via ZMQ message bus.
+# =============================================================================
+service:
+  gpu_telemetry_manager:
+    class: aiperf.gpu_telemetry.manager:GPUTelemetryManager
+    description: |
+      GPU telemetry collection service using DCGM. Monitors GPU metrics
+      (utilization, memory, power, temperature) during benchmark execution
+      for performance analysis.
+
+# =============================================================================
+# Results Processors
+# =============================================================================
+# Results processors aggregate results from record processors and compute derived metrics.
+# One-to-many mapping: multiple processors can be loaded simultaneously.
+# =============================================================================
+results_processor:
+  gpu_telemetry_accumulator:
+    class: aiperf.gpu_telemetry.accumulator:GPUTelemetryAccumulator
+    description: |
+      GPU telemetry accumulator that aggregates GPU telemetry records and computes
+      metrics in a hierarchical structure. Loaded when telemetry is enabled.
+
+  gpu_telemetry_jsonl_writer:
+    class: aiperf.gpu_telemetry.jsonl_writer:GPUTelemetryJSONLWriter
+    description: |
+      GPU telemetry JSONL writer that exports per-record GPU telemetry data to
+      JSONL files as it arrives from GPUTelemetryManager. Enabled with telemetry
+      export config.
+
+# =============================================================================
+# Console Exporters
+# =============================================================================
+# Console exporters display benchmark results and diagnostics to stdout.
+# One-to-many mapping: multiple console exporters can be loaded simultaneously.
+# =============================================================================
+console_exporter:
+  telemetry:
+    class: aiperf.exporters.gpu_telemetry_console_exporter:GPUTelemetryConsoleExporter
+    description: |
+      Console exporter for GPU telemetry metrics. Displays GPU utilization,
+      memory, power, and temperature metrics to stdout. Loaded when telemetry
+      is enabled.

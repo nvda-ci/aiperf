@@ -267,6 +267,27 @@ def list_types(category: PluginCategory) -> list[PluginEntry]:
     return _registry.list_types(category)
 
 
+def get(category: PluginCategory, name: str) -> PluginEntry | None:
+    """Get a single plugin entry by category and name.
+
+    Args:
+        category: Plugin category to search in.
+        name: Plugin name (e.g., 'chat', 'scatter').
+
+    Returns:
+        The PluginEntry if found, None otherwise.
+
+    Example:
+        >>> entry = plugins.get(PluginCategory.ENDPOINT, 'chat')
+        >>> if entry:
+        ...     print(f"{entry.name}: {entry.description}")
+    """
+    for entry in _registry.list_types(category):
+        if entry.name == name:
+            return entry
+    return None
+
+
 def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
     """Validate all registered types without loading them.
 
