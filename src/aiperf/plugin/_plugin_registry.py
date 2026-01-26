@@ -44,6 +44,8 @@ class PluginRegistry(Singleton):
         self._loaded_plugins: dict[str, PackageInfo] = {}
         # Reverse mapping from class to registered name (for find_registered_name)
         self._class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
+        # Category metadata cache (loaded lazily from categories.yaml)
+        self._category_metadata: dict[str, dict] | None = None
 
         # Load the builtin registry manifest and discover plugins once on startup
         self.load_registry("aiperf.plugin:plugins.yaml")
@@ -195,6 +197,82 @@ class PluginRegistry(Singleton):
                 name for name, meta in self._loaded_plugins.items() if meta.is_builtin
             ]
         return list(self._loaded_plugins.keys())
+
+    def get_categories(self) -> list[str]:
+        """Return sorted list of all registered category names."""
+        return sorted(self._types.keys())
+
+    def has_category(self, category: str) -> bool:
+        """Check if a category exists."""
+        return category in self._types
+
+    def ensure_category(self, category: str) -> None:
+        """Create category if it doesn't exist."""
+        if category not in self._types:
+            self._types[category] = {}
+
+    def get_package_metadata(self, package_name: str) -> "PackageInfo":
+        """Get metadata for a loaded plugin package.
+
+        Args:
+            package_name: Name of the loaded plugin package.
+
+        Returns:
+            PackageInfo with version, description, etc.
+
+        Raises:
+            KeyError: If package not found in loaded plugins.
+        """
+        if package_name not in self._loaded_plugins:
+            raise KeyError(f"Package '{package_name}' not found in loaded plugins")
+        return self._loaded_plugins[package_name]
+
+    def get_category_metadata(self, category: str) -> dict | None:
+        """Get metadata for a plugin category from categories.yaml.
+
+        Args:
+            category: Category name to get metadata for.
+
+        Returns:
+            Category metadata dict or None if not found.
+        """
+        if self._category_metadata is None:
+            self._load_category_metadata()
+        return self._category_metadata.get(category)
+
+    def register_type(self, entry: TypeEntry) -> None:
+        """Register a type entry with conflict resolution.
+
+        Args:
+            entry: TypeEntry to register. Must have category and name set.
+        """
+        self.ensure_category(entry.category)
+        self._resolve_conflict_and_register(entry.category, entry.name, entry)
+
+    def _load_category_metadata(self) -> None:
+        """Load category metadata from categories.yaml (lazy, cached)."""
+        try:
+            categories_path = (
+                importlib.resources.files("aiperf.plugin") / "categories.yaml"
+            )
+            content = categories_path.read_text(encoding="utf-8")
+        except Exception:
+            # Fallback to relative path
+            fallback = Path(__file__).parent / "categories.yaml"
+            if not fallback.exists():
+                _logger.warning("categories.yaml not found")
+                self._category_metadata = {}
+                return
+            content = fallback.read_text(encoding="utf-8")
+
+        data = _yaml.load(content) or {}
+
+        # Filter out non-category keys
+        self._category_metadata = {
+            k: v
+            for k, v in data.items()
+            if k not in ("schema_version",) and isinstance(v, dict)
+        }
 
     # --------------------------------------------------------------------------
     # Private: Class Path Operations

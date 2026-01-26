@@ -17,7 +17,7 @@ Conflict resolution: higher priority wins; equal priority: external beats built-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict, overload
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     from aiperf.plugin.enums import PluginCategory
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.plugin._plugin_registry import PluginRegistry
 from aiperf.plugin.schema import PackageInfo
-from aiperf.plugin.types import TypeEntry
+from aiperf.plugin.types import CategoryMetadata, TypeEntry
 
 _logger = AIPerfLogger(__name__)
 
@@ -362,9 +362,7 @@ def get_package_metadata(package_name: str) -> PackageInfo:
         >>> meta = plugins.get_package_metadata('aiperf')
         >>> print(meta['version'])
     """
-    if package_name not in _registry._loaded_plugins:
-        raise KeyError(f"Package '{package_name}' not found in loaded plugins")
-    return _registry._loaded_plugins[package_name]
+    return _registry.get_package_metadata(package_name)
 
 
 def list_categories(*, include_internal: bool = True) -> list[str]:
@@ -381,58 +379,10 @@ def list_categories(*, include_internal: bool = True) -> list[str]:
         >>> print(categories)
         ['arrival_pattern', 'communication', 'endpoint', ...]
     """
-    categories = sorted(_registry._types.keys())
+    categories = _registry.get_categories()
     if not include_internal:
         categories = [c for c in categories if not is_internal_category(c)]
     return categories
-
-
-# Category metadata cache (loaded from categories.yaml)
-_category_metadata: dict[str, dict] | None = None
-
-
-class CategoryMetadata(TypedDict, total=False):
-    """Metadata for a plugin category from categories.yaml."""
-
-    protocol: str
-    metadata_class: str
-    enum: str
-    description: str
-    internal: bool
-
-
-def _load_category_metadata() -> dict[str, dict]:
-    """Load category metadata from categories.yaml."""
-    global _category_metadata
-    if _category_metadata is not None:
-        return _category_metadata
-
-    from ruamel.yaml import YAML
-
-    try:
-        from importlib.resources import files
-
-        categories_path = files("aiperf.plugin") / "categories.yaml"
-        content = categories_path.read_text(encoding="utf-8")
-    except Exception:
-        # Fallback to relative path
-        fallback = Path(__file__).parent / "categories.yaml"
-        if not fallback.exists():
-            _logger.warning("categories.yaml not found")
-            _category_metadata = {}
-            return _category_metadata
-        content = fallback.read_text(encoding="utf-8")
-
-    yaml = YAML(typ="safe")
-    data = yaml.load(content) or {}
-
-    # Filter out non-category keys
-    _category_metadata = {
-        k: v
-        for k, v in data.items()
-        if k not in ("schema_version",) and isinstance(v, dict)
-    }
-    return _category_metadata
 
 
 def get_category_metadata(category: str) -> CategoryMetadata | None:
@@ -449,8 +399,7 @@ def get_category_metadata(category: str) -> CategoryMetadata | None:
         >>> meta = plugins.get_category_metadata('endpoint')
         >>> print(meta['description'])
     """
-    metadata = _load_category_metadata()
-    return metadata.get(category)
+    return _registry.get_category_metadata(category)
 
 
 def is_internal_category(category: str) -> bool:
@@ -517,8 +466,8 @@ def register(
     # Convert enum to string if needed
     name = name.value if hasattr(name, "value") else str(name)
 
-    # Create a TypeSpec with the pre-loaded class
-    type_spec = TypeEntry(
+    # Create a TypeEntry with the pre-loaded class
+    entry = TypeEntry(
         category=category,
         name=name,
         package=cls.__module__,
@@ -529,12 +478,8 @@ def register(
         loaded_class=cls,
     )
 
-    # Ensure category exists
-    if category not in _registry._types:
-        _registry._types[category] = {}
-
-    # Use conflict resolution to handle priority-based overrides
-    _registry._resolve_conflict_and_register(category, name, type_spec)
+    # Register with conflict resolution
+    _registry.register_type(entry)
 
     _logger.debug(
         lambda: f"Registered dynamic type {category}:{name} -> {cls.__name__} (priority={priority})"
@@ -569,7 +514,7 @@ def create_enum(category: str, enum_name: str) -> type:
     if not types:
         raise KeyError(
             f"No types registered for category '{category}'. "
-            f"Available categories: {sorted(_registry._types.keys())}"
+            f"Available categories: {_registry.get_categories()}"
         )
 
     # Create members dict: UPPER_SNAKE_CASE name -> string value
@@ -614,12 +559,15 @@ def detect_type_from_url(category: str, url: str) -> str:
 
     for impl in list_types(category):
         try:
-            cls = _registry._load_entry(impl)
+            cls = impl.load()
             if hasattr(cls, "metadata"):
                 metadata = cls.metadata()
                 if hasattr(metadata, "url_schemes") and scheme in metadata.url_schemes:
                     return impl.name
-        except Exception:
+        except (ImportError, AttributeError) as e:
+            _logger.debug(
+                lambda n=impl.name, err=e: f"Skipping {n} during URL detection: {err}"
+            )
             continue
 
     raise ValueError(

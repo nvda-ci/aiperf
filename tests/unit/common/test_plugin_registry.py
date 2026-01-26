@@ -13,7 +13,7 @@ import yaml
 
 from aiperf.plugin import plugins
 from aiperf.plugin._plugin_registry import PluginRegistry
-from aiperf.plugin.constants import DEFAULT_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
+from aiperf.plugin.constants import SUPPORTED_SCHEMA_VERSIONS
 from aiperf.plugin.schema import PackageInfo
 from aiperf.plugin.types import (
     PluginError,
@@ -1634,10 +1634,6 @@ class TestConstants:
         """Test SUPPORTED_SCHEMA_VERSIONS is defined."""
         assert "1.0" in SUPPORTED_SCHEMA_VERSIONS
         assert isinstance(SUPPORTED_SCHEMA_VERSIONS, tuple)
-
-    def test_default_schema_version(self):
-        """Test DEFAULT_SCHEMA_VERSION is in supported versions."""
-        assert DEFAULT_SCHEMA_VERSION in SUPPORTED_SCHEMA_VERSIONS
 
     def test_package_info_model(self):
         """Test PackageInfo is a Pydantic model with expected fields."""

@@ -5,8 +5,5 @@ from typing import Final
 # Supported schema versions for registry manifests
 SUPPORTED_SCHEMA_VERSIONS: Final[tuple[str, ...]] = ("1.0",)
 
-# Default schema version when not specified
-DEFAULT_SCHEMA_VERSION: Final[str] = "1.0"
-
 # Entry point group for package discovery
 DEFAULT_ENTRY_POINT_GROUP: Final[str] = "aiperf.plugins"

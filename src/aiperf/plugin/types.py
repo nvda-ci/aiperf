@@ -3,7 +3,7 @@
 import ast
 import importlib
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.json_schema import SkipJsonSchema
@@ -13,6 +13,21 @@ from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.plugin.schema.schemas import TypeSpec
 
 _logger = AIPerfLogger(__name__)
+
+
+# ==============================================================================
+# Type Definitions
+# ==============================================================================
+
+
+class CategoryMetadata(TypedDict, total=False):
+    """Metadata for a plugin category from categories.yaml."""
+
+    protocol: str
+    metadata_class: str
+    enum: str
+    description: str
+    internal: bool
 
 
 # ==============================================================================
