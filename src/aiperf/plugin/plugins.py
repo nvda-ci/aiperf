@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.plugin._plugin_registry import PluginRegistry
 from aiperf.plugin.schema import PackageInfo
-from aiperf.plugin.types import CategoryMetadata, TypeEntry
+from aiperf.plugin.types import CategoryMetadata, PluginEntry
 
 _logger = AIPerfLogger(__name__)
 
@@ -250,7 +250,7 @@ def get_class(category: PluginCategory, name_or_class_path: str) -> type:
     return _registry.get_class(category, name_or_class_path)
 
 
-def list_types(category: PluginCategory) -> list[TypeEntry]:
+def list_types(category: PluginCategory) -> list[PluginEntry]:
     """List all TypeEntry objects for a category (sorted alphabetically).
 
     Args:
@@ -470,7 +470,7 @@ def register(
     name = name.value if hasattr(name, "value") else str(name)
 
     # Create a TypeEntry with the pre-loaded class
-    entry = TypeEntry(
+    entry = PluginEntry(
         category=category,
         name=name,
         package=cls.__module__,

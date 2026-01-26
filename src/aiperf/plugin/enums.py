@@ -53,96 +53,8 @@ else:
     """
 
 # ============================================================================
-# Timing Types
-# ============================================================================
-
-TimingMode = plugins.create_enum(PluginCategory.TIMING_STRATEGY, "TimingMode")
-"""
-Dynamic enum for timing strategy implementations.
-
-Members are auto-generated from registered timing strategy plugins.
-Example: TimingMode.FIXED_SCHEDULE, TimingMode.REQUEST_RATE, TimingMode.USER_CENTRIC_RATE
-"""
-
-ArrivalPattern = plugins.create_enum(PluginCategory.ARRIVAL_PATTERN, "ArrivalPattern")
-"""
-Dynamic enum for arrival pattern implementations.
-
-Members are auto-generated from registered arrival pattern plugins.
-Example: ArrivalPattern.CONCURRENCY_BURST, ArrivalPattern.CONSTANT, ArrivalPattern.GAMMA
-"""
-
-RampType = plugins.create_enum(PluginCategory.RAMP, "RampType")
-"""
-Dynamic enum for ramp implementations.
-
-Members are auto-generated from registered ramp plugins.
-Example: RampType.EXPONENTIAL, RampType.LINEAR, RampType.POISSON
-"""
-
-# ============================================================================
-# Dataset Types
-# ============================================================================
-
-DatasetBackingStoreType = plugins.create_enum(
-    PluginCategory.DATASET_BACKING_STORE, "DatasetBackingStoreType"
-)
-"""
-Dynamic enum for dataset backing store implementations.
-
-Members are auto-generated from registered dataset backing store plugins.
-Example: DatasetBackingStoreType.MEMORY_MAP
-"""
-
-DatasetClientStoreType = plugins.create_enum(
-    PluginCategory.DATASET_CLIENT_STORE, "DatasetClientStoreType"
-)
-"""
-Dynamic enum for dataset client store implementations.
-
-Members are auto-generated from registered dataset client store plugins.
-Example: DatasetClientStoreType.MEMORY_MAP
-"""
-
-DatasetSamplingStrategy = plugins.create_enum(
-    PluginCategory.DATASET_SAMPLER, "DatasetSamplingStrategy"
-)
-"""
-Dynamic enum for dataset sampler implementations.
-
-Members are auto-generated from registered dataset sampler plugins.
-Example: DatasetSamplingStrategy.RANDOM, DatasetSamplingStrategy.SEQUENTIAL, DatasetSamplingStrategy.SHUFFLE
-"""
-
-ComposerType = plugins.create_enum(PluginCategory.DATASET_COMPOSER, "ComposerType")
-"""
-Dynamic enum for dataset composer implementations.
-
-Members are auto-generated from registered dataset composer plugins.
-Example: ComposerType.CUSTOM, ComposerType.SYNTHETIC, ComposerType.SYNTHETIC_RANKINGS
-"""
-
-CustomDatasetType = plugins.create_enum(
-    PluginCategory.CUSTOM_DATASET_LOADER, "CustomDatasetType"
-)
-"""
-Dynamic enum for custom dataset loader implementations.
-
-Members are auto-generated from registered custom dataset loader plugins.
-Example: CustomDatasetType.MOONCAKE_TRACE, CustomDatasetType.MULTI_TURN, CustomDatasetType.RANDOM_POOL
-"""
-
-# ============================================================================
 # Endpoint and Transport Types
 # ============================================================================
-
-EndpointType = plugins.create_enum(PluginCategory.ENDPOINT, "EndpointType")
-"""
-Dynamic enum for endpoint implementations.
-
-Members are auto-generated from registered endpoint plugins.
-Example: EndpointType.CHAT, EndpointType.COHERE_RANKINGS, EndpointType.COMPLETIONS
-"""
 
 TransportType = plugins.create_enum(PluginCategory.TRANSPORT, "TransportType")
 """
@@ -230,71 +142,14 @@ Members are auto-generated from registered service manager plugins.
 Example: ServiceRunType.KUBERNETES, ServiceRunType.MULTIPROCESSING
 """
 
-# ============================================================================
-# Communication Types
-# ============================================================================
-
-CommunicationBackend = plugins.create_enum(
-    PluginCategory.COMMUNICATION, "CommunicationBackend"
-)
-"""
-Dynamic enum for communication implementations.
-
-Members are auto-generated from registered communication plugins.
-Example: CommunicationBackend.ZMQ_IPC, CommunicationBackend.ZMQ_TCP
-"""
-
-CommClientType = plugins.create_enum(
-    PluginCategory.COMMUNICATION_CLIENT, "CommClientType"
-)
-"""
-Dynamic enum for communication client implementations.
-
-Members are auto-generated from registered communication client plugins.
-Example: CommClientType.PUB, CommClientType.PULL, CommClientType.PUSH
-"""
-
-ZMQProxyType = plugins.create_enum(PluginCategory.ZMQ_PROXY, "ZMQProxyType")
-"""
-Dynamic enum for zmq proxy implementations.
-
-Members are auto-generated from registered zmq proxy plugins.
-Example: ZMQProxyType.DEALER_ROUTER, ZMQProxyType.PUSH_PULL, ZMQProxyType.XPUB_XSUB
-"""
-
-# ============================================================================
-# Visualization Types
-# ============================================================================
-
-PlotType = plugins.create_enum(PluginCategory.PLOT, "PlotType")
-"""
-Dynamic enum for plot implementations.
-
-Members are auto-generated from registered plot plugins.
-Example: PlotType.AREA, PlotType.DUAL_AXIS, PlotType.HISTOGRAM
-"""
-
 __all__ = [
-    "ArrivalPattern",
-    "CommClientType",
-    "CommunicationBackend",
-    "ComposerType",
     "ConsoleExporterType",
-    "CustomDatasetType",
     "DataExporterType",
-    "DatasetBackingStoreType",
-    "DatasetClientStoreType",
-    "DatasetSamplingStrategy",
-    "EndpointType",
-    "PlotType",
     "PluginCategory",
-    "RampType",
     "RecordProcessorType",
     "ResultsProcessorType",
     "ServiceRunType",
     "ServiceType",
-    "TimingMode",
     "TransportType",
     "UIType",
-    "ZMQProxyType",
 ]

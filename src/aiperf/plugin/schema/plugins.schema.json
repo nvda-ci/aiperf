@@ -46,13 +46,6 @@
       ],
       "title": "PackageInfo",
       "type": "object"
-    },
-    "TransportType": {
-      "enum": [
-        "http"
-      ],
-      "title": "TransportType",
-      "type": "string"
     }
   },
   "description": "Root model for plugins.yaml file.\n\nThis file registers plugin implementations for AIPerf. Each section after\n'plugin' corresponds to a category from categories.yaml and maps type names\nto their implementing classes.\n\nExample:\n    schema_version: \"1.0\"\n    plugin:\n      name: my-plugins\n      version: 1.0.0\n      description: Custom endpoints for my use case\n      author: My Team\n\n    endpoint:\n      my_custom:\n        class: my_package.endpoints:MyCustomEndpoint\n        description: Custom endpoint for my use case",
@@ -63,62 +56,60 @@
       "title": "Schema Version",
       "type": "string"
     },
-    "plugin": {
-      "$ref": "#/$defs/PackageInfo",
-      "description": "Required section identifying your plugin package. See PluginPackageInfo for fields."
+    "package": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Required section identifying your plugin package. See PackageInfo for fields."
     },
     "timing_strategy": {
       "type": "object",
       "description": "Timing strategies control request scheduling and credit issuance.\nDetermines when requests are sent based on fixed schedules, request rates,\nor user-centric patterns. One-to-one mapping per benchmark run.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -126,54 +117,44 @@
       "type": "object",
       "description": "Interval generators determine inter-arrival times for request rate strategy.\nControls the distribution of request timing (constant, Poisson, gamma, etc.).\nOne-to-one mapping when using request_rate timing mode.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -181,54 +162,44 @@
       "type": "object",
       "description": "Ramp strategies control how values are gradually transitioned over time.\nUsed for ramping concurrency limits, request rates, and other numeric parameters.\nSupports linear, exponential, and stochastic ramping patterns.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -236,54 +207,44 @@
       "type": "object",
       "description": "Dataset backing stores manage conversation data on the DatasetManager side.\nProvides efficient storage for dataset distribution to workers.\nHandles streaming writes and finalization for client access.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -291,54 +252,44 @@
       "type": "object",
       "description": "Dataset client stores read conversation data on the Worker side.\nProvides efficient access to datasets from backing stores.\nSupports zero-copy reads and O(1) lookup performance.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -346,54 +297,44 @@
       "type": "object",
       "description": "Dataset samplers control how conversations are selected from the dataset.\nSupports random, sequential, and shuffle sampling strategies.\nOne-to-one mapping based on sampling strategy configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -401,54 +342,44 @@
       "type": "object",
       "description": "Dataset composers create conversation datasets from various sources.\nHandles synthetic generation, custom file loading, and specialized formats.\nOne-to-one mapping based on composer_type configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -456,54 +387,44 @@
       "type": "object",
       "description": "Custom dataset loaders parse different JSONL file formats into conversations.\nSupports single-turn, multi-turn, random-pool, and trace formats.\nAuto-detection: loaders are tried in priority order based on can_load().",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -511,126 +432,44 @@
       "type": "object",
       "description": "Endpoints define how to format requests and parse responses for different APIs.\nSupports OpenAI-compatible, HuggingFace, Cohere, NIM, and custom API formats.\nOne-to-one mapping based on endpoint_type configuration.",
       "additionalProperties": {
-        "additionalProperties": true,
-        "description": "Full specification for a plugin type entry.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
           "class": {
-            "description": "Fully qualified class path (module:ClassName).",
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
             "title": "Class",
             "type": "string"
           },
           "description": {
-            "description": "Human-readable description of this plugin type.",
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
             "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Priority for conflict resolution (higher wins).",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Endpoint metadata for discovery and documentation.",
-            "properties": {
-              "endpoint_path": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "API path (e.g., /v1/chat/completions).",
-                "title": "Endpoint Path"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "streaming_path": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Streaming API path if different from the endpoint path (e.g., /generate_stream).",
-                "title": "Streaming Path"
-              },
-              "service_kind": {
-                "default": "openai",
-                "description": "The service kind of the endpoint (used for artifact naming).",
-                "title": "Service Kind",
-                "type": "string"
-              },
-              "supports_streaming": {
-                "default": false,
-                "description": "Whether endpoint supports streaming responses.",
-                "title": "Supports Streaming",
-                "type": "boolean"
-              },
-              "tokenizes_input": {
-                "default": false,
-                "description": "Whether endpoint tokenizes text inputs.",
-                "title": "Tokenizes Input",
-                "type": "boolean"
-              },
-              "produces_tokens": {
-                "default": false,
-                "description": "Whether endpoint produces token-based output.",
-                "title": "Produces Tokens",
-                "type": "boolean"
-              },
-              "supports_audio": {
-                "default": false,
-                "description": "Whether endpoint accepts audio input.",
-                "title": "Supports Audio",
-                "type": "boolean"
-              },
-              "supports_images": {
-                "default": false,
-                "description": "Whether endpoint accepts image input.",
-                "title": "Supports Images",
-                "type": "boolean"
-              },
-              "supports_videos": {
-                "default": false,
-                "description": "Whether endpoint accepts video input.",
-                "title": "Supports Videos",
-                "type": "boolean"
-              },
-              "produces_images": {
-                "default": false,
-                "description": "Whether endpoint produces image-based outputs.",
-                "title": "Produces Images",
-                "type": "boolean"
-              },
-              "metrics_title": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Display title for metrics dashboard.",
-                "title": "Metrics Title"
+              {
+                "type": "null"
               }
-            },
-            "title": "EndpointMetadata",
-            "type": "object"
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "class",
-          "description"
+          "class"
         ],
-        "title": "PluginTypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -638,62 +477,44 @@
       "type": "object",
       "description": "Transports handle the network layer for sending requests to inference servers.\nManages connection pooling, streaming, error handling, and TCP configuration.\nOne-to-one mapping based on transport_type configuration.",
       "additionalProperties": {
-        "additionalProperties": true,
-        "description": "Full specification for a plugin type entry.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
           "class": {
-            "description": "Fully qualified class path (module:ClassName).",
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
             "title": "Class",
             "type": "string"
           },
           "description": {
-            "description": "Human-readable description of this plugin type.",
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
             "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Priority for conflict resolution (higher wins).",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Transport metadata for discovery and documentation.",
-            "properties": {
-              "transport_type": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TransportType"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ],
-                "description": "Transport type identifier for this transport",
-                "title": "Transport Type"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "url_schemes": {
-                "description": "URL schemes this transport handles (for auto-detection and validation).",
-                "items": {
-                  "type": "string"
-                },
-                "title": "Url Schemes",
-                "type": "array"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "transport_type"
             ],
-            "title": "TransportMetadata",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "class",
-          "description"
+          "class"
         ],
-        "title": "PluginTypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -701,54 +522,44 @@
       "type": "object",
       "description": "Record processors stream records and compute metrics in a distributed manner.\nFirst stage of metrics pipeline, handling per-record computations.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -756,54 +567,44 @@
       "type": "object",
       "description": "Results processors aggregate results from record processors and compute derived metrics.\nFinal stage of metrics pipeline for aggregated statistics and summaries.\nOne-to-many mapping: multiple processors can be loaded simultaneously.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -811,54 +612,44 @@
       "type": "object",
       "description": "Data exporters write benchmark results to files in various formats.\nSupports CSV, JSON, Parquet, and specialized export formats.\nOne-to-many mapping: multiple exporters can be loaded simultaneously.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -866,54 +657,44 @@
       "type": "object",
       "description": "Console exporters display benchmark results and diagnostics to stdout.\nProvides formatted output for metrics, errors, telemetry, and traces.\nOne-to-many mapping: multiple console exporters can be loaded simultaneously.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -921,54 +702,44 @@
       "type": "object",
       "description": "UI components provide progress tracking and visualization during benchmark execution.\nSupports rich terminal dashboards, simple progress bars, or headless execution.\nOne-to-one mapping based on ui configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -976,54 +747,44 @@
       "type": "object",
       "description": "Services are the core processes that make up the AIPerf distributed system.\nEach service runs in a separate process and communicates via ZMQ message bus.\nIncludes SystemController, Workers, Managers, and processing services.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -1031,54 +792,44 @@
       "type": "object",
       "description": "Service managers orchestrate how services are launched and managed.\nSupports multiprocessing (single-node) and Kubernetes (multi-node) deployments.\nOne-to-one mapping based on run_mode configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -1086,54 +837,44 @@
       "type": "object",
       "description": "Communication backends provide the underlying transport for inter-service messaging.\nSupports ZMQ IPC (single-node) and ZMQ TCP (multi-node) communication.\nOne-to-one mapping based on deployment configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -1141,54 +882,44 @@
       "type": "object",
       "description": "Communication clients implement different ZMQ socket patterns for messaging.\nIncludes PUB/SUB, PUSH/PULL, REQUEST/REPLY, and streaming patterns.\nInternal infrastructure: automatically created by framework based on usage.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -1196,54 +927,44 @@
       "type": "object",
       "description": "ZMQ proxies provide message routing between different socket patterns.\nIncludes XPUB/XSUB, DEALER/ROUTER, and PUSH/PULL proxy types.\nInternal infrastructure: automatically created by framework based on configuration.",
       "additionalProperties": {
-        "description": "Lazy-loading type entry with metadata. Call load() to import the class.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
-          "category": {
-            "description": "Category identifier",
-            "title": "Category",
+          "class": {
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
+            "title": "Class",
             "type": "string"
           },
-          "name": {
-            "description": "Type name",
-            "title": "Name",
-            "type": "string"
-          },
-          "package": {
-            "description": "Package providing this type",
-            "title": "Package",
-            "type": "string"
-          },
-          "class_path": {
-            "description": "Fully qualified class path (module:Class)",
-            "title": "Class Path",
+          "description": {
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
+            "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Conflict resolution priority",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
-          "description": {
-            "default": "",
-            "description": "Human-readable description",
-            "title": "Description",
-            "type": "string"
-          },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Type-specific metadata from plugins.yaml",
-            "title": "Metadata",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "category",
-          "name",
-          "package",
-          "class_path"
+          "class"
         ],
-        "title": "TypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     },
@@ -1251,67 +972,52 @@
       "type": "object",
       "description": "Plot handlers create different types of visualizations from benchmark data.\nSupports scatter, histogram, timeline, percentile bands, and multi-run comparisons.\nOne-to-one mapping based on plot type selection.",
       "additionalProperties": {
-        "additionalProperties": true,
-        "description": "Full specification for a plugin type entry.",
+        "description": "Specification for a plugin entry.\n\nEach plugin entry maps a name (like 'chat' or 'completions') to a Python\nclass that implements the category's protocol.\n\nExample:\n    chat:\n      class: aiperf.endpoints.chat:ChatEndpoint\n      description: OpenAI-compatible chat completions endpoint",
         "properties": {
           "class": {
-            "description": "Fully qualified class path (module:ClassName).",
+            "description": "Python class that implements this plugin entry. Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'.",
             "title": "Class",
             "type": "string"
           },
           "description": {
-            "description": "Human-readable description of this plugin type.",
+            "default": "",
+            "description": "Brief explanation of what this plugin type does and when to use it.",
             "title": "Description",
             "type": "string"
           },
           "priority": {
             "default": 0,
-            "description": "Priority for conflict resolution (higher wins).",
+            "description": "Conflict resolution priority. When multiple packages register the same type name, the one with higher priority wins. Use 0 for normal plugins, higher values to override built-in implementations.",
             "title": "Priority",
             "type": "integer"
           },
           "metadata": {
-            "additionalProperties": true,
-            "description": "Metadata for a plot type including display name and description.",
-            "properties": {
-              "display_name": {
-                "description": "Human-readable name for UI display.",
-                "title": "Display Name",
-                "type": "string"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "description": {
-                "description": "Description of what this plot type shows.",
-                "title": "Description",
-                "type": "string"
-              },
-              "category": {
-                "description": "Plot category (per_request, aggregated, combined, comparison).",
-                "title": "Category",
-                "type": "string"
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "display_name",
-              "description",
-              "category"
             ],
-            "title": "PlotTypeInfo",
-            "type": "object"
+            "default": null,
+            "description": "Category-specific configuration for this plugin type. The allowed fields depend on the category's metadata_class in categories.yaml.",
+            "title": "Metadata"
           }
         },
         "required": [
-          "class",
-          "description"
+          "class"
         ],
-        "title": "PluginTypeEntry",
+        "title": "PluginSpec",
         "type": "object"
       }
     }
   },
   "required": [
-    "plugin"
+    "package"
   ],
-  "title": "PluginsFile",
+  "title": "PluginsManifest",
   "type": "object",
   "additionalProperties": false
 }

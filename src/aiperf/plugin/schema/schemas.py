@@ -63,7 +63,7 @@ class CategorySpec(BaseModel):
     )
 
 
-class CategoriesFile(BaseModel):
+class CategoriesManifest(BaseModel):
     """Root model for categories.yaml file.
 
     This file defines all plugin extension points in AIPerf. Each category
@@ -148,10 +148,10 @@ class PackageInfo(BaseModel):
         return self.name == "aiperf"
 
 
-class TypeSpec(BaseModel):
-    """Specification for a plugin type.
+class PluginSpec(BaseModel):
+    """Specification for a plugin entry.
 
-    Each plugin type maps a name (like 'chat' or 'completions') to a Python
+    Each plugin entry maps a name (like 'chat' or 'completions') to a Python
     class that implements the category's protocol.
 
     Example:
@@ -165,7 +165,7 @@ class TypeSpec(BaseModel):
     class_: str = Field(
         alias="class",
         description=(
-            "Python class that implements this plugin type. "
+            "Python class that implements this plugin entry. "
             "Use 'module.path:ClassName' format, e.g., 'aiperf.endpoints.chat:ChatEndpoint'."
         ),
     )
@@ -190,7 +190,7 @@ class TypeSpec(BaseModel):
     )
 
 
-class PluginsFile(BaseModel):
+class PluginsManifest(BaseModel):
     """Root model for plugins.yaml file.
 
     This file registers plugin implementations for AIPerf. Each section after
@@ -218,8 +218,9 @@ class PluginsFile(BaseModel):
         default="1.0",
         description="Version of the plugins.yaml schema format. Use '1.0' for current format.",
     )
-    plugin: PackageInfo = Field(
-        description="Required section identifying your plugin package. See PluginPackageInfo for fields.",
+    package: PackageInfo | None = Field(
+        default=None,
+        description="Required section identifying your plugin package. See PackageInfo for fields.",
     )
 
     @classmethod
@@ -227,10 +228,10 @@ class PluginsFile(BaseModel):
         """Generate JSON Schema with additionalProperties for plugin categories."""
         schema = super().model_json_schema(**kwargs)
 
-        # Create a schema for category entries (dict of type name -> PluginTypeEntry)
+        # Create a schema for category entries (dict of type name -> PluginSpec)
         category_entry_schema = {
             "type": "object",
-            "additionalProperties": TypeSpec.model_json_schema(**kwargs),
+            "additionalProperties": PluginSpec.model_json_schema(**kwargs),
         }
 
         schema["additionalProperties"] = category_entry_schema

@@ -159,9 +159,9 @@ def load_categories() -> dict[str, dict[str, Any]]:
 
 def generate_categories_schema() -> dict[str, Any]:
     """Generate JSON Schema for categories.yaml."""
-    from aiperf.plugin.schema import CategoriesFile
+    from aiperf.plugin.schema import CategoriesManifest
 
-    return CategoriesFile.model_json_schema()
+    return CategoriesManifest.model_json_schema()
 
 
 def generate_plugins_schema() -> dict[str, Any]:
@@ -170,14 +170,13 @@ def generate_plugins_schema() -> dict[str, Any]:
     Reads categories.yaml to generate specific properties for each category,
     with metadata schemas introspected from the metadata_class if defined.
     """
-    from aiperf.plugin.schema import PluginsFile
-    from aiperf.plugin.types import TypeEntry
+    from aiperf.plugin.schema import PluginsManifest, PluginSpec
 
-    base_schema = PluginsFile.model_json_schema()
+    base_schema = PluginsManifest.model_json_schema()
     categories = load_categories()
 
     # Base plugin type entry schema (without metadata)
-    plugin_entry_schema = TypeEntry.model_json_schema()
+    plugin_entry_schema = PluginSpec.model_json_schema()
 
     # Collect all $defs from metadata schemas to hoist to root level
     all_defs: dict[str, Any] = dict(base_schema.get("$defs", {}))
@@ -204,9 +203,9 @@ def generate_plugins_schema() -> dict[str, Any]:
                 all_defs.update(metadata_schema.pop("$defs"))
 
             # Custom entry schema with typed metadata
-            entry_schema = {
+            plugin_spec_schema = {
                 "additionalProperties": True,
-                "description": "Full specification for a plugin type entry.",
+                "description": "Full specification for a plugin entry.",
                 "properties": {
                     "class": {
                         "description": "Fully qualified class path (module:ClassName).",
@@ -214,7 +213,7 @@ def generate_plugins_schema() -> dict[str, Any]:
                         "type": "string",
                     },
                     "description": {
-                        "description": "Human-readable description of this plugin type.",
+                        "description": "Human-readable description of this plugin.",
                         "title": "Description",
                         "type": "string",
                     },
@@ -227,17 +226,17 @@ def generate_plugins_schema() -> dict[str, Any]:
                     "metadata": metadata_schema,
                 },
                 "required": ["class", "description"],
-                "title": "PluginTypeEntry",
+                "title": "PluginSpec",
                 "type": "object",
             }
         else:
-            entry_schema = plugin_entry_schema
+            plugin_spec_schema = plugin_entry_schema
 
         # Category property: maps type names to entries
         category_properties[category_name] = {
             "type": "object",
             "description": description,
-            "additionalProperties": entry_schema,
+            "additionalProperties": plugin_spec_schema,
         }
 
     # Build final schema with explicit category properties
@@ -246,11 +245,11 @@ def generate_plugins_schema() -> dict[str, Any]:
         "description": base_schema.get("description", ""),
         "properties": {
             "schema_version": base_schema["properties"]["schema_version"],
-            "plugin": base_schema["properties"]["plugin"],
+            "package": base_schema["properties"]["package"],
             **category_properties,
         },
-        "required": base_schema.get("required", ["plugin"]),
-        "title": base_schema.get("title", "PluginsFile"),
+        "required": base_schema.get("required", ["package"]),
+        "title": base_schema.get("title", "PluginsManifest"),
         "type": "object",
         "additionalProperties": False,  # Only allow known categories
     }

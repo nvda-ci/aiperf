@@ -142,3 +142,9 @@ ignore-words-list = "timeslice,timeslices"
 
 [project.entry-points."aiperf.plugins"]
 aiperf = "aiperf.plugin:plugins.yaml"
+aiperf-plot = "aiperf.plot:plugins.yaml"
+aiperf-endpoints = "aiperf.endpoints:plugins.yaml"
+aiperf-dataset = "aiperf.dataset:plugins.yaml"
+aiperf-timing = "aiperf.timing:plugins.yaml"
+aiperf-zmq = "aiperf.zmq:plugins.yaml"
+aiperf-ui = "aiperf.ui:plugins.yaml"

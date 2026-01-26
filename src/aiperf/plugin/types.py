@@ -10,7 +10,7 @@ from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self
 
 from aiperf.common.aiperf_logger import AIPerfLogger
-from aiperf.plugin.schema.schemas import TypeSpec
+from aiperf.plugin.schema.schemas import PluginSpec
 
 _logger = AIPerfLogger(__name__)
 
@@ -59,8 +59,8 @@ class TypeNotFoundError(PluginError):
 # ==============================================================================
 
 
-class TypeEntry(BaseModel):
-    """Lazy-loading type entry with metadata. Call load() to import the class."""
+class PluginEntry(BaseModel):
+    """Lazy-loading plugin entry with metadata. Call load() to import the class."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -73,7 +73,7 @@ class TypeEntry(BaseModel):
     priority: int = Field(default=0, description="Conflict resolution priority")
     description: str = Field(default="", description="Human-readable description")
     metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Type-specific metadata from plugins.yaml"
+        default_factory=dict, description="Plugin-specific metadata from plugins.yaml"
     )
     loaded_class: SkipJsonSchema[type | None] = Field(
         default=None, description="Cached class after loading"
@@ -86,7 +86,7 @@ class TypeEntry(BaseModel):
 
     @classmethod
     def from_type_spec(
-        cls, type_spec: TypeSpec, package: str, category: str, name: str
+        cls, type_spec: PluginSpec, package: str, category: str, name: str
     ) -> Self:
         return cls(
             category=category,

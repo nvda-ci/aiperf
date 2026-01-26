@@ -16,8 +16,8 @@ from aiperf.plugin._plugin_registry import PluginRegistry
 from aiperf.plugin.constants import SUPPORTED_SCHEMA_VERSIONS
 from aiperf.plugin.schema import PackageInfo
 from aiperf.plugin.types import (
+    PluginEntry,
     PluginError,
-    TypeEntry,
     TypeNotFoundError,
 )
 
@@ -141,7 +141,7 @@ class TestTypeEntry:
 
     def test_init_with_all_fields(self):
         """Test that TypeEntry stores all fields correctly."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -162,7 +162,7 @@ class TestTypeEntry:
 
     def test_init_uses_defaults(self):
         """Test that defaults are used for optional fields."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -176,7 +176,7 @@ class TestTypeEntry:
 
     def test_load_caches_class(self, mock_class):
         """Test that load() caches the class after first load."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -202,7 +202,7 @@ class TestTypeEntry:
 
     def test_load_invalid_class_path(self):
         """Test that load() raises ValueError for invalid class_path."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -215,7 +215,7 @@ class TestTypeEntry:
 
     def test_load_module_not_found(self):
         """Test that load() raises ImportError when module not found."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -228,7 +228,7 @@ class TestTypeEntry:
 
     def test_load_class_not_found(self):
         """Test that load() raises AttributeError when class not found."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="test_category",
             name="test_type",
             package="test_package",
@@ -244,7 +244,7 @@ class TestTypeEntry:
 
     def test_load_empty_module_path(self):
         """Test that load() raises ValueError for empty module path."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -255,7 +255,7 @@ class TestTypeEntry:
 
     def test_load_empty_class_name(self):
         """Test that load() raises ValueError for empty class name."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -270,7 +270,7 @@ class TestTypeEntryValidate:
 
     def test_validate_already_loaded_class(self, mock_class):
         """Test that validate returns True for already loaded class."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -284,7 +284,7 @@ class TestTypeEntryValidate:
 
     def test_validate_invalid_class_path_format_no_colon(self):
         """Test validate catches invalid class_path without colon."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -297,7 +297,7 @@ class TestTypeEntryValidate:
 
     def test_validate_invalid_class_path_empty_parts(self):
         """Test validate catches empty module or class."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -310,7 +310,7 @@ class TestTypeEntryValidate:
 
     def test_validate_module_not_found(self):
         """Test validate catches non-existent module."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -323,7 +323,7 @@ class TestTypeEntryValidate:
 
     def test_validate_valid_module_without_class_check(self):
         """Test validate succeeds for valid module without class check."""
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -337,7 +337,7 @@ class TestTypeEntryValidate:
     def test_validate_with_class_check_finds_class(self):
         """Test validate with check_class=True finds class definition."""
         # Use a real module with a known class
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -351,7 +351,7 @@ class TestTypeEntryValidate:
     def test_validate_with_class_check_class_not_found(self):
         """Test validate with check_class=True catches missing class."""
         # Use a real module but a nonexistent class
-        lazy = TypeEntry(
+        lazy = PluginEntry(
             category="cat",
             name="type",
             package="pkg",
@@ -587,7 +587,7 @@ class TestListTypes:
         lazy_types = registry.list_types("endpoint")
 
         assert len(lazy_types) == 2
-        assert all(isinstance(lt, TypeEntry) for lt in lazy_types)
+        assert all(isinstance(lt, PluginEntry) for lt in lazy_types)
 
     def test_list_types_sorted_alphabetically(self, registry, temp_registry_file):
         """Test that results are sorted alphabetically by name."""
@@ -1824,7 +1824,7 @@ class TestEdgeCases:
         """Test that TypeEntry is frozen (immutable)."""
         from pydantic import ValidationError
 
-        entry = TypeEntry(
+        entry = PluginEntry(
             category="cat",
             name="type",
             package="pkg",

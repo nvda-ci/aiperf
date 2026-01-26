@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Communication Backends
+# =============================================================================
+# Communication backends provide the underlying transport for inter-service messaging.
+# One-to-one mapping: exactly one communication backend is selected based on deployment.
+# =============================================================================
+communication:
+  zmq_ipc:
+    class: aiperf.zmq.zmq_comms:ZMQIPCCommunication
+    description: ZMQ IPC communication backend for single-node deployments. Provides high-performance message passing over Unix domain sockets for same-machine communication.
+
+  zmq_tcp:
+    class: aiperf.zmq.zmq_comms:ZMQTCPCommunication
+    description: ZMQ TCP communication backend for distributed multi-node deployments. Provides reliable message passing over TCP sockets for cross-machine communication.
+
+# =============================================================================
+# Communication Clients
+# =============================================================================
+# Communication clients implement different ZMQ socket patterns for messaging.
+# Internal infrastructure: automatically created by framework based on usage patterns.
+# =============================================================================
+communication_client:
+  pub:
+    class: aiperf.zmq.pub_client:ZMQPubClient
+    description: ZMQ PUB client for publish-subscribe messaging pattern. Broadcasts messages to multiple subscribers with topic-based filtering support.
+
+  pull:
+    class: aiperf.zmq.pull_client:ZMQPullClient
+    description: ZMQ PULL client for pipeline messaging pattern. Receives messages from pushers in fair-queued fashion for work processing.
+
+  push:
+    class: aiperf.zmq.push_client:ZMQPushClient
+    description: ZMQ PUSH client for pipeline messaging pattern. Sends messages to workers in load-balanced fashion for distributed work distribution.
+
+  reply:
+    class: aiperf.zmq.router_reply_client:ZMQRouterReplyClient
+    description: ZMQ ROUTER client for request-reply messaging pattern. Receives commands and sends responses to specific requesters with identity-based routing.
+
+  request:
+    class: aiperf.zmq.dealer_request_client:ZMQDealerRequestClient
+    description: ZMQ DEALER client for request-reply messaging pattern. Sends commands and waits for responses with timeout support and retry logic.
+
+  streaming_dealer:
+    class: aiperf.zmq.streaming_dealer_client:ZMQStreamingDealerClient
+    description: ZMQ DEALER client for streaming messaging pattern. Provides high-throughput streaming with flow control and backpressure management.
+
+  streaming_router:
+    class: aiperf.zmq.streaming_router_client:ZMQStreamingRouterClient
+    description: ZMQ ROUTER client for streaming messaging pattern. Receives high-throughput streams with identity-based routing and connection management.
+
+  sub:
+    class: aiperf.zmq.sub_client:ZMQSubClient
+    description: ZMQ SUB client for publish-subscribe messaging pattern. Receives broadcasts from publishers with topic filtering and subscription management.
+
+# =============================================================================
+# ZMQ Proxies
+# =============================================================================
+# ZMQ proxies provide message routing between different socket patterns.
+# Internal infrastructure: automatically created by framework based on configuration.
+# =============================================================================
+zmq_proxy:
+  dealer_router:
+    class: aiperf.zmq.zmq_proxy_sockets:ZMQDealerRouterProxy
+    description: DEALER/ROUTER proxy for request-reply pattern. Routes messages between DEALER clients and ROUTER services with identity-based routing and response forwarding.
+
+  push_pull:
+    class: aiperf.zmq.zmq_proxy_sockets:ZMQPushPullProxy
+    description: PUSH/PULL proxy for pipeline pattern. Routes messages from PUSH clients to PULL services with load-balanced work distribution.
+
+  xpub_xsub:
+    class: aiperf.zmq.zmq_proxy_sockets:ZMQXPubXSubProxy
+    description: XPUB/XSUB proxy for publish-subscribe pattern. Routes messages from PUB clients to SUB services with subscription management and message broadcasting.

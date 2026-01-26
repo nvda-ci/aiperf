@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=../plugin/schema/plugins.schema.json
+
+schema_version: "1.0"
+
+# =============================================================================
+# Plot
+# =============================================================================
+# Plot handlers create different types of visualizations from benchmark data.
+# One-to-one mapping: exactly one handler is selected based on plot type.
+# =============================================================================
+plot:
+  area:
+    class: aiperf.plot.handlers.single_run_handlers:AreaHandler
+    description: Filled area showing token throughput distribution.
+    metadata:
+      display_name: Throughput Over Time
+      category: combined
+
+  dual_axis:
+    class: aiperf.plot.handlers.single_run_handlers:DualAxisHandler
+    description: Two metrics on separate Y-axes (e.g., throughput + GPU util).
+    metadata:
+      display_name: Dual Metric Overlay
+      category: combined
+
+  histogram:
+    class: aiperf.plot.handlers.single_run_handlers:HistogramHandler
+    description: Bar chart of aggregated values per time window.
+    metadata:
+      display_name: Time Window Bars
+      category: aggregated
+
+  pareto:
+    class: aiperf.plot.handlers.multi_run_handlers:ParetoHandler
+    description: Trade-off frontier showing optimal configurations.
+    metadata:
+      display_name: Pareto Curve
+      category: comparison
+
+  percentile_bands:
+    class: aiperf.plot.handlers.single_run_handlers:PercentileBandsHandler
+    description: p50 line with p95/p99 shaded uncertainty bands for SLA monitoring.
+    metadata:
+      display_name: Percentile Bands Over Time
+      category: aggregated
+
+  request_timeline:
+    class: aiperf.plot.handlers.single_run_handlers:RequestTimelineHandler
+    description: Gantt-style view showing TTFT vs generation time per request.
+    metadata:
+      display_name: Request Phase Breakdown
+      category: per_request
+
+  scatter:
+    class: aiperf.plot.handlers.single_run_handlers:ScatterHandler
+    description: Individual data points for each request.
+    metadata:
+      display_name: Per-Request Scatter
+      category: per_request
+
+  scatter_line:
+    class: aiperf.plot.handlers.multi_run_handlers:ScatterLineHandler
+    description: Points connected by lines, grouped by configuration.
+    metadata:
+      display_name: Scatter + Trend Line
+      category: comparison
+
+  scatter_with_percentiles:
+    class: aiperf.plot.handlers.single_run_handlers:ScatterWithPercentilesHandler
+    description: Per-request points with rolling p50/p95/p99 trend lines.
+    metadata:
+      display_name: Scatter with Trends
+      category: per_request
+
+  timeslice:
+    class: aiperf.plot.handlers.single_run_handlers:TimeSliceHandler
+    description: Aggregated averages per time window (e.g., every 10s).
+    metadata:
+      display_name: Time Window Summary
+      category: aggregated
