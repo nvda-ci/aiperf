@@ -37,7 +37,7 @@ def system_controller(
     mock_ui = AsyncMock()
     mock_comm = AsyncMock()
 
-    def mock_get_class(protocol, type_name):
+    def mock_get_class(protocol, name):
         if protocol == "service_manager":
             return lambda **kwargs: mock_service_manager
         if protocol == "ui":

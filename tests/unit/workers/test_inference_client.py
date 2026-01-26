@@ -43,7 +43,7 @@ class TestInferenceClient:
         mock_endpoint.get_endpoint_params.return_value = {}
         mock_endpoint.format_payload.return_value = {}
 
-        def mock_get_class(protocol, type_name):
+        def mock_get_class(protocol, name):
             if protocol == "endpoint":
                 return lambda **kwargs: mock_endpoint
             if protocol == "transport":

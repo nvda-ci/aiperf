@@ -145,7 +145,13 @@ class TestErrorHandling:
         mock_loader = Mock()
         mock_loader.load_dataset.return_value = {}
         mock_loader.convert_to_conversations.return_value = []
-        mock_get_class.return_value = lambda **kwargs: mock_loader
+        # Create a mock class that has get_preferred_sampling_strategy and can be instantiated
+        mock_loader_class = Mock()
+        mock_loader_class.return_value = mock_loader
+        mock_loader_class.get_preferred_sampling_strategy.return_value = (
+            DatasetSamplingStrategy.SEQUENTIAL
+        )
+        mock_get_class.return_value = mock_loader_class
 
         composer = CustomDatasetComposer(custom_config, mock_tokenizer)
         result = composer.create_dataset()

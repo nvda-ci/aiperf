@@ -45,7 +45,7 @@ def validate_class_paths(registry: dict[str, Any]) -> list[str]:
         if protocol_name in skip_sections or not isinstance(implementations, dict):
             continue
 
-        for impl_name, impl_info in implementations.items():
+        for name, impl_info in implementations.items():
             # Extract class path
             if isinstance(impl_info, str):
                 class_path = impl_info
@@ -53,14 +53,14 @@ def validate_class_paths(registry: dict[str, Any]) -> list[str]:
                 class_path = impl_info["class"]
             else:
                 errors.append(
-                    f"  {protocol_name}:{impl_name} - Invalid format (missing 'class' field)"
+                    f"  {protocol_name}:{name} - Invalid format (missing 'class' field)"
                 )
                 continue
 
             # Parse module:class format
             if ":" not in class_path:
                 errors.append(
-                    f"  {protocol_name}:{impl_name} - Invalid class path format: {class_path}"
+                    f"  {protocol_name}:{name} - Invalid class path format: {class_path}"
                 )
                 continue
 
@@ -71,14 +71,14 @@ def validate_class_paths(registry: dict[str, Any]) -> list[str]:
                 module = importlib.import_module(module_path)
                 if not hasattr(module, class_name):
                     errors.append(
-                        f"  {protocol_name}:{impl_name} - Class '{class_name}' not found in module '{module_path}'"
+                        f"  {protocol_name}:{name} - Class '{class_name}' not found in module '{module_path}'"
                     )
             except ImportError as e:
                 errors.append(
-                    f"  {protocol_name}:{impl_name} - Cannot import module '{module_path}': {e}"
+                    f"  {protocol_name}:{name} - Cannot import module '{module_path}': {e}"
                 )
             except Exception as e:
-                errors.append(f"  {protocol_name}:{impl_name} - Error: {e}")
+                errors.append(f"  {protocol_name}:{name} - Error: {e}")
 
     return errors
 
@@ -117,10 +117,10 @@ def validate_no_duplicates(registry: dict[str, Any]) -> list[str]:
         if protocol_name in skip_sections or not isinstance(implementations, dict):
             continue
 
-        for impl_name in implementations:
-            if impl_name not in seen_impls:
-                seen_impls[impl_name] = []
-            seen_impls[impl_name].append(protocol_name)
+        for name in implementations:
+            if name not in seen_impls:
+                seen_impls[name] = []
+            seen_impls[name].append(protocol_name)
 
     return errors
 

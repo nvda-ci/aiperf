@@ -76,7 +76,7 @@ def _count_types_per_package() -> dict[str, int]:
     counts: dict[str, int] = {}
     for category in plugin_registry.list_categories():
         for type_entry in plugin_registry.list_types(category):
-            pkg = type_entry.package_name
+            pkg = type_entry.package
             counts[pkg] = counts.get(pkg, 0) + 1
     return counts
 
@@ -96,7 +96,7 @@ def show_overview() -> None:
 
     for cat in all_categories:
         types = plugin_registry.list_types(cat)
-        type_names = ", ".join(f"[italic]{t.type_name}[/]" for t in types)
+        type_names = ", ".join(f"[italic]{t.name}[/]" for t in types)
         cat_table.add_row(_format_category_name(cat), type_names)
 
     console.print(cat_table)
@@ -115,14 +115,13 @@ def show_overview() -> None:
         )
 
         for pkg in packages:
-            try:
-                metadata = plugin_registry.get_package_metadata(pkg)
-                version = metadata.get("version", "-")
-                description = metadata.get("description", "")
-            except KeyError:
-                version = "-"
-                description = ""
-            pkg_table.add_row(pkg, version, str(type_counts.get(pkg, 0)), description)
+            metadata = plugin_registry.get_package_metadata(pkg)
+            pkg_table.add_row(
+                pkg,
+                metadata.version,
+                str(type_counts.get(pkg, 0)),
+                metadata.description,
+            )
 
         console.print(pkg_table)
 
@@ -154,33 +153,33 @@ def show_category_types(category: str) -> None:
     table.add_column("Description", overflow="ellipsis", no_wrap=True, ratio=1)
 
     for lt in lazy_types:
-        table.add_row(lt.type_name, lt.description or "[dim]-[/dim]")
+        table.add_row(lt.name, lt.description or "[dim]-[/dim]")
 
     console.print(table)
     console.print(f"\n[dim]Usage: aiperf plugins {category} <type> for details[/dim]")
 
 
-def show_type_details(category: str, type_name: str) -> None:
+def show_type_details(category: str, name: str) -> None:
     """Show details about a specific type."""
     lazy_types = plugin_registry.list_types(category)
-    lazy_type = next((lt for lt in lazy_types if lt.type_name == type_name), None)
+    lazy_type = next((lt for lt in lazy_types if lt.name == name), None)
 
     if not lazy_type:
-        console.print(f"[red]Not found: {category}:{type_name}[/red]")
+        console.print(f"[red]Not found: {category}:{name}[/red]")
         if lazy_types:
             console.print(f"\n[dim]Available {category} types:[/dim]")
             for lt in lazy_types:
-                console.print(f"  {lt.type_name}")
+                console.print(f"  {lt.name}")
         return
 
-    info = f"""[bold]Type:[/bold] {lazy_type.type_name}
+    info = f"""[bold]Type:[/bold] {lazy_type.name}
 [bold]Category:[/bold] {lazy_type.category}
-[bold]Package:[/bold] {lazy_type.package_name}
+[bold]Package:[/bold] {lazy_type.package}
 [bold]Class:[/bold] {lazy_type.class_path}
 
 {lazy_type.description or "[dim]No description[/dim]"}"""
 
-    console.print(Panel(info, title=f"{category}:{type_name}", border_style="cyan"))
+    console.print(Panel(info, title=f"{category}:{name}", border_style="cyan"))
 
 
 def show_packages(builtin_only: bool = False) -> None:
@@ -201,14 +200,10 @@ def show_packages(builtin_only: bool = False) -> None:
     )
 
     for pkg in packages:
-        try:
-            metadata = plugin_registry.get_package_metadata(pkg)
-            version = metadata.get("version", "-")
-            description = metadata.get("description", "")
-        except KeyError:
-            version = "-"
-            description = ""
-        table.add_row(pkg, version, str(type_counts.get(pkg, 0)), description)
+        metadata = plugin_registry.get_package_metadata(pkg)
+        table.add_row(
+            pkg, metadata.version, str(type_counts.get(pkg, 0)), metadata.description
+        )
 
     console.print(table)
 
@@ -286,7 +281,7 @@ def plugins(
         str | None,
         cyclopts.Parameter(help="Category to explore (e.g., endpoint)"),
     ] = None,
-    type_name: Annotated[
+    name: Annotated[
         str | None,
         cyclopts.Parameter(help="Type name for details (e.g., openai)"),
     ] = None,
@@ -325,7 +320,7 @@ def plugins(
 
     if category is None:
         show_overview()
-    elif type_name is None:
+    elif name is None:
         show_category_types(category)
     else:
-        show_type_details(category, type_name)
+        show_type_details(category, name)

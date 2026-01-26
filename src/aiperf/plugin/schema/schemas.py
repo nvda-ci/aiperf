@@ -105,7 +105,7 @@ class CategoriesFile(BaseModel):
 # =============================================================================
 
 
-class PluginPackageInfo(BaseModel):
+class PackageInfo(BaseModel):
     """Metadata about the plugin package.
 
     This section identifies your plugin package and is displayed in
@@ -119,25 +119,36 @@ class PluginPackageInfo(BaseModel):
         )
     )
     version: str = Field(
-        default="",
+        default="unknown",
         description="Semantic version of your plugin package, e.g., '1.0.0' or '2.1.3-beta'.",
     )
     description: str = Field(
-        default="",
+        default="unknown",
         description="One-line summary of what your plugin package provides.",
     )
     author: str = Field(
-        default="",
+        default="unknown",
         description="Author name, team, or organization, e.g., 'NVIDIA' or 'Jane Doe <jane@example.com>'.",
+    )
+    license: str = Field(
+        default="unknown",
+        description="License of the plugin package, e.g., 'Apache-2.0' or 'MIT'.",
+    )
+    homepage: str = Field(
+        default="unknown",
+        description="Homepage of the plugin package, e.g., 'https://example.com'.",
     )
 
     @property
-    def builtin(self) -> bool:
-        """Whether this is a built-in plugin package."""
+    def is_builtin(self) -> bool:
+        """Whether this is a built-in plugin package.
+
+        A built-in plugin package is one that is included in the AIPerf core distribution.
+        """
         return self.name == "aiperf"
 
 
-class PluginTypeEntry(BaseModel):
+class TypeSpec(BaseModel):
     """Specification for a plugin type.
 
     Each plugin type maps a name (like 'chat' or 'completions') to a Python
@@ -207,7 +218,7 @@ class PluginsFile(BaseModel):
         default="1.0",
         description="Version of the plugins.yaml schema format. Use '1.0' for current format.",
     )
-    plugin: PluginPackageInfo = Field(
+    plugin: PackageInfo = Field(
         description="Required section identifying your plugin package. See PluginPackageInfo for fields.",
     )
 
@@ -219,7 +230,7 @@ class PluginsFile(BaseModel):
         # Create a schema for category entries (dict of type name -> PluginTypeEntry)
         category_entry_schema = {
             "type": "object",
-            "additionalProperties": PluginTypeEntry.model_json_schema(**kwargs),
+            "additionalProperties": TypeSpec.model_json_schema(**kwargs),
         }
 
         schema["additionalProperties"] = category_entry_schema

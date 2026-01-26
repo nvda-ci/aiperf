@@ -9,8 +9,6 @@ from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, Us
 from aiperf.common.models import MetricResult, ProfileResults
 from aiperf.exporters.exporter_manager import ExporterManager
 from aiperf.plugin.enums import (
-    ConsoleExporterType,
-    DataExporterType,
     EndpointType,
 )
 
@@ -48,25 +46,18 @@ class TestExporterManager:
     async def test_export(
         self, endpoint_config, output_config, sample_records, mock_user_config
     ):
-        exporter_types = [
-            DataExporterType.JSON,
-        ]
-        mock_exporter_instances = []
-        mock_exporter_classes = {}
+        # Create a mock exporter instance
+        mock_instance = MagicMock()
+        mock_instance.export = AsyncMock()
+        mock_class = MagicMock(return_value=mock_instance)
 
-        for exporter_type in exporter_types:
-            instance = MagicMock()
-            instance.export = AsyncMock()
-            mock_class = MagicMock(return_value=instance)
-            mock_exporter_classes[exporter_type] = mock_class
-            mock_exporter_instances.append(instance)
+        # Create a mock PluginType that returns our mock class when loaded
+        mock_plugin_type = MagicMock()
+        mock_plugin_type.load.return_value = mock_class
 
-        with patch.object(
-            __import__(
-                "aiperf.common.factories", fromlist=["DataExporterFactory"]
-            ).DataExporterFactory,
-            "_registry",
-            mock_exporter_classes,
+        with patch(
+            "aiperf.exporters.exporter_manager.plugins.list_types",
+            return_value=[mock_plugin_type],
         ):
             manager = ExporterManager(
                 results=ProfileResults(
@@ -82,37 +73,36 @@ class TestExporterManager:
                 telemetry_results=None,
             )
             await manager.export_data()
-        for mock_class, mock_instance in zip(
-            mock_exporter_classes.values(), mock_exporter_instances, strict=False
-        ):
-            mock_class.assert_called_once()
-            mock_instance.export.assert_awaited_once()
+
+        mock_plugin_type.load.assert_called_once()
+        mock_class.assert_called_once()
+        mock_instance.export.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_export_console(
         self, endpoint_config, output_config, sample_records, mock_user_config
     ):
-        exporter_types = [
-            ConsoleExporterType.METRICS,
-            ConsoleExporterType.ERRORS,
-        ]
-        mock_exporter_instances = []
-        mock_exporter_classes = {}
         from rich.console import Console
 
-        for exporter_type in exporter_types:
+        # Create mock exporter instances for each console exporter type
+        mock_instances = []
+        mock_classes = []
+        mock_plugin_types = []
+
+        for _ in range(2):  # Simulate two console exporters
             instance = MagicMock()
             instance.export = AsyncMock()
             mock_class = MagicMock(return_value=instance)
-            mock_exporter_classes[exporter_type] = mock_class
-            mock_exporter_instances.append(instance)
+            mock_plugin_type = MagicMock()
+            mock_plugin_type.load.return_value = mock_class
 
-        with patch.object(
-            __import__(
-                "aiperf.common.factories", fromlist=["ConsoleExporterFactory"]
-            ).ConsoleExporterFactory,
-            "_registry",
-            mock_exporter_classes,
+            mock_instances.append(instance)
+            mock_classes.append(mock_class)
+            mock_plugin_types.append(mock_plugin_type)
+
+        with patch(
+            "aiperf.exporters.exporter_manager.plugins.list_types",
+            return_value=mock_plugin_types,
         ):
             manager = ExporterManager(
                 results=ProfileResults(
@@ -128,8 +118,10 @@ class TestExporterManager:
                 telemetry_results=None,
             )
             await manager.export_console(Console())
-        for mock_class, mock_instance in zip(
-            mock_exporter_classes.values(), mock_exporter_instances, strict=False
+
+        for mock_plugin_type, mock_class, mock_instance in zip(
+            mock_plugin_types, mock_classes, mock_instances, strict=False
         ):
+            mock_plugin_type.load.assert_called_once()
             mock_class.assert_called_once()
             mock_instance.export.assert_awaited_once()

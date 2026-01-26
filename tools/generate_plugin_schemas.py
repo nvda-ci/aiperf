@@ -170,13 +170,14 @@ def generate_plugins_schema() -> dict[str, Any]:
     Reads categories.yaml to generate specific properties for each category,
     with metadata schemas introspected from the metadata_class if defined.
     """
-    from aiperf.plugin.schema import PluginsFile, PluginTypeEntry
+    from aiperf.plugin.schema import PluginsFile
+    from aiperf.plugin.types import TypeEntry
 
     base_schema = PluginsFile.model_json_schema()
     categories = load_categories()
 
     # Base plugin type entry schema (without metadata)
-    plugin_entry_schema = PluginTypeEntry.model_json_schema()
+    plugin_entry_schema = TypeEntry.model_json_schema()
 
     # Collect all $defs from metadata schemas to hoist to root level
     all_defs: dict[str, Any] = dict(base_schema.get("$defs", {}))

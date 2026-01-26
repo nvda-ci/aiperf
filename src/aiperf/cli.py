@@ -22,19 +22,15 @@ def _get_help_text() -> str:
     # Get aiperf version for the title
     try:
         aiperf_meta = plugins.get_package_metadata("aiperf")
-        aiperf_version = aiperf_meta.get("version", "unknown")
+        aiperf_version = aiperf_meta.version
     except KeyError:
         aiperf_version = "unknown"
 
     packages = plugins.list_packages()
     plugin_list = []
     for pkg in packages:
-        try:
-            meta = plugins.get_package_metadata(pkg)
-            version = meta.get("version", "unknown")
-            plugin_list.append(f"{pkg} (v{version})")
-        except KeyError:
-            plugin_list.append(pkg)
+        meta = plugins.get_package_metadata(pkg)
+        plugin_list.append(f"{pkg} (v{meta.version})")
 
     plugins_str = ", ".join(plugin_list) if plugin_list else "none"
     return f"NVIDIA AIPerf v{aiperf_version} - AI Performance Benchmarking Tool\n\nInstalled Plugins: {plugins_str}"

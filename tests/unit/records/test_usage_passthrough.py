@@ -35,6 +35,9 @@ def mock_tokenizer():
 def parser():
     """Create a parser with mocked endpoint."""
     mock_endpoint = MagicMock()
+    # Create a mock class with metadata method for UserConfig validation
+    mock_endpoint_class = MagicMock()
+    mock_endpoint_class.return_value = mock_endpoint
 
     def mock_communication_init(self, service_config, **kwargs):
         from aiperf.common.mixins.aiperf_lifecycle_mixin import AIPerfLifecycleMixin
@@ -60,7 +63,11 @@ def parser():
         ),
         patch(
             "aiperf.records.inference_result_parser.plugins.get_class",
-            return_value=lambda **kwargs: mock_endpoint,
+            return_value=mock_endpoint_class,
+        ),
+        patch(
+            "aiperf.common.config.user_config.plugins.get_class",
+            return_value=mock_endpoint_class,
         ),
     ):
         parser = InferenceResultParser(

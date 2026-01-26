@@ -504,13 +504,13 @@ class MetricValueType(BasePydanticBackedStrEnum):
         """Get the MetricValueType for a given type."""
         # If the type is a simple type like float or int, we have to use __name__.
         # This is because using str() on float or int will return <class 'float'> or <class 'int'>, etc.
-        type_name = type.__name__
-        if type_name == "list":
+        name = type.__name__
+        if name == "list":
             # However, if the type is a list, we have to use str() to get the list type as well, e.g. list[int]
-            type_name = str(type)
-        elif type_name == "MetricValueTypeVarT":
-            type_name = "float"  # Default to float if the user did not specify a type.
-        return MetricValueType(type_name)
+            name = str(type)
+        elif name == "MetricValueTypeVarT":
+            name = "float"  # Default to float if the user did not specify a type.
+        return MetricValueType(name)
 
 
 class FrequencyMetricUnitInfo(BaseMetricUnitInfo):

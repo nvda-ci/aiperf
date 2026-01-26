@@ -35,7 +35,7 @@ Explore AIPerf plugins: aiperf plugins [category] [type]
 
 Category to explore (e.g., endpoint).
 
-#### `--type-name` `<str>`
+#### `--name` `<str>`
 
 Type name for details (e.g., openai).
 

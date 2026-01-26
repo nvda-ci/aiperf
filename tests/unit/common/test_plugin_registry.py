@@ -14,8 +14,8 @@ import yaml
 from aiperf.plugin import plugins
 from aiperf.plugin._plugin_registry import PluginRegistry
 from aiperf.plugin.constants import DEFAULT_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
+from aiperf.plugin.schema import PackageInfo
 from aiperf.plugin.types import (
-    PackageMetadata,
     PluginError,
     TypeEntry,
     TypeNotFoundError,
@@ -104,12 +104,12 @@ class TestTypeNotFoundError:
         assert "completions" in str(error)
 
     def test_error_stores_attributes(self):
-        """Test that error stores category, type_name, and available."""
+        """Test that error stores category, name, and available."""
         available = ["type_a", "type_b", "type_c"]
         error = TypeNotFoundError("my_category", "unknown_type", available)
 
         assert error.category == "my_category"
-        assert error.type_name == "unknown_type"
+        assert error.name == "unknown_type"
         assert error.available == available
 
     def test_error_is_plugin_error_subclass(self):
@@ -143,18 +143,17 @@ class TestTypeEntry:
         """Test that TypeEntry stores all fields correctly."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="test:TestClass",
             priority=75,
             description="Test description",
             metadata={"version": "1.0.0"},
-            is_builtin=False,
         )
 
         assert lazy.category == "test_category"
-        assert lazy.type_name == "test_type"
-        assert lazy.package_name == "test_package"
+        assert lazy.name == "test_type"
+        assert lazy.package == "test_package"
         assert lazy.class_path == "test:TestClass"
         assert lazy.priority == 75
         assert lazy.description == "Test description"
@@ -165,8 +164,8 @@ class TestTypeEntry:
         """Test that defaults are used for optional fields."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="test:TestClass",
         )
 
@@ -179,8 +178,8 @@ class TestTypeEntry:
         """Test that load() caches the class after first load."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="test.module:TestClass",
             metadata={},
         )
@@ -205,8 +204,8 @@ class TestTypeEntry:
         """Test that load() raises ValueError for invalid class_path."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="invalid_path_without_colon",
             metadata={},
         )
@@ -218,8 +217,8 @@ class TestTypeEntry:
         """Test that load() raises ImportError when module not found."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="nonexistent.module:TestClass",
             metadata={},
         )
@@ -231,8 +230,8 @@ class TestTypeEntry:
         """Test that load() raises AttributeError when class not found."""
         lazy = TypeEntry(
             category="test_category",
-            type_name="test_type",
-            package_name="test_package",
+            name="test_type",
+            package="test_package",
             class_path="test.module:NonexistentClass",
         )
 
@@ -247,8 +246,8 @@ class TestTypeEntry:
         """Test that load() raises ValueError for empty module path."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path=":TestClass",
         )
         with pytest.raises(ValueError, match="Invalid class_path format"):
@@ -258,8 +257,8 @@ class TestTypeEntry:
         """Test that load() raises ValueError for empty class name."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="module:",
         )
         with pytest.raises(ValueError, match="Invalid class_path format"):
@@ -273,8 +272,8 @@ class TestTypeEntryValidate:
         """Test that validate returns True for already loaded class."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="module:Class",
             loaded_class=mock_class,
         )
@@ -287,8 +286,8 @@ class TestTypeEntryValidate:
         """Test validate catches invalid class_path without colon."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="invalid_no_colon",
         )
 
@@ -300,8 +299,8 @@ class TestTypeEntryValidate:
         """Test validate catches empty module or class."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path=":Class",
         )
 
@@ -313,8 +312,8 @@ class TestTypeEntryValidate:
         """Test validate catches non-existent module."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="nonexistent_module_xyz:Class",
         )
 
@@ -326,8 +325,8 @@ class TestTypeEntryValidate:
         """Test validate succeeds for valid module without class check."""
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="os.path:join",  # Valid module, valid attribute
         )
 
@@ -340,8 +339,8 @@ class TestTypeEntryValidate:
         # Use a real module with a known class
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="pathlib:Path",
         )
 
@@ -354,8 +353,8 @@ class TestTypeEntryValidate:
         # Use a real module but a nonexistent class
         lazy = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="os:NonexistentClassXYZ123",
         )
 
@@ -452,10 +451,20 @@ class TestPluginRegistryBasics:
         """Test discovering plugin registries via entry points."""
         mock_ep = Mock()
         mock_ep.name = "test-plugin"
-        mock_ep.load.return_value = str(temp_registry_file)
+        mock_ep.value = "test.module:plugins.yaml"
 
-        with patch(
-            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        # Mock importlib.resources.files to return a path that resolves to our temp file
+        mock_traversable = Mock()
+        mock_traversable.__truediv__ = Mock(return_value=temp_registry_file)
+
+        with (
+            patch(
+                "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+            ),
+            patch(
+                "aiperf.plugin._plugin_registry.importlib.resources.files",
+                return_value=mock_traversable,
+            ),
         ):
             registry.discover_plugins()
 
@@ -498,27 +507,6 @@ class TestPluginRegistryBasics:
 
         assert "test-plugin" in registry._loaded_plugins
         assert "endpoint" in registry._types
-
-    def test_load_registry_simple_format(self, registry):
-        """Test loading registry with simple string format (module:Class)."""
-        yaml_content = {
-            "plugin": {"name": "simple-plugin", "version": "1.0.0"},
-            "endpoint": {
-                "simple": "simple.module:SimpleClass",  # String format
-            },
-        }
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(yaml_content, f)
-            path = Path(f.name)
-
-        registry.load_registry(path)
-
-        assert "simple" in registry._types["endpoint"]
-        lazy_type = registry._types["endpoint"]["simple"]
-        assert lazy_type.class_path == "simple.module:SimpleClass"
-        assert lazy_type.description == ""  # No description in simple format
-        assert lazy_type.priority == 0  # Default priority
 
 
 # ==============================================================================
@@ -608,8 +596,8 @@ class TestListTypes:
         lazy_types = registry.list_types("endpoint")
 
         # Should be sorted: low_priority_endpoint, test_endpoint
-        assert lazy_types[0].type_name == "low_priority_endpoint"
-        assert lazy_types[1].type_name == "test_endpoint"
+        assert lazy_types[0].name == "low_priority_endpoint"
+        assert lazy_types[1].name == "test_endpoint"
 
     def test_list_types_can_inspect_metadata(self, registry, temp_registry_file):
         """Test that user can inspect metadata without loading."""
@@ -619,7 +607,7 @@ class TestListTypes:
 
         # User can inspect metadata
         for lazy_type in lazy_types:
-            assert lazy_type.type_name
+            assert lazy_type.name
             assert lazy_type.description
             assert lazy_type.priority >= 0  # Can be 0 (default) or higher
             assert lazy_type.class_path
@@ -642,7 +630,7 @@ class TestListTypes:
 
             # User manually loads
             for lazy_type in lazy_types:
-                if lazy_type.type_name == "test_endpoint":
+                if lazy_type.name == "test_endpoint":
                     EndpointClass = lazy_type.load()
                     assert EndpointClass is mock_class
                     # User manually instantiates
@@ -705,8 +693,8 @@ class TestValidateAll:
 
         assert "endpoint" in errors
         assert len(errors["endpoint"]) == 1
-        type_name, error_msg = errors["endpoint"][0]
-        assert type_name == "invalid_type"
+        name, error_msg = errors["endpoint"][0]
+        assert name == "invalid_type"
         assert "Module not found" in error_msg
 
     def test_validate_all_multiple_categories(self, registry):
@@ -871,7 +859,7 @@ class TestPriorityResolution:
     """Tests for priority-based conflict resolution."""
 
     def test_priority_resolves_conflicts(self, registry):
-        """Test priority resolves conflicts when same type_name."""
+        """Test priority resolves conflicts when same name."""
         # Register type with priority 50
         yaml_content = {
             "plugin": {"name": "builtin", "version": "1.0.0", "builtin": True},
@@ -889,7 +877,7 @@ class TestPriorityResolution:
 
         registry.load_registry(path1)
 
-        # Register same type_name with priority 100
+        # Register same name with priority 100
         yaml_content2 = {
             "plugin": {"name": "plugin", "version": "1.0.0"},
             "endpoint": {
@@ -908,7 +896,7 @@ class TestPriorityResolution:
 
         # Plugin should win
         lazy_type = registry._types["endpoint"]["openai"]
-        assert lazy_type.package_name == "plugin"
+        assert lazy_type.package == "plugin"
         assert lazy_type.priority == 100
         assert lazy_type.class_path == "plugin:EnhancedOpenAI"
 
@@ -942,7 +930,7 @@ class TestPriorityResolution:
 
         # Plugin A should win
         lazy_type = registry._types["endpoint"]["custom"]
-        assert lazy_type.package_name == "plugin_a"
+        assert lazy_type.package == "plugin_a"
         assert lazy_type.priority == 100
 
     def test_no_conflict_both_registered(self, registry):
@@ -1056,7 +1044,7 @@ class TestImplicitPriority:
 
         # Package should win
         lazy_type = registry._types["endpoint"]["openai"]
-        assert lazy_type.package_name == "plugin"
+        assert lazy_type.package == "plugin"
         assert lazy_type.class_path == "plugin:EnhancedOpenAI"
 
     def test_higher_priority_package_wins_over_builtin(self, registry):
@@ -1094,7 +1082,7 @@ class TestImplicitPriority:
 
         # Package wins (higher priority)
         lazy_type = registry._types["endpoint"]["openai"]
-        assert lazy_type.package_name == "custom_plugin"
+        assert lazy_type.package == "custom_plugin"
         assert lazy_type.priority == 100
 
     def test_equal_priority_builtin_loses_to_package(self, registry):
@@ -1132,7 +1120,7 @@ class TestImplicitPriority:
 
         # Package wins (equal priority, but package beats built-in)
         lazy_type = registry._types["endpoint"]["custom"]
-        assert lazy_type.package_name == "override_plugin"
+        assert lazy_type.package == "override_plugin"
         assert lazy_type.priority == 10
 
     def test_lower_priority_package_loses(self, registry):
@@ -1170,7 +1158,7 @@ class TestImplicitPriority:
 
         # Package A wins (higher priority)
         lazy_type = registry._types["endpoint"]["custom"]
-        assert lazy_type.package_name == "plugin_a"
+        assert lazy_type.package == "plugin_a"
         assert lazy_type.priority == 100
 
 
@@ -1411,8 +1399,8 @@ class TestModuleLevelFunctions:
         """Test get_package_metadata returns metadata for loaded plugin."""
         metadata = plugins.get_package_metadata("aiperf")
 
-        assert isinstance(metadata, dict)
-        assert metadata.get("builtin") is True
+        assert isinstance(metadata, PackageInfo)
+        assert metadata.is_builtin is True
 
     def test_get_package_metadata_not_found(self):
         """Test get_package_metadata raises KeyError for unknown package."""
@@ -1429,7 +1417,7 @@ class TestModuleLevelFunctions:
 
         plugins.register(
             category="endpoint",
-            type_name="dynamic_endpoint",
+            name="dynamic_endpoint",
             cls=DynamicEndpoint,
             priority=50,
             is_builtin=False,
@@ -1451,7 +1439,7 @@ class TestModuleLevelFunctions:
 
         plugins.register(
             category="endpoint",
-            type_name=TestType.CUSTOM,
+            name=TestType.CUSTOM,
             cls=CustomClass,
         )
 
@@ -1471,7 +1459,7 @@ class TestModuleLevelFunctions:
         # Register low priority first
         plugins.register(
             category="endpoint",
-            type_name="conflict_type",
+            name="conflict_type",
             cls=LowPriorityClass,
             priority=10,
         )
@@ -1479,7 +1467,7 @@ class TestModuleLevelFunctions:
         # Register high priority second
         plugins.register(
             category="endpoint",
-            type_name="conflict_type",
+            name="conflict_type",
             cls=HighPriorityClass,
             priority=100,
         )
@@ -1651,15 +1639,15 @@ class TestConstants:
         """Test DEFAULT_SCHEMA_VERSION is in supported versions."""
         assert DEFAULT_SCHEMA_VERSION in SUPPORTED_SCHEMA_VERSIONS
 
-    def test_package_metadata_typed_dict(self):
-        """Test PackageMetadata is a TypedDict with expected keys."""
-        # Create a valid PackageMetadata
-        meta: PackageMetadata = {
-            "name": "test",
-            "version": "1.0.0",
-            "builtin": True,
-        }
-        assert meta["name"] == "test"
+    def test_package_info_model(self):
+        """Test PackageInfo is a Pydantic model with expected fields."""
+        # Create a valid PackageInfo
+        meta = PackageInfo(
+            name="test",
+            version="1.0.0",
+        )
+        assert meta.name == "test"
+        assert meta.is_builtin is False  # Only "aiperf" is builtin
 
 
 # ==============================================================================
@@ -1708,7 +1696,7 @@ class TestIntegration:
 
         # Package should override (higher priority)
         lazy_type = registry._types["endpoint"]["openai"]
-        assert lazy_type.package_name == "custom-plugin"
+        assert lazy_type.package == "custom-plugin"
         assert lazy_type.priority == 110
         assert lazy_type.class_path == "custom.endpoints:CustomOpenAI"
 
@@ -1781,7 +1769,7 @@ class TestIntegration:
 
         # 3. List types
         types = registry.list_types("endpoint")
-        type_names = [t.type_name for t in types]
+        type_names = [t.name for t in types]
         assert "lifecycle_endpoint" in type_names
 
         # 4. Validate
@@ -1825,7 +1813,7 @@ class TestEdgeCases:
 
         plugins.register(
             category="brand_new_category",
-            type_name="new_type",
+            name="new_type",
             cls=NewCategoryClass,
         )
 
@@ -1836,16 +1824,18 @@ class TestEdgeCases:
 
         plugins.reset()
 
-    def test_type_entry_frozen_dataclass(self):
+    def test_type_entry_frozen_model(self):
         """Test that TypeEntry is frozen (immutable)."""
+        from pydantic import ValidationError
+
         entry = TypeEntry(
             category="cat",
-            type_name="type",
-            package_name="pkg",
+            name="type",
+            package="pkg",
             class_path="mod:Class",
         )
 
-        with pytest.raises(AttributeError):
+        with pytest.raises(ValidationError, match="frozen"):
             entry.category = "new_cat"  # Should raise - frozen
 
     def test_class_to_name_reverse_mapping_updated_on_get(self, registry, mock_class):
@@ -1873,7 +1863,7 @@ class TestEdgeCases:
             assert registry._class_to_name[cls] == "mapped_type"
 
     def test_discover_plugins_path_object(self, registry):
-        """Test discover_plugins with Path object return."""
+        """Test discover_plugins with Path object return via importlib.resources."""
         yaml_content = {
             "plugin": {"name": "path-plugin", "version": "1.0.0"},
             "endpoint": {"path_type": {"class": "mod:Class"}},
@@ -1885,10 +1875,20 @@ class TestEdgeCases:
 
         mock_ep = Mock()
         mock_ep.name = "path-plugin"
-        mock_ep.load.return_value = path  # Return Path object
+        mock_ep.value = "path.module:plugins.yaml"
 
-        with patch(
-            "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+        # Mock importlib.resources.files to return a path that resolves to our temp file
+        mock_traversable = Mock()
+        mock_traversable.__truediv__ = Mock(return_value=path)
+
+        with (
+            patch(
+                "aiperf.plugin._plugin_registry.entry_points", return_value=[mock_ep]
+            ),
+            patch(
+                "aiperf.plugin._plugin_registry.importlib.resources.files",
+                return_value=mock_traversable,
+            ),
         ):
             registry.discover_plugins()
 

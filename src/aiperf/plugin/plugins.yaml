@@ -8,7 +8,7 @@
 # Schema version: 1.0
 #
 # Format:
-#   type_name:
+#   name:
 #     class: module.path:ClassName
 #     description: Human-readable description (required)
 #     priority: int (optional, default: 0, for conflict resolution only)

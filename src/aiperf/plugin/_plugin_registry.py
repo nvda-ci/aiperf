@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-from importlib.abc import Traversable
+import importlib
 from importlib.metadata import entry_points
+from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import Any
 from weakref import WeakKeyDictionary
 
 from pydantic import ValidationError
@@ -15,32 +15,14 @@ from aiperf.plugin.constants import (
     DEFAULT_ENTRY_POINT_GROUP,
     SUPPORTED_SCHEMA_VERSIONS,
 )
-from aiperf.plugin.schema import PluginsFile
+from aiperf.plugin.schema import PackageInfo, PluginsFile, TypeSpec
 from aiperf.plugin.types import (
-    PackageMetadata,
     TypeEntry,
     TypeNotFoundError,
 )
 
 _logger = AIPerfLogger(__name__)
 _yaml = YAML(typ="safe")
-
-
-def _get_builtins_path() -> Path | Traversable:
-    """Get path to built-in plugins.yaml."""
-    try:
-        from importlib.resources import files
-
-        return files("aiperf.plugin") / "plugins.yaml"
-    except Exception as e:
-        # Fallback to relative path if running from source
-        fallback = Path(__file__).parent / "plugins.yaml"
-        if not fallback.exists():
-            raise RuntimeError(
-                "Built-in plugins.yaml not found in aiperf.plugin package.\n"
-                "This is a critical error - the package system cannot function without it."
-            ) from e
-        return fallback
 
 
 # ==============================================================================
@@ -54,21 +36,30 @@ class PluginRegistry(Singleton):
     def __init__(self) -> None:
         super().__init__()
         _logger.debug("Initialized plugin registry singleton")
-        # Nested dict: category -> type_name -> TypeEntry
+        # Nested dict: category -> name -> TypeEntry
         self._types: dict[str, dict[str, TypeEntry]] = {}
         # Reverse lookup: class_path -> TypeEntry
         self._type_entries_by_class_path: dict[str, TypeEntry] = {}
         # Loaded plugin metadata: plugin_name -> metadata
-        self._loaded_plugins: dict[str, PackageMetadata] = {}
+        self._loaded_plugins: dict[str, PackageInfo] = {}
         # Reverse mapping from class to registered name (for find_registered_name)
         self._class_to_name: WeakKeyDictionary[type, str] = WeakKeyDictionary()
 
         # Load the builtin registry manifest and discover plugins once on startup
-        self.load_registry(_get_builtins_path())
+        self.load_registry("aiperf.plugin:plugins.yaml")
         self.discover_plugins()
 
     def load_registry(self, registry_path: Path | str | Traversable) -> None:
         """See module-level load_registry() for details."""
+        if isinstance(registry_path, str) and ":" in registry_path:
+            package, _, path = registry_path.rpartition(":")
+            try:
+                registry_path = importlib.resources.files(package) / path
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid registry path: {registry_path}\nReason: {e!r}"
+                ) from e
+
         # Load YAML content
         yaml_content = self._read_registry_file(registry_path)
 
@@ -96,14 +87,13 @@ class PluginRegistry(Singleton):
 
         # Extract plugin info from validated model
         package_name = plugins_file.plugin.name
-        is_builtin = plugins_file.plugin.builtin
 
         _logger.info(
-            f"Loading registry: {package_name} (builtin={is_builtin}, schema={plugins_file.schema_version})"
+            f"Loading registry: {package_name} (schema={plugins_file.schema_version})"
         )
 
         # Register types from manifest (use model_extra for category data)
-        self._register_types_from_manifest(package_name, plugins_file, is_builtin)
+        self._register_types_from_manifest(package_name, plugins_file)
 
         # Count categories (fields in model_extra)
         category_count = (
@@ -128,7 +118,8 @@ class PluginRegistry(Singleton):
         for ep in plugin_eps:
             try:
                 # Load entry point (should return path to plugins.yaml)
-                registry_path = ep.load()
+                module_name, _, filename = ep.value.rpartition(":")
+                registry_path = importlib.resources.files(module_name) / filename
 
                 if not isinstance(registry_path, str | Path):
                     _logger.warning(
@@ -168,7 +159,7 @@ class PluginRegistry(Singleton):
             return []
 
         impls = list(self._types[category].values())
-        impls.sort(key=lambda x: x.type_name)  # Alphabetical order
+        impls.sort(key=lambda x: x.name)  # Alphabetical order
 
         _logger.debug(lambda cat=category, i=impls: f"Listed {len(i)} types for {cat}")
 
@@ -181,12 +172,12 @@ class PluginRegistry(Singleton):
         errors: dict[str, list[tuple[str, str]]] = {}
 
         for category, types in self._types.items():
-            for type_name, entry in types.items():
+            for name, entry in types.items():
                 valid, error = entry.validate(check_class=check_class)
                 if not valid and error:
                     if category not in errors:
                         errors[category] = []
-                    errors[category].append((type_name, error))
+                    errors[category].append((name, error))
 
         return errors
 
@@ -194,9 +185,7 @@ class PluginRegistry(Singleton):
         """See module-level list_packages() for details."""
         if builtin_only:
             return [
-                name
-                for name, meta in self._loaded_plugins.items()
-                if meta.get("builtin", False)
+                name for name, meta in self._loaded_plugins.items() if meta.is_builtin
             ]
         return list(self._loaded_plugins.keys())
 
@@ -223,7 +212,7 @@ class PluginRegistry(Singleton):
 
         return self._load_entry(lazy_type)
 
-    def _get_class_by_name(self, category: str, type_name: str) -> type:
+    def _get_class_by_name(self, category: str, name: str) -> type:
         """Get type by short name."""
         if category not in self._types:
             raise KeyError(
@@ -231,17 +220,17 @@ class PluginRegistry(Singleton):
                 f"Available categories: {sorted(self._types.keys())}"
             )
 
-        if type_name not in self._types[category]:
+        if name not in self._types[category]:
             available = list(self._types[category].keys())
-            raise TypeNotFoundError(category, type_name, available)
+            raise TypeNotFoundError(category, name, available)
 
-        lazy_type = self._types[category][type_name]
+        lazy_type = self._types[category][name]
         return self._load_entry(lazy_type)
 
     def _load_entry(self, entry: TypeEntry) -> type:
         """Load a TypeEntry and update the reverse class-to-name mapping."""
         cls = entry.load()
-        self._class_to_name[cls] = entry.type_name
+        self._class_to_name[cls] = entry.name
         return cls
 
     def find_registered_name(self, category: str, cls: type) -> str | None:
@@ -259,9 +248,9 @@ class PluginRegistry(Singleton):
         # Slow path: search by class path for classes not loaded via registry
         target_class_path = f"{cls.__module__}:{cls.__name__}"
 
-        for type_name, lazy_type in self._types[category].items():
-            if lazy_type.class_path == target_class_path:
-                return type_name
+        for _, entry in self._types[category].items():
+            if entry.class_path == target_class_path:
+                return entry.name
 
         return None
 
@@ -314,12 +303,12 @@ class PluginRegistry(Singleton):
             ) from e
 
     def _register_types_from_manifest(
-        self, package_name: str, plugins_file: PluginsFile, is_builtin: bool
+        self, package: str, plugins_file: PluginsFile
     ) -> None:
         """Register types from manifest with conflict resolution."""
         # Load package metadata from installed package
-        package_metadata = self._load_package_metadata(package_name, is_builtin)
-        self._loaded_plugins[package_name] = package_metadata
+        package_metadata = self._load_package_metadata(package)
+        self._loaded_plugins[package] = package_metadata
 
         # Process each category from model_extra (where Pydantic stores extra fields)
         categories = plugins_file.model_extra or {}
@@ -335,92 +324,87 @@ class PluginRegistry(Singleton):
                 self._types[category_name] = {}
 
             # Register each type
-            for type_name, type_data in types_dict.items():
+            for name, type_spec_data in types_dict.items():
+                # Convert raw dict to TypeSpec (model_extra stores raw dicts)
+                if isinstance(type_spec_data, dict):
+                    try:
+                        type_spec = TypeSpec.model_validate(type_spec_data)
+                    except ValidationError as e:
+                        _logger.warning(
+                            f"Invalid type spec for {category_name}:{name}: {e}"
+                        )
+                        continue
+                else:
+                    _logger.warning(
+                        f"Invalid type spec format for {category_name}:{name}: "
+                        f"expected dict, got {type(type_spec_data).__name__}"
+                    )
+                    continue
+
                 self._register_type(
                     category_name=category_name,
-                    type_name=type_name,
-                    type_data=type_data,
-                    package_name=package_name,
-                    package_metadata=package_metadata,
-                    is_builtin=is_builtin,
+                    name=name,
+                    type_spec=type_spec,
+                    package=package,
                 )
 
     def _register_type(
         self,
         category_name: str,
-        type_name: str,
-        type_data: dict[str, Any],
-        package_name: str,
-        package_metadata: PackageMetadata,
-        is_builtin: bool,
+        name: str,
+        type_spec: TypeSpec,
+        package: str,
     ) -> None:
         """Register a single type with conflict resolution."""
-        if not isinstance(type_data, dict):
-            _logger.warning(
-                f"Invalid type format for {category_name}:{type_name}: expected dict with 'class' key, "
-                f"got {type(type_data).__name__}"
-            )
-            return
+        # Validate required class path
+        if not type_spec.class_:
+            raise ValueError(f"Missing 'class' field for {category_name}:{name}")
 
-        # Extract required class path
-        class_path = type_data.get("class")
-        if not class_path:
-            _logger.warning(f"Missing 'class' field for {category_name}:{type_name}")
-            return
-
-        # Extract optional fields with defaults
-        priority = type_data.get("priority", 0)
-        description = type_data.get("description", "")
-
-        # Create lazy type
-        lazy_type = TypeEntry(
-            category=category_name,
-            type_name=type_name,
-            package_name=package_name,
-            class_path=class_path,
-            priority=priority,
-            description=description,
-            metadata=package_metadata,
-            is_builtin=is_builtin,
-        )
+        entry = TypeEntry.from_type_spec(type_spec, package, category_name, name)
 
         # Handle conflicts with smart resolution
-        self._resolve_conflict_and_register(category_name, type_name, lazy_type)
+        self._resolve_conflict_and_register(category_name, name, entry)
 
     def _resolve_conflict_and_register(
         self,
         category_name: str,
-        type_name: str,
-        lazy_type: TypeEntry,
+        name: str,
+        entry: TypeEntry,
     ) -> None:
         """Resolve conflicts and register type."""
-        existing = self._types[category_name].get(type_name)
+        existing = self._types[category_name].get(name)
 
         if existing is None:
             # No conflict - register directly
-            self._types[category_name][type_name] = lazy_type
-            self._type_entries_by_class_path[lazy_type.class_path] = lazy_type
+            self._types[category_name][name] = entry
+            self._type_entries_by_class_path[entry.class_path] = entry
 
             _logger.debug(
-                lambda: f"Registered {category_name}:{type_name} from {lazy_type.package_name} (priority={lazy_type.priority})"
+                lambda cat=category_name,
+                n=name,
+                e=entry: f"Registered {cat}:{n} from {e.package} (priority={e.priority})"
             )
             return
 
         # Conflict exists - resolve based on priority and type
-        winner, reason = self._resolve_conflict(existing, lazy_type)
+        winner, reason = self._resolve_conflict(existing, entry)
 
-        if winner is lazy_type:
+        if winner is entry:
             # New type wins
-            self._types[category_name][type_name] = lazy_type
-            self._type_entries_by_class_path[lazy_type.class_path] = lazy_type
+            self._types[category_name][name] = entry
+            self._type_entries_by_class_path[entry.class_path] = entry
 
             _logger.info(
-                f"Override registered {category_name}:{type_name}: {lazy_type.package_name} beats {existing.package_name} ({reason})"
+                f"Override registered {category_name}:{name}: {entry.package} beats {existing.package} ({reason})"
             )
         else:
             # Existing type wins
             _logger.debug(
-                lambda: f"Override rejected {category_name}:{type_name}: {existing.package_name} beats {lazy_type.package_name} ({reason})"
+                lambda cat=category_name,
+                n=name,
+                ex=existing,
+                e=entry,
+                r=reason: f"Override rejected {cat}:{n}: {ex.package} beats {e.package} ({r})"
             )
 
     def _resolve_conflict(
@@ -443,31 +427,26 @@ class PluginRegistry(Singleton):
 
         # Rule 3: Both same type - first wins (warn)
         _logger.warning(
-            f"Plugin conflict for {new.category}:{new.type_name}: {existing.package_name} vs {new.package_name} (priority={new.priority})"
+            f"Plugin conflict for {new.category}:{new.name}: {existing.package} vs {new.package} (priority={new.priority})"
         )
 
         return existing, "first registered wins (both same type)"
 
-    def _load_package_metadata(
-        self, package_name: str, is_builtin: bool
-    ) -> PackageMetadata:
+    def _load_package_metadata(self, package: str) -> PackageInfo:
         """Load package metadata from installed package."""
         try:
             import importlib.metadata
 
-            pkg_metadata = importlib.metadata.metadata(package_name)
+            pkg_metadata = importlib.metadata.metadata(package)
 
-            return PackageMetadata(
-                name=pkg_metadata.get("Name", package_name),
+            return PackageInfo(
+                name=pkg_metadata.get("Name", package),
                 version=pkg_metadata.get("Version", "unknown"),
                 description=pkg_metadata.get("Summary", ""),
                 author=pkg_metadata.get("Author", ""),
                 license=pkg_metadata.get("License", ""),
                 homepage=pkg_metadata.get("Home-page", ""),
-                builtin=is_builtin,
             )
         except Exception as e:
-            _logger.warning(
-                f"Failed to load package metadata for {package_name}: {e!r}"
-            )
-            return PackageMetadata(name=package_name, builtin=is_builtin)
+            _logger.warning(f"Failed to load package metadata for {package}: {e!r}")
+            return PackageInfo(name=package)

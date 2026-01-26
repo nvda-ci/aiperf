@@ -161,12 +161,12 @@ class PluginManifest:
     Attributes:
         plugin_name: Plugin package name
         metadata: Plugin metadata (version, author, etc.)
-        implementations: Dict of protocol → {impl_name → impl_info}
+        implementations: Dict of protocol → {name → impl_info}
     """
 
     plugin_name: str
     metadata: dict[str, Any]
-    implementations: dict[str, dict[str, dict]]  # protocol → impl_name → info
+    implementations: dict[str, dict[str, dict]]  # protocol → name → info
 
     @classmethod
     def from_yaml(cls, plugin_name: str, yaml_content: str) -> "PluginManifest":
@@ -205,7 +205,7 @@ class LazyImplementation:
 
     Attributes:
         protocol_name: Protocol type (e.g., "phase_hook")
-        impl_name: Implementation name (e.g., "datadog")
+        name: Implementation name (e.g., "datadog")
         plugin_name: Plugin providing this implementation
         class_path: Fully qualified class path (e.g., "pkg.module:ClassName")
         metadata: Implementation metadata (description, config_schema, etc.)
@@ -213,7 +213,7 @@ class LazyImplementation:
     """
 
     protocol_name: str
-    impl_name: str
+    name: str
     plugin_name: str
     class_path: str
     metadata: dict[str, Any]
@@ -285,7 +285,7 @@ class LazyPluginRegistry:
     """
 
     def __init__(self):
-        # protocol → impl_name → LazyImplementation
+        # protocol → name → LazyImplementation
         self._implementations: dict[str, dict[str, LazyImplementation]] = {}
 
         # Track loaded plugins
@@ -369,11 +369,11 @@ class LazyPluginRegistry:
 
         # Register each implementation
         for protocol_name, impls in manifest.implementations.items():
-            for impl_name, impl_info in impls.items():
+            for name, impl_info in impls.items():
                 # Create lazy implementation entry
                 lazy_impl = LazyImplementation(
                     protocol_name=protocol_name,
-                    impl_name=impl_name,
+                    name=name,
                     plugin_name=plugin_name,
                     class_path=impl_info.get('class') or impl_info,  # Support simple or detailed format
                     metadata=impl_info if isinstance(impl_info, dict) else {},
@@ -384,14 +384,14 @@ class LazyPluginRegistry:
                     continue
 
                 # Register (NOT loaded yet!)
-                self._implementations.setdefault(protocol_name, {})[impl_name] = lazy_impl
+                self._implementations.setdefault(protocol_name, {})[name] = lazy_impl
 
-    def get_implementation(self, protocol_name: str, impl_name: str) -> type:
+    def get_implementation(self, protocol_name: str, name: str) -> type:
         """Get implementation class (lazy load).
 
         Args:
             protocol_name: Protocol type
-            impl_name: Implementation name
+            name: Implementation name
 
         Returns:
             Loaded class
@@ -402,28 +402,28 @@ class LazyPluginRegistry:
         if protocol_name not in self._implementations:
             raise KeyError(f"No implementations registered for protocol: {protocol_name}")
 
-        if impl_name not in self._implementations[protocol_name]:
+        if name not in self._implementations[protocol_name]:
             available = list(self._implementations[protocol_name].keys())
             raise KeyError(
-                f"Implementation '{impl_name}' not found for protocol '{protocol_name}'. "
+                f"Implementation '{name}' not found for protocol '{protocol_name}'. "
                 f"Available: {available}"
             )
 
-        lazy_impl = self._implementations[protocol_name][impl_name]
+        lazy_impl = self._implementations[protocol_name][name]
         return lazy_impl.load()  # LAZY LOAD HERE!
 
-    def create_instance(self, protocol_name: str, impl_name: str, **kwargs) -> Any:
+    def create_instance(self, protocol_name: str, name: str, **kwargs) -> Any:
         """Create instance of implementation (lazy load + instantiate).
 
         Args:
             protocol_name: Protocol type
-            impl_name: Implementation name
+            name: Implementation name
             **kwargs: Init arguments
 
         Returns:
             Instance
         """
-        lazy_impl = self._implementations[protocol_name][impl_name]
+        lazy_impl = self._implementations[protocol_name][name]
         return lazy_impl.create_instance(**kwargs)
 
     def list_implementations(self, protocol_name: str) -> list[str]:
@@ -440,18 +440,18 @@ class LazyPluginRegistry:
     def get_implementation_info(
         self,
         protocol_name: str,
-        impl_name: str
+        name: str
     ) -> dict:
         """Get implementation metadata without loading it.
 
         Args:
             protocol_name: Protocol type
-            impl_name: Implementation name
+            name: Implementation name
 
         Returns:
             Metadata dict (description, config_schema, etc.)
         """
-        lazy_impl = self._implementations[protocol_name][impl_name]
+        lazy_impl = self._implementations[protocol_name][name]
         return {
             'plugin': lazy_impl.plugin_name,
             'class_path': lazy_impl.class_path,
@@ -842,9 +842,9 @@ def list_implementations(protocol):
 
     click.echo(f"Available {protocol} implementations:\n")
 
-    for impl_name in impls:
-        info = registry.get_implementation_info(protocol, impl_name)
-        click.echo(f"  • {impl_name}")
+    for name in impls:
+        info = registry.get_implementation_info(protocol, name)
+        click.echo(f"  • {name}")
         click.echo(f"    Plugin: {info['plugin']}")
         if info['description']:
             click.echo(f"    Description: {info['description']}")

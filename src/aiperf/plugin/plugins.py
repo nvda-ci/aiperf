@@ -9,7 +9,7 @@ Usage:
 
     EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
     for impl in plugins.list_types(PluginCategory.ENDPOINT):
-        print(f"{impl.type_name}: {impl.description}")
+        print(f"{impl.name}: {impl.description}")
 
 Conflict resolution: higher priority wins; equal priority: external beats built-in.
 """
@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.plugin._plugin_registry import PluginRegistry
-from aiperf.plugin.types import PackageMetadata, TypeEntry
+from aiperf.plugin.schema import PackageInfo
+from aiperf.plugin.types import TypeEntry
 
 _logger = AIPerfLogger(__name__)
 
@@ -253,12 +254,12 @@ def list_types(category: PluginCategory) -> list[TypeEntry]:
         category: Plugin category to list types for.
 
     Returns:
-        List of TypeEntry objects with metadata (type_name, description, priority, etc.).
+        List of TypeEntry objects with metadata (name, description, priority, etc.).
         Returns empty list if category doesn't exist.
 
     Example:
         >>> for impl in plugins.list_types(PluginCategory.ENDPOINT):
-        ...     print(f"{impl.type_name}: {impl.description}")
+        ...     print(f"{impl.name}: {impl.description}")
     """
     return _registry.list_types(category)
 
@@ -273,15 +274,15 @@ def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
         check_class: If True, also verify class exists via AST parsing.
 
     Returns:
-        Dict mapping category names to lists of (type_name, error_message) tuples.
+        Dict mapping category names to lists of (name, error_message) tuples.
         Empty dict means all types are valid.
 
     Example:
         >>> errors = plugins.validate_all(check_class=True)
         >>> if errors:
         ...     for category, type_errors in errors.items():
-        ...         for type_name, error in type_errors:
-        ...             print(f"{category}:{type_name}: {error}")
+        ...         for name, error in type_errors:
+        ...             print(f"{category}:{name}: {error}")
     """
     return _registry.validate_all(check_class=check_class)
 
@@ -345,14 +346,14 @@ def list_packages(builtin_only: bool = False) -> list[str]:
     return _registry.list_packages(builtin_only)
 
 
-def get_package_metadata(package_name: str) -> PackageMetadata:
+def get_package_metadata(package_name: str) -> PackageInfo:
     """Get metadata for a loaded plugin package.
 
     Args:
         package_name: Name of the plugin package.
 
     Returns:
-        PackageMetadata dict with name, version, description, author, etc.
+        PackageInfo dict with name, version, description, author, etc.
 
     Raises:
         KeyError: If the package has not been loaded.
@@ -490,7 +491,7 @@ def reset() -> None:
 
 def register(
     category: str,
-    type_name: str,
+    name: str,
     cls: type,
     *,
     priority: int = 0,
@@ -503,7 +504,7 @@ def register(
 
     Args:
         category: Plugin category to register under.
-        type_name: Short name for the type (can be an enum value).
+        name: Short name for the type (can be an enum value).
         cls: The class to register.
         priority: Conflict resolution priority (higher wins). Default: 0.
         is_builtin: Whether this is a built-in type. Default: True.
@@ -514,19 +515,18 @@ def register(
         >>> plugins.register('endpoint', 'custom', MyCustomEndpoint, priority=10)
     """
     # Convert enum to string if needed
-    name = type_name.value if hasattr(type_name, "value") else str(type_name)
+    name = name.value if hasattr(name, "value") else str(name)
 
-    # Create a TypeEntry with the pre-loaded class
-    lazy_type = TypeEntry(
+    # Create a TypeSpec with the pre-loaded class
+    type_spec = TypeEntry(
         category=category,
-        type_name=name,
-        package_name="aiperf-test" if not is_builtin else "aiperf",
+        name=name,
+        package=cls.__module__,
         class_path=f"{cls.__module__}:{cls.__name__}",
         priority=priority,
         description=cls.__doc__ or "",
-        metadata=PackageMetadata(name="aiperf", builtin=is_builtin),
+        metadata={},
         loaded_class=cls,
-        is_builtin=is_builtin,
     )
 
     # Ensure category exists
@@ -534,7 +534,7 @@ def register(
         _registry._types[category] = {}
 
     # Use conflict resolution to handle priority-based overrides
-    _registry._resolve_conflict_and_register(category, name, lazy_type)
+    _registry._resolve_conflict_and_register(category, name, type_spec)
 
     _logger.debug(
         lambda: f"Registered dynamic type {category}:{name} -> {cls.__name__} (priority={priority})"
@@ -573,9 +573,7 @@ def create_enum(category: str, enum_name: str) -> type:
         )
 
     # Create members dict: UPPER_SNAKE_CASE name -> string value
-    members = {
-        impl.type_name.replace("-", "_").upper(): impl.type_name for impl in types
-    }
+    members = {impl.name.replace("-", "_").upper(): impl.name for impl in types}
 
     # Get the caller's module so pickle can find the enum
     frame = sys._getframe(1)
@@ -620,7 +618,7 @@ def detect_type_from_url(category: str, url: str) -> str:
             if hasattr(cls, "metadata"):
                 metadata = cls.metadata()
                 if hasattr(metadata, "url_schemes") and scheme in metadata.url_schemes:
-                    return impl.type_name
+                    return impl.name
         except Exception:
             continue
 

@@ -2880,7 +2880,7 @@ from aiperf.plugin import plugin_registry
 
 impls = plugin_registry.list_types("endpoint")
 for impl in impls:
-    if impl.impl_name == "my_endpoint":
+    if impl.name == "my_endpoint":
         print(f"Priority: {impl.priority}")
         print(f"Plugin: {impl.plugin_name}")
 ```

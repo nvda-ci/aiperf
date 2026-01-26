@@ -2,48 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 import ast
 import importlib
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import Self
 
 from aiperf.common.aiperf_logger import AIPerfLogger
+from aiperf.plugin.schema.schemas import TypeSpec
 
 _logger = AIPerfLogger(__name__)
-
-# ==============================================================================
-# Type Definitions
-# ==============================================================================
-
-
-class PackageMetadata(TypedDict, total=False):
-    """Package metadata from YAML manifest."""
-
-    name: str
-    version: str
-    description: str
-    author: str
-    license: str
-    homepage: str
-    builtin: bool
-
-
-class ManifestData(TypedDict, total=False):
-    """YAML manifest structure."""
-
-    schema_version: str
-    plugin: dict[str, Any]
-
-
-# TypeSpec uses functional form because 'class' is a Python keyword.
-TypeSpec = TypedDict(
-    "TypeSpec",
-    {
-        "class": str,  # Fully qualified class path (module:Class)
-        "description": str,
-        "priority": int,
-    },
-    total=False,
-)
 
 
 # ==============================================================================
@@ -58,14 +26,14 @@ class PluginError(Exception):
 class TypeNotFoundError(PluginError):
     """Type not found in category. Includes available types in error message."""
 
-    def __init__(self, category: str, type_name: str, available: list[str]) -> None:
+    def __init__(self, category: str, name: str, available: list[str]) -> None:
         self.category = category
-        self.type_name = type_name
+        self.name = name
         self.available = available
 
         available_str = "\n".join(f"  • {name}" for name in sorted(available))
         super().__init__(
-            f"Type '{type_name}' not found for category '{category}'.\n"
+            f"Type '{name}' not found for category '{category}'.\n"
             f"Available types:\n{available_str}"
         )
 
@@ -75,31 +43,44 @@ class TypeNotFoundError(PluginError):
 # ==============================================================================
 
 
-@dataclass(frozen=True, slots=True)
-class TypeEntry:
+class TypeEntry(BaseModel):
     """Lazy-loading type entry with metadata. Call load() to import the class."""
 
-    category: str = field(metadata={"description": "Category identifier"})
-    type_name: str = field(metadata={"description": "Type name"})
-    package_name: str = field(metadata={"description": "Package providing this type"})
-    class_path: str = field(
-        metadata={"description": "Fully qualified class path (module:Class)"}
+    model_config = ConfigDict(frozen=True)
+
+    category: str = Field(..., description="Category identifier")
+    name: str = Field(..., description="Type name")
+    package: str = Field(..., description="Package providing this type")
+    class_path: str = Field(
+        ..., description="Fully qualified class path (module:Class)"
     )
-    priority: int = field(
-        default=0, metadata={"description": "Conflict resolution priority"}
+    priority: int = Field(default=0, description="Conflict resolution priority")
+    description: str = Field(default="", description="Human-readable description")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Type-specific metadata from plugins.yaml"
     )
-    description: str = field(
-        default="", metadata={"description": "Human-readable description"}
+    loaded_class: type | None = Field(
+        default=None, description="Cached class after loading"
     )
-    metadata: PackageMetadata = field(
-        default_factory=dict, metadata={"description": "Package metadata"}
-    )
-    loaded_class: type | None = field(
-        default=None, metadata={"description": "Cached class after loading"}
-    )
-    is_builtin: bool = field(
-        default=False, metadata={"description": "Whether this is built-in"}
-    )
+
+    @property
+    def is_builtin(self) -> bool:
+        """Whether this is a built-in type."""
+        return self.package == "aiperf"
+
+    @classmethod
+    def from_type_spec(
+        cls, type_spec: TypeSpec, package: str, category: str, name: str
+    ) -> Self:
+        return cls(
+            category=category,
+            name=name,
+            package=package,
+            class_path=type_spec.class_,
+            priority=type_spec.priority,
+            description=type_spec.description,
+            metadata=type_spec.metadata or {},
+        )
 
     def load(self) -> type:
         """Import and return the class (cached after first call)."""
@@ -125,7 +106,7 @@ class TypeEntry:
             object.__setattr__(self, "loaded_class", cls)
 
             _logger.debug(
-                lambda: f"Loaded {self.category}:{self.type_name} from {self.class_path}"
+                lambda: f"Loaded {self.category}:{self.name} from {self.class_path}"
             )
 
             return cls
@@ -133,14 +114,14 @@ class TypeEntry:
         except ImportError as e:
             # Raise enriched ImportError for backward compatibility
             raise ImportError(
-                f"Failed to import module for {self.category}:{self.type_name} from '{self.class_path}'\n"
+                f"Failed to import module for {self.category}:{self.name} from '{self.class_path}'\n"
                 f"Reason: {e!r}\n"
                 f"Tip: Check that the module is installed and importable"
             ) from e
         except AttributeError as e:
             # Raise enriched AttributeError for backward compatibility
             raise AttributeError(
-                f"Class '{class_name}' not found for {self.category}:{self.type_name} from '{self.class_path}'\n"
+                f"Class '{class_name}' not found for {self.category}:{self.name} from '{self.class_path}'\n"
                 f"Reason: {e!r}\n"
                 f"Tip: Check that the class name is spelled correctly and exported from the module"
             ) from e

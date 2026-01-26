@@ -85,7 +85,7 @@ class TestShowTypeDetails:
         if categories:
             types = plugin_registry.list_types(categories[0])
             if types:
-                show_type_details(categories[0], types[0].type_name)
+                show_type_details(categories[0], types[0].name)
                 assert mock_console.print.call_count >= 1
 
     def test_invalid_type(self, mock_console: MagicMock) -> None:
@@ -111,7 +111,7 @@ class TestMainCommand:
 
     def test_no_args_shows_overview(self, mock_console: MagicMock) -> None:
         """Test that no args shows overview."""
-        plugins_cmd(category=None, type_name=None, packages=False, validate=False)
+        plugins_cmd(category=None, name=None, packages=False, validate=False)
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("categor" in c.lower() for c in calls)
 
@@ -120,7 +120,7 @@ class TestMainCommand:
         categories = get_all_categories()
         if categories:
             plugins_cmd(
-                category=categories[0], type_name=None, packages=False, validate=False
+                category=categories[0], name=None, packages=False, validate=False
             )
             assert mock_console.print.call_count >= 2
 
@@ -132,7 +132,7 @@ class TestMainCommand:
             if types:
                 plugins_cmd(
                     category=categories[0],
-                    type_name=types[0].type_name,
+                    name=types[0].name,
                     packages=False,
                     validate=False,
                 )
@@ -140,7 +140,7 @@ class TestMainCommand:
 
     def test_packages_flag(self, mock_console: MagicMock) -> None:
         """Test --packages flag prints something."""
-        plugins_cmd(category=None, type_name=None, packages=True, validate=False)
+        plugins_cmd(category=None, name=None, packages=True, validate=False)
         # Should print at least once (either table or "No plugins found")
         assert mock_console.print.call_count >= 1
 
@@ -151,7 +151,7 @@ class TestIntegration:
     def test_full_workflow(self, mock_console: MagicMock) -> None:
         """Test exploring plugins -> category -> type."""
         # 1. Show overview
-        plugins_cmd(category=None, type_name=None, packages=False, validate=False)
+        plugins_cmd(category=None, name=None, packages=False, validate=False)
         assert mock_console.print.call_count >= 2
         mock_console.reset_mock()
 
@@ -159,7 +159,7 @@ class TestIntegration:
         categories = get_all_categories()
         if categories:
             plugins_cmd(
-                category=categories[0], type_name=None, packages=False, validate=False
+                category=categories[0], name=None, packages=False, validate=False
             )
             assert mock_console.print.call_count >= 2
             mock_console.reset_mock()
@@ -169,7 +169,7 @@ class TestIntegration:
             if types:
                 plugins_cmd(
                     category=categories[0],
-                    type_name=types[0].type_name,
+                    name=types[0].name,
                     packages=False,
                     validate=False,
                 )

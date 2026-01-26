@@ -141,9 +141,9 @@ def load_plugins() -> dict:
         return yaml_safe.load(f)
 
 
-def type_to_member_name(type_name: str) -> str:
+def type_to_member_name(name: str) -> str:
     """Convert type name to enum member name (UPPER_CASE)."""
-    return type_name.replace("-", "_").upper()
+    return name.replace("-", "_").upper()
 
 
 def get_description(type_spec: str | dict) -> str | None:
@@ -435,9 +435,9 @@ class PluginCategory(ExtensibleStrEnum):
         lines.append("")
 
         # Add enum members with descriptions from TypeEntry
-        for entry in sorted(type_entries, key=lambda e: e.type_name):
-            member_name = type_to_member_name(entry.type_name)
-            lines.append(f'    {member_name} = "{entry.type_name}"')
+        for entry in sorted(type_entries, key=lambda e: e.name):
+            member_name = type_to_member_name(entry.name)
+            lines.append(f'    {member_name} = "{entry.name}"')
             if entry.description:
                 desc_lines = entry.description.strip().split("\n")
                 if len(desc_lines) == 1:

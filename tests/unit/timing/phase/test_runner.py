@@ -259,7 +259,7 @@ class TestPhaseRunnerLifecycle:
         r = make_runner(c, conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -280,7 +280,7 @@ class TestPhaseRunnerLifecycle:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -300,7 +300,7 @@ class TestPhaseRunnerLifecycle:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -326,7 +326,7 @@ class TestRamperCreation:
         )
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -347,7 +347,7 @@ class TestRamperCreation:
         )
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -374,7 +374,7 @@ class TestRamperCreation:
         )
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -395,7 +395,7 @@ class TestRamperCreation:
         )
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -558,7 +558,7 @@ class TestSeamlessMode:
         r = make_runner(cfg(seamless=True), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             result = await asyncio.wait_for(r.run(is_final_phase=False), timeout=1.0)
@@ -576,7 +576,7 @@ class TestSeamlessMode:
         r = make_runner(cfg(seamless=True), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -604,7 +604,7 @@ class TestPhaseTypes:
         r = make_runner(cfg(phase=phase), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()
@@ -625,7 +625,7 @@ class TestEdgeCases:
         r = make_runner(cfg(), conv_src, pub, router, conc, cancel, cb)
         with patch(
             "aiperf.timing.phase.runner.plugins.get_class",
-            return_value=MockStrategy(),
+            return_value=lambda **kwargs: MockStrategy(),
         ):
             r._progress.all_credits_sent_event.set()
             r._progress.all_credits_returned_event.set()

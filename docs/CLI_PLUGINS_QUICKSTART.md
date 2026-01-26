@@ -84,7 +84,7 @@ aiperf plugins list-implementations my_protocol
 ### "Which plugin provides this implementation?"
 ```bash
 # Show detailed info including plugin name
-aiperf plugins info protocol_name impl_name
+aiperf plugins info protocol_name name
 ```
 
 ### "What protocols can I extend?"

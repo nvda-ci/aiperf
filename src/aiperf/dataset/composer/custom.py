@@ -130,9 +130,9 @@ class CustomDatasetComposer(BaseDatasetComposer):
                 ) from e
 
         detected_type = None
-        for impl in plugins.list_types("custom_dataset_loader"):
+        for impl in plugins.list_types(PluginCategory.CUSTOM_DATASET_LOADER):
             loader_class = impl.load()
-            dataset_type = CustomDatasetType(impl.impl_name)
+            dataset_type = CustomDatasetType(impl.name)
             if loader_class.can_load(data, filename):
                 self.info(
                     f"Loader {loader_class.__name__} can handle the input file data format."

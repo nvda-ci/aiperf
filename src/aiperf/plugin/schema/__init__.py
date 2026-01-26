@@ -13,15 +13,9 @@ __ignore__ = []
 from aiperf.plugin.schema.schemas import (
     CategoriesFile,
     CategorySpec,
-    PluginPackageInfo,
+    PackageInfo,
     PluginsFile,
-    PluginTypeEntry,
+    TypeSpec,
 )
 
-__all__ = [
-    "CategoriesFile",
-    "CategorySpec",
-    "PluginPackageInfo",
-    "PluginTypeEntry",
-    "PluginsFile",
-]
+__all__ = ["CategoriesFile", "CategorySpec", "PackageInfo", "PluginsFile", "TypeSpec"]

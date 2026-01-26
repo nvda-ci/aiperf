@@ -311,10 +311,10 @@ class SystemController(SignalHandlerMixin, BaseService):
         self.service_manager.service_map[message.service_type].append(service_info)
 
         try:
-            type_name = ServiceType(message.service_type).name.title().replace("_", " ")
+            name = ServiceType(message.service_type).name.title().replace("_", " ")
         except (TypeError, ValueError):
-            type_name = message.service_type
-        self.info(lambda: f"Registered {type_name} (id: '{message.service_id}')")
+            name = message.service_type
+        self.info(lambda: f"Registered {name} (id: '{message.service_id}')")
 
     @on_message(MessageType.HEARTBEAT)
     async def _process_heartbeat_message(self, message: HeartbeatMessage) -> None:

@@ -115,7 +115,7 @@ class LazyPluginRegistry:
     """
 
     def __init__(self):
-        # Lazy plugin storage: protocol_name → {impl_name → LazyPlugin}
+        # Lazy plugin storage: protocol_name → {name → LazyPlugin}
         self._registry: dict[str, dict[str, LazyPlugin]] = {}
 
     def discover_plugins(self, entry_point_group: str = "aiperf.plugins"):
@@ -138,44 +138,44 @@ class LazyPluginRegistry:
         for ep in plugin_eps:
             # Parse name: "protocol:impl" or just "impl"
             if ':' in ep.name:
-                protocol_name, impl_name = ep.name.split(':', 1)
+                protocol_name, name = ep.name.split(':', 1)
             else:
                 # Default protocol (for backward compat)
                 protocol_name = 'phase_hook'
-                impl_name = ep.name
+                name = ep.name
 
             # Create lazy plugin entry (NOT loaded yet!)
             lazy_plugin = LazyPlugin(
-                name=impl_name,
+                name=name,
                 entry_point=ep,
                 loaded_class=None,  # Will load on first access
             )
 
             # Register to protocol
-            self._registry.setdefault(protocol_name, {})[impl_name] = lazy_plugin
+            self._registry.setdefault(protocol_name, {})[name] = lazy_plugin
 
     def register_lazy(
         self,
         protocol_name: str,
-        impl_name: str,
+        name: str,
         entry_point: importlib.metadata.EntryPoint
     ):
         """Register lazy plugin entry.
 
         Args:
             protocol_name: Protocol/factory name (e.g., "phase_hook")
-            impl_name: Implementation name (e.g., "datadog")
+            name: Implementation name (e.g., "datadog")
             entry_point: EntryPoint for lazy loading
         """
-        lazy_plugin = LazyPlugin(impl_name, entry_point)
-        self._registry.setdefault(protocol_name, {})[impl_name] = lazy_plugin
+        lazy_plugin = LazyPlugin(name, entry_point)
+        self._registry.setdefault(protocol_name, {})[name] = lazy_plugin
 
-    def get_implementation(self, protocol_name: str, impl_name: str) -> type:
+    def get_implementation(self, protocol_name: str, name: str) -> type:
         """Get implementation class (loads lazily).
 
         Args:
             protocol_name: Protocol/factory name
-            impl_name: Implementation name
+            name: Implementation name
 
         Returns:
             Loaded plugin class
@@ -186,31 +186,31 @@ class LazyPluginRegistry:
         if protocol_name not in self._registry:
             raise KeyError(f"Unknown protocol: {protocol_name}")
 
-        if impl_name not in self._registry[protocol_name]:
+        if name not in self._registry[protocol_name]:
             raise KeyError(
-                f"Unknown implementation '{impl_name}' for protocol '{protocol_name}'"
+                f"Unknown implementation '{name}' for protocol '{protocol_name}'"
             )
 
-        lazy_plugin = self._registry[protocol_name][impl_name]
+        lazy_plugin = self._registry[protocol_name][name]
         return lazy_plugin.load()  # Lazy load here!
 
     def create_instance(
         self,
         protocol_name: str,
-        impl_name: str,
+        name: str,
         **kwargs
     ) -> Any:
         """Create instance of plugin (loads lazily).
 
         Args:
             protocol_name: Protocol/factory name
-            impl_name: Implementation name
+            name: Implementation name
             **kwargs: Arguments for plugin __init__
 
         Returns:
             Plugin instance
         """
-        lazy_plugin = self._registry[protocol_name][impl_name]
+        lazy_plugin = self._registry[protocol_name][name]
         return lazy_plugin.create_instance(**kwargs)
 
     def list_implementations(self, protocol_name: str) -> list[str]:
@@ -226,19 +226,19 @@ class LazyPluginRegistry:
         """
         return list(self._registry.get(protocol_name, {}).keys())
 
-    def is_registered(self, protocol_name: str, impl_name: str) -> bool:
+    def is_registered(self, protocol_name: str, name: str) -> bool:
         """Check if implementation is registered (doesn't load it).
 
         Args:
             protocol_name: Protocol name
-            impl_name: Implementation name
+            name: Implementation name
 
         Returns:
             True if registered
         """
         return (
             protocol_name in self._registry
-            and impl_name in self._registry[protocol_name]
+            and name in self._registry[protocol_name]
         )
 
 
@@ -378,7 +378,7 @@ class LoggingPhaseHook:
 setup(
     name="aiperf-datadog-plugin",
     entry_points={
-        # Format: "protocol:impl_name"
+        # Format: "protocol:name"
         "aiperf.plugins": [
             "phase_hook:datadog = aiperf_datadog_plugin:DatadogPhaseHook"
         ]
@@ -706,7 +706,7 @@ timing_mode: custom_replay  # Plugin implementation!
 
 ## Entry Point Naming Convention
 
-### Format: `"protocol:impl_name"`
+### Format: `"protocol:name"`
 
 ```python
 entry_points={
