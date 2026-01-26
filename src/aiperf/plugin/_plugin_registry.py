@@ -474,16 +474,18 @@ class PluginRegistry(Singleton):
         # Conflict exists - resolve based on priority and type
         winner, reason = self._resolve_conflict(existing, entry)
 
+        # Always register by class_path so ALL plugins remain accessible via fully-qualified path
+        self._type_entries_by_class_path[entry.class_path] = entry
+
         if winner is entry:
-            # New type wins
+            # New type wins - update the name-based lookup
             self._types[category_name][name] = entry
-            self._type_entries_by_class_path[entry.class_path] = entry
 
             _logger.info(
                 f"Override registered {category_name}:{name}: {entry.package} beats {existing.package} ({reason})"
             )
         else:
-            # Existing type wins
+            # Existing type wins - name lookup unchanged, but class_path still accessible
             _logger.debug(
                 lambda cat=category_name,
                 n=name,

@@ -35,11 +35,13 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 
 | System | Best For | Discovery | Conflict Resolution | Type Safety |
 |--------|----------|-----------|---------------------|-------------|
-| **AIPerf** | Factory pattern (select ONE impl) | YAML + entry points | Priority-based | Excellent (overloads) |
+| **AIPerf** | Factory pattern (select ONE impl)* | YAML + entry points | Priority-based | Excellent (overloads) |
 | **Pluggy** | Hook chains (call ALL impls) | Decorators | Order-based | None |
 | **Stevedore** | Managed entry points | Entry points only | First wins / custom | None |
 | **Raw Entry Points** | Simple discovery | Entry points | None | None |
 | **Yapsy** | File-based plugins | File system scan | None | None |
+
+*\*AIPerf can also iterate all plugins via `list_types()` loop - see [Calling All Plugins](#calling-all-plugins-aiperf-vs-pluggy).*
 
 **AIPerf's Unique Position**: A YAML-first, type-safe factory system with priority-based conflict resolution. Most similar to Stevedore's `DriverManager` but with better developer experience and conflict handling.
 
@@ -49,7 +51,7 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 
 ### 1. AIPerf Plugin System
 - **Version Analyzed**: As of January 2026 (current codebase)
-- **Files**: `_plugin_registry.py` (537 lines), `plugins.py` (575 lines), `types.py` (203 lines)
+- **Files**: `_plugin_registry.py` (537 lines), `plugins.py` (575 lines), `types.py` (203 lines), `enums.py` (300 lines)
 - **Dependencies**: Pydantic, ruamel.yaml, importlib.metadata
 
 ### 2. Pluggy
@@ -70,6 +72,24 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 - **Version**: 1.12.x
 - **Repository**: [github.com/tibonihoo/yapsy](https://github.com/tibonihoo/yapsy)
 
+### Other Notable Systems (Not Covered in Detail)
+
+| System | Approach | Best For |
+|--------|----------|----------|
+| **[PluginBase](https://github.com/mitsuhiko/pluginbase)** | Import system extension | Apps with bundled + user plugins |
+| **[Pike](https://github.com/pyarmory/pike)** | Filesystem-based loading | Load from arbitrary paths |
+| **[Venusian](https://docs.pylonsproject.org/projects/venusian/)** | Decorator scanning | Pyramid/Pylons ecosystem |
+| **[straight.plugin](https://straightplugin.readthedocs.io/)** | Namespace packages | Simple module/class plugins |
+| **[Flask-Plugins](https://flask-plugins.readthedocs.io/)** | Drop-in directory | Flask applications |
+| **[Twisted.plugin](https://docs.twisted.org/en/stable/core/howto/plugin.html)** | Twisted ecosystem | Async/Twisted apps |
+| **[Zope.component](https://zopecomponent.readthedocs.io/)** | Interface/adapter pattern | Zope/Plone ecosystem |
+
+**Framework-Specific Extensions** (not general-purpose):
+- **Flask Extensions** - `Flask-*` packages via pip
+- **Click Plugins** - CLI command extensions
+- **Sphinx Extensions** - Documentation plugins
+- **SQLAlchemy Dialects** - Database driver plugins
+
 ---
 
 ## Feature Matrix
@@ -81,7 +101,7 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 | **Entry point discovery** | Yes | No* | Yes | Yes | No |
 | **File-based discovery** | No | No | No | No | Yes |
 | **Decorator registration** | No | Yes (`@hookimpl`) | No | No | No |
-| **YAML manifest** | Yes | No | No | No | Yes (`.yapsy-plugin`) |
+| **YAML manifest** | Yes | No | No | No | No (INI format) |
 | **Programmatic registration** | Yes (`register()`) | Yes (`pm.register()`) | No | No | No |
 | **Auto-discovery on import** | Yes | No | Optional | No | No |
 
@@ -127,7 +147,18 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 | **Reverse lookup (class→name)** | Yes | No | No | No | No |
 | **URL scheme detection** | Yes | No | No | No | No |
 | **Package metadata** | Yes | No | Yes | Yes | No |
-| **Testing utilities** | Yes (`reset()`) | Yes | Yes (`make_test_instance`) | No | No |
+| **Testing utilities** | Yes (`reset()`) | No* | Yes (deprecated) | No | No |
+| **Historic hooks** | No | Yes | No | No | No |
+| **Optional hook validation** | No | Yes (`optionalhook`) | No | No | No |
+| **Hook aliasing** | No | Yes (`specname`) | No | No | No |
+| **Dependency verification** | No | No | Yes (`verify_requirements`) | No | No |
+| **Exception propagation control** | No | No | Yes (`propagate_map_exceptions`) | No | No |
+| **Plugin versioning** | No | No | No | No | Yes (`VersionedPluginManager`) |
+| **Config file integration** | No | No | No | No | Yes (`ConfigurablePluginManager`) |
+| **Singleton pattern** | Yes (module-level) | No | No | No | Yes (`PluginManagerSingleton`) |
+| **Category-specific metadata** | Yes (`metadata_class`) | No | No | No | No |
+
+*\*Pluggy itself has no testing utilities; pytest's `pytester` fixture is a separate pytest feature.*
 
 ---
 
@@ -152,6 +183,11 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 │  - TypeEntry (frozen Pydantic model)                        │
 │  - CategoryMetadata (TypedDict)                             │
 │  - PluginError, TypeNotFoundError                           │
+├─────────────────────────────────────────────────────────────┤
+│                    enums.py (Runtime Enums)                  │
+│  - PluginCategory (ExtensibleStrEnum, dynamic)              │
+│  - Category-specific type enums (EndpointType, etc.)        │
+│  - Works with both enum values AND plain strings            │
 ├─────────────────────────────────────────────────────────────┤
 │                   schema/ (Validation)                       │
 │  - PluginsFile, TypeSpec, PackageInfo                       │
@@ -204,10 +240,267 @@ class TypeEntry(BaseModel):
    - Allows garbage collection of unused classes
    - Enables `find_registered_name(category, cls)`
 
-4. **Dynamic Enum Generation** (plugins.py:489-527)
-   - Creates StrEnum from registered types
+4. **Dynamic Enum Generation** (plugins.py:489-527, enums.py:38-47)
+   - Creates `ExtensibleStrEnum` from registered types
+   - `PluginCategory` is dynamically generated at runtime from categories.yaml
+   - Both enum values and plain strings work: `PluginCategory.ENDPOINT == "endpoint"`
    - Automatically updates when plugins added
    - Picklable (sets correct `__module__`)
+
+#### Limitations
+
+AIPerf's plugin system is optimized for the factory pattern (select ONE implementation). This design choice means certain features common in other systems are absent or require manual implementation.
+
+**1. No Built-in Hook Chains**
+
+Unlike Pluggy, AIPerf has no native "call all plugins" mechanism. You must manually iterate:
+
+```python
+# AIPerf - manual iteration required
+results = []
+for entry in plugins.list_types("record_processor"):
+    processor = entry.load()(config)
+    results.append(processor.process(record))
+
+# Pluggy - built-in
+results = pm.hook.process_record(record=record)  # automatic
+```
+
+**Impact**: More boilerplate for hook-style use cases. However, this gives full control over instantiation, error handling, and result aggregation.
+
+**2. No Execution Ordering**
+
+No equivalent to Pluggy's `tryfirst`, `trylast`, or `hookwrapper`:
+
+| Feature | Pluggy | AIPerf Workaround |
+|---------|--------|-------------------|
+| Run first | `@hookimpl(tryfirst=True)` | Sort by custom metadata field |
+| Run last | `@hookimpl(trylast=True)` | Sort by custom metadata field |
+| Wrap others | `@hookimpl(wrapper=True)` | Implement decorator pattern manually |
+
+```python
+# AIPerf workaround - use metadata for ordering
+# plugins.yaml
+record_processor:
+  validator:
+    class: myapp:Validator
+    metadata:
+      order: 10  # lower = earlier
+  transformer:
+    class: myapp:Transformer
+    metadata:
+      order: 20
+
+# Python
+entries = sorted(
+    plugins.list_types("record_processor"),
+    key=lambda e: e.metadata.get("order", 100)
+)
+```
+
+**3. No Hook Wrappers / Middleware Pattern**
+
+Cannot wrap plugin execution with before/after logic at the framework level:
+
+```python
+# Pluggy - framework-level wrapping
+@hookimpl(wrapper=True)
+def process(self, data):
+    start = time.time()
+    result = yield  # other plugins run here
+    print(f"Took {time.time() - start}s")
+    return result
+
+# AIPerf - must implement manually in your iteration loop
+for entry in plugins.list_types("processor"):
+    start = time.time()
+    result = entry.load()(config).process(data)
+    print(f"{entry.name} took {time.time() - start}s")
+```
+
+**4. No File-Based Discovery**
+
+Unlike Yapsy, AIPerf cannot scan directories for plugin files:
+
+| Discovery Method | Yapsy | AIPerf |
+|------------------|-------|--------|
+| Scan `/plugins/*.py` | ✅ Built-in | ❌ Not supported |
+| Entry points | ❌ | ✅ Built-in |
+| YAML manifest | ❌ | ✅ Built-in |
+
+**Impact**: Plugins must be properly packaged with entry points or explicitly loaded via `load_registry()`. Cannot do "drop a file in a folder" deployment.
+
+**5. No Invoke-on-Load**
+
+Unlike Stevedore, no automatic instantiation during discovery:
+
+```python
+# Stevedore - automatic instantiation
+mgr = driver.DriverManager(
+    namespace='myapp.drivers',
+    name='chat',
+    invoke_on_load=True,      # ← instantiates immediately
+    invoke_args=(config,),
+)
+instance = mgr.driver  # already instantiated
+
+# AIPerf - always manual
+cls = plugins.get_class("endpoint", "chat")  # returns class
+instance = cls(config)  # you instantiate
+```
+
+**Rationale**: Explicit instantiation is intentional—it prevents side effects during discovery and gives full control over construction arguments.
+
+**6. No Custom Conflict Resolver**
+
+Conflict resolution is priority-based only. Cannot provide custom logic:
+
+```python
+# Stevedore - custom resolver
+def my_resolver(manager, eps, name):
+    return max(eps, key=lambda ep: ep.value.split(':')[0])
+
+mgr = DriverManager(
+    namespace='myapp',
+    name='driver',
+    on_load_failure_callback=my_resolver,
+)
+
+# AIPerf - fixed algorithm
+# 1. Higher priority wins
+# 2. On tie: external beats built-in
+# 3. On tie: first registered wins (with warning)
+```
+
+**7. No Historic Hooks**
+
+Cannot retroactively call hooks for plugins registered after the hook was fired:
+
+```python
+# Pluggy - historic hooks
+@hookspec(historic=True)
+def on_startup(self):
+    """Late-registered plugins also receive this call."""
+
+# AIPerf - no equivalent
+# Must ensure all plugins are registered before events fire
+```
+
+**8. No Runtime Plugin Unregistration**
+
+Once registered, plugins cannot be cleanly removed (except via `reset()` which clears everything):
+
+```python
+# Pluggy
+pm.unregister(plugin)  # removes specific plugin
+
+# AIPerf
+plugins.reset()  # nuclear option - clears ALL plugins
+# No selective unregistration
+```
+
+**Impact**: Testing requires `reset()` between tests. Hot-reloading plugins requires full registry reset.
+
+**9. No Dependency Verification**
+
+Unlike Stevedore, no built-in check that plugin dependencies are installed:
+
+```python
+# Stevedore
+mgr = ExtensionManager(
+    namespace='myapp.plugins',
+    verify_requirements=True,  # ← checks dependencies
+)
+
+# AIPerf - manual verification
+entry = plugins.get_type("endpoint", "custom")
+try:
+    cls = entry.load()  # fails here if deps missing
+except ImportError as e:
+    print(f"Missing dependency: {e}")
+```
+
+**10. Startup Overhead**
+
+AIPerf loads YAML and discovers entry points on first import:
+
+| System | Startup Behavior | Typical Time |
+|--------|------------------|--------------|
+| AIPerf | Eager (on import) | 100-500ms |
+| Pluggy | Lazy (on register) | Minimal |
+| Stevedore | Per-manager | 50-200ms each |
+
+```python
+# This import triggers full discovery
+from aiperf.plugin import plugins  # loads YAML, scans entry points
+
+# Subsequent calls are fast (cached)
+plugins.get_class("endpoint", "chat")  # O(1) lookup
+```
+
+**11. YAML Dependency**
+
+Requires `ruamel.yaml` for manifest parsing:
+
+```
+# Additional dependencies
+ruamel.yaml>=0.17  # ~500KB
+pydantic>=2.0      # already required by AIPerf
+```
+
+Other systems (Pluggy, raw entry points) have zero runtime dependencies beyond stdlib.
+
+**12. Single Implementation per Type Name (But All Accessible by Class Path)**
+
+By design, only one implementation is returned when looking up by **name**. However, ALL implementations remain accessible via their **fully-qualified class path**:
+
+```python
+# Package A registers endpoint.chat (priority=5) → packagea.endpoints:ChatEndpoint
+# Package B registers endpoint.chat (priority=10) → packageb.endpoints:ChatEndpoint
+# → Package B wins the "chat" name
+
+# By NAME - returns the winner only:
+plugins.get_class("endpoint", "chat")  # → Package B's class
+
+# By CLASS PATH - access ANY registered implementation (including "losers"):
+plugins.get_class("endpoint", "packagea.endpoints:ChatEndpoint")  # → Package A's class
+plugins.get_class("endpoint", "packageb.endpoints:ChatEndpoint")  # → Package B's class
+
+# Iterate all types in category (one per unique name):
+for entry in plugins.list_types("endpoint"):
+    print(f"{entry.name}: {entry.class_path}")
+```
+
+This differs from Pluggy where hooks automatically call ALL implementations:
+
+```python
+# Pluggy - ALL implementations called automatically
+pm.hook.process(data=data)  # calls EVERY registered impl, returns list
+
+# AIPerf - manual iteration, but full control over which impls to use
+for entry in plugins.list_types("endpoint"):
+    cls = entry.load()  # load by winner name
+# Or access specific impl by class path
+```
+
+**Key Distinction**: AIPerf gives you explicit control - name-based lookup returns the "best" (highest priority), but class-path lookup lets you access any registered implementation.
+
+#### Limitations Summary Table
+
+| Limitation | Severity | Workaround Available |
+|------------|----------|---------------------|
+| No built-in hook chains | Medium | Manual `list_types()` iteration |
+| No execution ordering | Low | Custom metadata + sorting |
+| No hook wrappers | Medium | Manual before/after in loop |
+| No file-based discovery | Low | Use entry points or `load_registry()` |
+| No invoke-on-load | Low | Explicit instantiation |
+| No custom conflict resolver | Low | Priority usually sufficient |
+| No historic hooks | Low | Register plugins before events |
+| No runtime unregistration | Medium | `reset()` for testing |
+| No dependency verification | Low | Try/except on `load()` |
+| Startup overhead | Low | One-time cost, cached after |
+| YAML dependency | Low | Small footprint |
+| Single impl per name | By design | Use class path for direct access |
 
 ---
 
@@ -294,7 +587,7 @@ class MyPlugin:
 
 | Aspect | Pluggy | AIPerf |
 |--------|--------|--------|
-| Use case | Call ALL plugins | Select ONE plugin |
+| Use case | Call ALL plugins (built-in) | Select ONE or iterate ALL (manual loop) |
 | Return type | `list[Any]` or `Any` | `type[Protocol]` |
 | Conflict handling | All run | Priority resolution |
 | Validation | None | AST + Schema |
@@ -646,10 +939,15 @@ custom = "my_package.endpoints:CustomEndpoint"
 from aiperf.plugin import plugins
 from aiperf.plugin.enums import PluginCategory
 
-# Type-safe: IDE knows this returns type[EndpointProtocol]
+# Option 1: Type-safe enum (IDE knows this returns type[EndpointProtocol])
 EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'custom')
 endpoint = EndpointClass(config)
+
+# Option 2: Plain string (works because PluginCategory is an ExtensibleStrEnum)
+EndpointClass = plugins.get_class("endpoint", 'custom')
 ```
+
+> **Note**: `PluginCategory` is an `ExtensibleStrEnum` (extends both `str` and `Enum`), so both enum values and plain strings work as category arguments. The enum provides IDE autocomplete and type checking; plain strings are convenient for dynamic use cases.
 
 **Pluggy**:
 ```python
@@ -677,11 +975,18 @@ endpoint = mgr.driver
 from aiperf.plugin import plugins
 from aiperf.plugin.enums import PluginCategory
 
-for entry in plugins.list_types(PluginCategory.ENDPOINT):
+# Both enum and string forms work
+for entry in plugins.list_types(PluginCategory.ENDPOINT):  # or "endpoint"
     print(f"{entry.name}: {entry.description}")
     print(f"  Package: {entry.package}")
     print(f"  Priority: {entry.priority}")
     print(f"  Class: {entry.class_path}")
+
+# String form useful for dynamic category iteration
+for category in plugins.list_categories():
+    print(f"\n{category}:")
+    for entry in plugins.list_types(category):  # category is str
+        print(f"  - {entry.name}")
 ```
 
 **Pluggy**:
@@ -699,6 +1004,35 @@ mgr = extension.ExtensionManager(namespace='myapp.endpoints')
 for ext in mgr:
     print(f"{ext.name}: {ext.entry_point}")
 ```
+
+### Calling All Plugins (AIPerf vs Pluggy)
+
+**AIPerf** - iterate via `list_types()` loop:
+```python
+from aiperf.plugin import plugins
+
+# Call all record processors (like a hook chain)
+results = []
+for entry in plugins.list_types("record_processor"):
+    ProcessorClass = entry.load()  # lazy load
+    processor = ProcessorClass(config)
+    result = processor.process(record)
+    results.append(result)
+
+# Or with a list comprehension
+results = [
+    entry.load()(config).process(record)
+    for entry in plugins.list_types("record_processor")
+]
+```
+
+**Pluggy** - built-in hook calling:
+```python
+# Pluggy calls all implementations automatically
+results = pm.hook.process_record(record=record)  # returns list of results
+```
+
+> **Key Difference**: Pluggy has built-in hook semantics (call all, collect results). AIPerf gives you full control over the iteration - you decide what to instantiate, when to call, and how to combine results.
 
 ---
 
@@ -718,7 +1052,7 @@ for ext in mgr:
 | Operation | AIPerf | Pluggy | Stevedore |
 |-----------|--------|--------|-----------|
 | Get single plugin | O(1) dict lookup | N/A | O(n) search |
-| Call all plugins | N/A | O(n) calls | O(n) calls |
+| Call all plugins | O(n) via `list_types()` loop | O(n) built-in | O(n) calls |
 | First load | Import + cache | Already loaded | Import |
 | Subsequent loads | O(1) cached | O(1) | O(1) cached |
 
@@ -735,7 +1069,8 @@ for ext in mgr:
 ## When to Use What
 
 ### Use AIPerf Plugin System When:
-- You need to select ONE implementation from a category
+- You need to select ONE implementation from a category (factory pattern)
+- You need to iterate ALL implementations (via `list_types()` loop)
 - Type safety and IDE support are important
 - You want declarative YAML configuration
 - Plugin conflicts need intelligent resolution
@@ -792,6 +1127,8 @@ for ext in mgr:
 
 ### Module: `aiperf.plugin.plugins`
 
+> **Category Parameter**: All functions accepting a `category` parameter accept either a `PluginCategory` enum value (e.g., `PluginCategory.ENDPOINT`) or a plain string (e.g., `"endpoint"`). `PluginCategory` is an `ExtensibleStrEnum`, so enum values ARE strings. Use enums for type safety and IDE support; use strings for dynamic scenarios.
+
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `get_class` | `(category, name) -> type` | Get plugin class by name (21 typed overloads) |
@@ -801,9 +1138,9 @@ for ext in mgr:
 | `get_package_metadata` | `(name) -> PackageInfo` | Get package info |
 | `get_category_metadata` | `(category) -> CategoryMetadata` | Get category info |
 | `is_internal_category` | `(category) -> bool` | Check if category is internal |
-| `find_registered_name` | `(category, cls) -> str | None` | Reverse lookup |
+| `find_registered_name` | `(category, cls) -> str \| None` | Reverse lookup |
 | `validate_all` | `(check_class=False) -> dict` | Validate without importing |
-| `register` | `(category, name, cls, priority=0)` | Programmatic registration |
+| `register` | `(category, name, cls, *, priority=0, is_builtin=True)` | Programmatic registration |
 | `create_enum` | `(category, name) -> type` | Generate StrEnum from types |
 | `detect_type_from_url` | `(category, url) -> str` | Match URL scheme to type |
 | `load_registry` | `(path)` | Load additional YAML |
