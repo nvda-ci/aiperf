@@ -1,5 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# fmt: off
+# noqa: I001
 import asyncio
 import gc
 import time
@@ -44,11 +46,7 @@ from aiperf.common.protocols import (
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.dataset.loader import ShareGPTLoader
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import (
-    ComposerType,
-    DatasetBackingStoreType,
-    PluginCategory,
-)
+from aiperf.plugin.enums import ComposerType, DatasetBackingStoreType, PluginType
 
 
 @implements_protocol(ServiceProtocol)
@@ -275,7 +273,7 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
             composer_type = ComposerType.SYNTHETIC
 
         ComposerClass = plugins.get_class(
-            PluginCategory.DATASET_COMPOSER, composer_type
+            PluginType.DATASET_COMPOSER, composer_type
         )
         composer = ComposerClass(config=self.user_config, tokenizer=self.tokenizer)
         return composer.create_dataset()

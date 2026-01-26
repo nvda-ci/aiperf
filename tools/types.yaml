@@ -1,0 +1,234 @@
+
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# ============================================================================
+# SIMPLE YAML-DRIVEN TYPE GENERATOR
+# Python 3.10+ | 2026 Modern Architecture
+# ============================================================================
+#
+# This is the single source of truth for all Literal type definitions.
+# Just add your types here and run: python tools/generate_literals.py
+#
+# No Python coding required!
+#
+
+# ============================================================================
+# System & Lifecycle Types
+# ============================================================================
+lifecycle:
+  LifecycleState:
+    - created
+    - initializing
+    - initialized
+    - starting
+    - running
+    - stopping
+    - stopped
+    - failed
+
+  SystemState:
+    - initializing
+    - configuring
+    - ready
+    - profiling
+    - processing
+    - stopping
+    - shutdown
+
+  ServiceRegistrationStatus:
+    - unregistered
+    - waiting
+    - registered
+    - timeout
+    - error
+
+  WorkerStatus:
+    - healthy
+    - high_load
+    - error
+    - idle
+    - stale
+
+# ============================================================================
+# Messaging Types
+# ============================================================================
+messaging:
+  MessageType:
+    - all_records_received
+    - command
+    - command_response
+    - connection_probe
+    - conversation_request
+    - conversation_response
+    - conversation_turn_request
+    - conversation_turn_response
+    - credits_complete
+    - credit_drop
+    - credit_phase_complete
+    - credit_phase_progress
+    - credit_phase_sending_complete
+    - credit_phase_start
+    - credit_return
+    - dataset_configured_notification
+    - dataset_timing_request
+    - dataset_timing_response
+    - error
+    - heartbeat
+    - inference_results
+    - metric_records
+    - parsed_inference_results
+    - processing_stats
+    - process_records_result
+    - process_telemetry_result
+    - profile_progress
+    - profile_results
+    - realtime_metrics
+    - registration
+    - service_error
+    - status
+    - telemetry_records
+    - telemetry_status
+    - worker_health
+    - worker_status_summary
+
+  CommandType:
+    - realtime_metrics
+    - process_records
+    - profile_cancel
+    - profile_configure
+    - profile_start
+    - register_service
+    - shutdown
+    - shutdown_workers
+    - spawn_workers
+
+  CommandResponseStatus:
+    - acknowledged
+    - failure
+    - success
+    - unhandled
+
+# ============================================================================
+# Media Types
+# ============================================================================
+media:
+  MediaType:
+    - text
+    - image
+    - audio
+    - video
+
+  ImageFormat:
+    - png
+    - jpeg
+    - random
+
+  AudioFormat:
+    - wav
+    - mp3
+
+  VideoFormat:
+    - mp4
+
+  VideoSynthType:
+    - moving_shapes
+    - grid_clock
+
+# ============================================================================
+# Dataset Types
+# ============================================================================
+dataset:
+  PromptSource:
+    - synthetic
+    - file
+    - payload
+
+  PublicDatasetType:
+    - sharegpt
+
+# ============================================================================
+# Timing Types
+# ============================================================================
+timing:
+  CreditPhase:
+    - warmup
+    - profiling
+
+# ============================================================================
+# Model Types
+# ============================================================================
+model:
+  ModelSelectionStrategy:
+    - round_robin
+    - random
+
+# ============================================================================
+# Export Types
+# ============================================================================
+export:
+  ExportLevel:
+    - summary
+    - records
+    - raw
+
+# ============================================================================
+# Logging Types
+# ============================================================================
+logging:
+  AIPerfLogLevel:
+    - trace
+    - debug
+    - info
+    - notice
+    - warning
+    - success
+    - error
+    - critical
+
+# ============================================================================
+# SSE Types
+# ============================================================================
+sse:
+  SSEFieldType:
+    - data
+    - event
+    - id
+    - retry
+    - comment
+
+# ============================================================================
+# ZMQ Types
+# ============================================================================
+zmq:
+  ProxyEndType:
+    - frontend
+    - backend
+    - capture
+    - control
+
+# ============================================================================
+# Communication Address Types
+# ============================================================================
+communication:
+  CommAddressType:
+    - event_bus_proxy_frontend
+    - event_bus_proxy_backend
+    - dataset_manager_proxy_frontend
+    - dataset_manager_proxy_backend
+    - credit_drop
+    - credit_return
+    - records
+    - raw_inference_proxy_frontend
+    - raw_inference_proxy_backend
+
+# ============================================================================
+# Dynamic Types (Runtime Discovery)
+# ============================================================================
+# These types are discovered at generation time by calling methods/accessing
+# attributes at runtime. They cannot be statically defined.
+#
+dynamic:
+  MetricTag:
+    source: aiperf.metrics.metric_registry.MetricRegistry
+    method: all_tags
+    description: "All registered metric tags discovered at runtime"

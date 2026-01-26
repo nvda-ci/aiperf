@@ -5,10 +5,10 @@
 
 Usage:
     from aiperf.plugin import plugins
-    from aiperf.plugin.enums import PluginCategory
+    from aiperf.plugin.enums import PluginType
 
-    EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
-    for impl in plugins.list_types(PluginCategory.ENDPOINT):
+    EndpointClass = plugins.get_class(PluginType.ENDPOINT, 'openai')
+    for impl in plugins.list_types(PluginType.ENDPOINT):
         print(f"{impl.name}: {impl.description}")
 
 Conflict resolution: higher priority wins; equal priority: external beats built-in.
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from aiperf.plugin.container import PluginContainer
-    from aiperf.plugin.enums import PluginCategory
+    from aiperf.plugin.enums import PluginType
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.plugin._plugin_registry import PluginRegistry
@@ -39,8 +39,8 @@ _logger = AIPerfLogger(__name__)
 # This pattern follows the random_generator module design.
 # Usage:
 #   from aiperf.plugin import plugins
-#   from aiperf.plugin.enums import PluginCategory
-#   EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'openai')
+#   from aiperf.plugin.enums import PluginType
+#   EndpointClass = plugins.get_class(PluginType.ENDPOINT, 'openai')
 #   endpoint = EndpointClass(...)
 # ==============================================================================
 
@@ -78,6 +78,29 @@ if TYPE_CHECKING:
     )
     from aiperf.dataset.composer import BaseDatasetComposer
     from aiperf.plot.core.plot_type_handlers import PlotTypeHandlerProtocol
+    from aiperf.plugin.enums import (
+        ArrivalPatternName,
+        CommunicationClientName,
+        CommunicationName,
+        ConsoleExporterName,
+        CustomDatasetLoaderName,
+        DataExporterName,
+        DatasetBackingStoreName,
+        DatasetClientStoreName,
+        DatasetComposerName,
+        DatasetSamplerName,
+        EndpointName,
+        PlotName,
+        RampName,
+        RecordProcessorName,
+        ResultsProcessorName,
+        ServiceManagerName,
+        ServiceName,
+        TimingStrategyName,
+        TransportName,
+        UiName,
+        ZmqProxyName,
+    )
     from aiperf.post_processors import BaseMetricsProcessor
     from aiperf.timing.intervals import IntervalGeneratorProtocol
     from aiperf.timing.ramping import RampStrategyProtocol
@@ -89,133 +112,305 @@ if TYPE_CHECKING:
 # <generated-overloads>
 @overload
 def get_class(
-    category: Literal[PluginCategory.TIMING_STRATEGY], name_or_class_path: str
+    category: Literal["timing_strategy"],
+    name_or_class_path: TimingStrategyName | str,
 ) -> type[TimingStrategyProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.ARRIVAL_PATTERN], name_or_class_path: str
+    category: Literal[PluginType.TIMING_STRATEGY],
+    name_or_class_path: TimingStrategyName | str,
+) -> type[TimingStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["arrival_pattern"],
+    name_or_class_path: ArrivalPatternName | str,
 ) -> type[IntervalGeneratorProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.RAMP], name_or_class_path: str
+    category: Literal[PluginType.ARRIVAL_PATTERN],
+    name_or_class_path: ArrivalPatternName | str,
+) -> type[IntervalGeneratorProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["ramp"],
+    name_or_class_path: RampName | str,
 ) -> type[RampStrategyProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.DATASET_BACKING_STORE], name_or_class_path: str
+    category: Literal[PluginType.RAMP],
+    name_or_class_path: RampName | str,
+) -> type[RampStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["dataset_backing_store"],
+    name_or_class_path: DatasetBackingStoreName | str,
 ) -> type[DatasetBackingStoreProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.DATASET_CLIENT_STORE], name_or_class_path: str
+    category: Literal[PluginType.DATASET_BACKING_STORE],
+    name_or_class_path: DatasetBackingStoreName | str,
+) -> type[DatasetBackingStoreProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["dataset_client_store"],
+    name_or_class_path: DatasetClientStoreName | str,
 ) -> type[DatasetClientStoreProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.DATASET_SAMPLER], name_or_class_path: str
+    category: Literal[PluginType.DATASET_CLIENT_STORE],
+    name_or_class_path: DatasetClientStoreName | str,
+) -> type[DatasetClientStoreProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["dataset_sampler"],
+    name_or_class_path: DatasetSamplerName | str,
 ) -> type[DatasetSamplingStrategyProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.DATASET_COMPOSER], name_or_class_path: str
+    category: Literal[PluginType.DATASET_SAMPLER],
+    name_or_class_path: DatasetSamplerName | str,
+) -> type[DatasetSamplingStrategyProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["dataset_composer"],
+    name_or_class_path: DatasetComposerName | str,
 ) -> type[BaseDatasetComposer]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.CUSTOM_DATASET_LOADER], name_or_class_path: str
+    category: Literal[PluginType.DATASET_COMPOSER],
+    name_or_class_path: DatasetComposerName | str,
+) -> type[BaseDatasetComposer]: ...
+
+
+@overload
+def get_class(
+    category: Literal["custom_dataset_loader"],
+    name_or_class_path: CustomDatasetLoaderName | str,
 ) -> type[CustomDatasetLoaderProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.ENDPOINT], name_or_class_path: str
+    category: Literal[PluginType.CUSTOM_DATASET_LOADER],
+    name_or_class_path: CustomDatasetLoaderName | str,
+) -> type[CustomDatasetLoaderProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["endpoint"],
+    name_or_class_path: EndpointName | str,
 ) -> type[EndpointProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.TRANSPORT], name_or_class_path: str
+    category: Literal[PluginType.ENDPOINT],
+    name_or_class_path: EndpointName | str,
+) -> type[EndpointProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["transport"],
+    name_or_class_path: TransportName | str,
 ) -> type[TransportProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.RECORD_PROCESSOR], name_or_class_path: str
+    category: Literal[PluginType.TRANSPORT],
+    name_or_class_path: TransportName | str,
+) -> type[TransportProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["record_processor"],
+    name_or_class_path: RecordProcessorName | str,
 ) -> type[RecordProcessorProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.RESULTS_PROCESSOR], name_or_class_path: str
+    category: Literal[PluginType.RECORD_PROCESSOR],
+    name_or_class_path: RecordProcessorName | str,
+) -> type[RecordProcessorProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["results_processor"],
+    name_or_class_path: ResultsProcessorName | str,
 ) -> type[BaseMetricsProcessor]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.DATA_EXPORTER], name_or_class_path: str
+    category: Literal[PluginType.RESULTS_PROCESSOR],
+    name_or_class_path: ResultsProcessorName | str,
+) -> type[BaseMetricsProcessor]: ...
+
+
+@overload
+def get_class(
+    category: Literal["data_exporter"],
+    name_or_class_path: DataExporterName | str,
 ) -> type[DataExporterProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.CONSOLE_EXPORTER], name_or_class_path: str
+    category: Literal[PluginType.DATA_EXPORTER],
+    name_or_class_path: DataExporterName | str,
+) -> type[DataExporterProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["console_exporter"],
+    name_or_class_path: ConsoleExporterName | str,
 ) -> type[ConsoleExporterProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.UI], name_or_class_path: str
+    category: Literal[PluginType.CONSOLE_EXPORTER],
+    name_or_class_path: ConsoleExporterName | str,
+) -> type[ConsoleExporterProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["ui"],
+    name_or_class_path: UiName | str,
 ) -> type[AIPerfUIProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.SERVICE], name_or_class_path: str
+    category: Literal[PluginType.UI],
+    name_or_class_path: UiName | str,
+) -> type[AIPerfUIProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["service"],
+    name_or_class_path: ServiceName | str,
 ) -> type[ServiceProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.SERVICE_MANAGER], name_or_class_path: str
+    category: Literal[PluginType.SERVICE],
+    name_or_class_path: ServiceName | str,
+) -> type[ServiceProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["service_manager"],
+    name_or_class_path: ServiceManagerName | str,
 ) -> type[ServiceManagerProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.COMMUNICATION], name_or_class_path: str
+    category: Literal[PluginType.SERVICE_MANAGER],
+    name_or_class_path: ServiceManagerName | str,
+) -> type[ServiceManagerProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["communication"],
+    name_or_class_path: CommunicationName | str,
 ) -> type[CommunicationProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.COMMUNICATION_CLIENT], name_or_class_path: str
+    category: Literal[PluginType.COMMUNICATION],
+    name_or_class_path: CommunicationName | str,
+) -> type[CommunicationProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["communication_client"],
+    name_or_class_path: CommunicationClientName | str,
 ) -> type[CommunicationClientProtocol]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.ZMQ_PROXY], name_or_class_path: str
+    category: Literal[PluginType.COMMUNICATION_CLIENT],
+    name_or_class_path: CommunicationClientName | str,
+) -> type[CommunicationClientProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal["zmq_proxy"],
+    name_or_class_path: ZmqProxyName | str,
 ) -> type[BaseZMQProxy]: ...
 
 
 @overload
 def get_class(
-    category: Literal[PluginCategory.PLOT], name_or_class_path: str
+    category: Literal[PluginType.ZMQ_PROXY],
+    name_or_class_path: ZmqProxyName | str,
+) -> type[BaseZMQProxy]: ...
+
+
+@overload
+def get_class(
+    category: Literal["plot"],
+    name_or_class_path: PlotName | str,
+) -> type[PlotTypeHandlerProtocol]: ...
+
+
+@overload
+def get_class(
+    category: Literal[PluginType.PLOT],
+    name_or_class_path: PlotName | str,
 ) -> type[PlotTypeHandlerProtocol]: ...
 
 
 # Fallback for unknown categories
 @overload
-def get_class(category: PluginCategory, name_or_class_path: str) -> type: ...
+def get_class(category: PluginType, name_or_class_path: str) -> type: ...
+
+
+@overload
+def get_class(category: str, name_or_class_path: str) -> type: ...
 
 
 # </generated-overloads>
@@ -226,11 +421,11 @@ def get_class(category: PluginCategory, name_or_class_path: str) -> type: ...
 # ==============================================================================
 
 
-def get_class(category: PluginCategory, name_or_class_path: str) -> type:
+def get_class(category: PluginType, name_or_class_path: str) -> type:
     """Get type class by name or fully qualified class path.
 
     Args:
-        category: Plugin category (e.g., PluginCategory.ENDPOINT).
+        category: Plugin category (e.g., PluginType.ENDPOINT).
         name_or_class_path: Either a short type name (e.g., 'chat') or
             a fully qualified class path (e.g., 'aiperf.endpoints:ChatEndpoint').
 
@@ -244,13 +439,13 @@ def get_class(category: PluginCategory, name_or_class_path: str) -> type:
 
     Example:
         >>> from aiperf.plugin import plugins
-        >>> from aiperf.plugin.enums import PluginCategory
-        >>> EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'chat')
+        >>> from aiperf.plugin.enums import PluginType
+        >>> EndpointClass = plugins.get_class(PluginType.ENDPOINT, 'chat')
     """
     return _registry.get_class(category, name_or_class_path)
 
 
-def list_types(category: PluginCategory) -> list[PluginEntry]:
+def list_types(category: PluginType) -> list[PluginEntry]:
     """List all TypeEntry objects for a category (sorted alphabetically).
 
     Args:
@@ -261,31 +456,10 @@ def list_types(category: PluginCategory) -> list[PluginEntry]:
         Returns empty list if category doesn't exist.
 
     Example:
-        >>> for impl in plugins.list_types(PluginCategory.ENDPOINT):
+        >>> for impl in plugins.list_types(PluginType.ENDPOINT):
         ...     print(f"{impl.name}: {impl.description}")
     """
     return _registry.list_types(category)
-
-
-def get(category: PluginCategory, name: str) -> PluginEntry | None:
-    """Get a single plugin entry by category and name.
-
-    Args:
-        category: Plugin category to search in.
-        name: Plugin name (e.g., 'chat', 'scatter').
-
-    Returns:
-        The PluginEntry if found, None otherwise.
-
-    Example:
-        >>> entry = plugins.get(PluginCategory.ENDPOINT, 'chat')
-        >>> if entry:
-        ...     print(f"{entry.name}: {entry.description}")
-    """
-    for entry in _registry.list_types(category):
-        if entry.name == name:
-            return entry
-    return None
 
 
 def validate_all(check_class: bool = False) -> dict[str, list[tuple[str, str]]]:
@@ -659,7 +833,7 @@ def register_dependency(
 
 
 def create_instance(
-    category: PluginCategory | str,
+    category: PluginType | str,
     name: str,
     **overrides: Any,
 ) -> Any:
@@ -670,7 +844,7 @@ def create_instance(
     automatically injected based on constructor type hints.
 
     Args:
-        category: Plugin category (e.g., 'endpoint', PluginCategory.ENDPOINT).
+        category: Plugin category (e.g., 'endpoint', PluginType.ENDPOINT).
         name: Plugin name (e.g., 'chat').
         **overrides: Explicit values that override auto-injection.
 

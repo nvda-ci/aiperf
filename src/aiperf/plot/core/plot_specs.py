@@ -104,10 +104,10 @@ class PlotTypeInfo(AIPerfBaseModel):
 def _get_plugin_entry(plot_type: PlotType) -> PluginEntry | None:
     """Get the plugin entry for a plot type from the registry."""
     from aiperf.plugin import plugins
-    from aiperf.plugin.enums import PluginCategory
+    from aiperf.plugin.enums import PluginType
 
     try:
-        return plugins.get(PluginCategory.PLOT, plot_type.value)
+        return plugins.get(PluginType.PLOT, plot_type.value)
     except Exception:
         return None
 

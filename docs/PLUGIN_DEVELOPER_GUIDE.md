@@ -65,7 +65,7 @@ The AIPerf plugin system provides a **YAML-first, type-safe factory pattern** fo
 │  - PluginError, TypeNotFoundError                           │
 ├─────────────────────────────────────────────────────────────┤
 │                    enums.py (Runtime Enums)                  │
-│  - PluginCategory: dynamically generated from categories    │
+│  - PluginType: dynamically generated from categories    │
 │  - Type enums: EndpointType, TransportType, etc.            │
 │  - ExtensibleStrEnum: works as both enum and string         │
 ├─────────────────────────────────────────────────────────────┤
@@ -120,16 +120,16 @@ class TypeEntry(BaseModel):
         """Lazy load and cache the class."""
 ```
 
-### PluginCategory Enum
+### PluginType Enum
 
-`PluginCategory` is dynamically generated from `categories.yaml`:
+`PluginType` is dynamically generated from `categories.yaml`:
 
 ```python
-from aiperf.plugin.enums import PluginCategory
+from aiperf.plugin.enums import PluginType
 
 # These are equivalent (ExtensibleStrEnum)
-PluginCategory.ENDPOINT == "endpoint"  # True
-plugins.get_class(PluginCategory.ENDPOINT, "chat")
+PluginType.ENDPOINT == "endpoint"  # True
+plugins.get_class(PluginType.ENDPOINT, "chat")
 plugins.get_class("endpoint", "chat")  # Both work
 ```
 
@@ -155,7 +155,7 @@ When multiple plugins register the same `(category, name)`:
 
 ```python
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import PluginCategory, EndpointType, TransportType
+from aiperf.plugin.enums import PluginType, EndpointType, TransportType
 ```
 
 ### Get a Single Implementation (Factory Pattern)
@@ -164,7 +164,7 @@ The most common pattern - select ONE implementation by name:
 
 ```python
 # Type-safe (IDE knows return type is type[EndpointProtocol])
-EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, "chat")
+EndpointClass = plugins.get_class(PluginType.ENDPOINT, "chat")
 endpoint = EndpointClass(model_endpoint=model_endpoint)
 
 # String form also works
@@ -527,7 +527,7 @@ Generate enums from registered types:
 
 ```python
 # Create enum from all types in a category
-MyEndpointType = plugins.create_enum(PluginCategory.ENDPOINT, "MyEndpointType")
+MyEndpointType = plugins.create_enum(PluginType.ENDPOINT, "MyEndpointType")
 # MyEndpointType.CHAT, MyEndpointType.COMPLETIONS, etc.
 ```
 

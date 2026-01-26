@@ -38,7 +38,7 @@ from aiperf.plugin import plugins
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aiperf.plugin.enums import PluginCategory
+    from aiperf.plugin.enums import PluginType
 
 T = TypeVar("T")
 
@@ -126,7 +126,7 @@ class PluginContainer:
 
     def create(
         self,
-        category: str | PluginCategory,
+        category: str | PluginType,
         name: str,
         **overrides: Any,
     ) -> Any:
@@ -138,7 +138,7 @@ class PluginContainer:
         or must be provided via overrides.
 
         Args:
-            category: Plugin category (e.g., 'endpoint', PluginCategory.ENDPOINT).
+            category: Plugin category (e.g., 'endpoint', PluginType.ENDPOINT).
             name: Plugin name (e.g., 'chat').
             **overrides: Explicit values that override auto-injection.
                 These are passed directly to the constructor.

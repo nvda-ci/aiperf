@@ -6,6 +6,12 @@
 This script reads the plugin category definitions from categories.yaml and injects
 type overloads directly into plugins.py between marker comments.
 
+Features:
+- Literal string category names for autocomplete (e.g., "endpoint")
+- Literal string plugin names for autocomplete (e.g., "chat")
+- Enum category support (e.g., PluginType.ENDPOINT)
+- Type-safe return types based on category
+
 Usage:
     python tools/generate_plugin_overloads.py [--check]
 
@@ -57,6 +63,29 @@ def load_categories(yaml_path: Path) -> dict:
     }
 
 
+def load_plugins_from_registry() -> dict[str, list[str]]:
+    """Load plugin names from the runtime registry.
+
+    Returns:
+        Dict mapping category name to list of plugin names.
+    """
+    # Add src to path for imports
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+
+    try:
+        from aiperf.plugin import plugins
+
+        result = {}
+        for category in plugins.list_categories():
+            types = plugins.list_types(category)
+            if types:
+                result[category] = sorted(t.name for t in types)
+        return result
+    except Exception as e:
+        print(f"Warning: Could not load plugins from registry: {e}", file=sys.stderr)
+        return {}
+
+
 def parse_class_path(class_path: str) -> tuple[str, str]:
     """Parse 'module.path:ClassName' into (module_path, class_name)."""
     if ":" not in class_path:
@@ -72,13 +101,32 @@ def parse_class_path(class_path: str) -> tuple[str, str]:
 # =============================================================================
 
 
-def generate_imports(categories: dict) -> str:
+def get_literal_name(category_name: str) -> str:
+    """Get the Literal type alias name for a category.
+
+    Must match the naming convention in generate_plugin_enums.py.
+    Example: endpoint -> EndpointName
+    """
+    return "".join(word.title() for word in category_name.split("_")) + "Name"
+
+
+def generate_imports(
+    categories: dict, plugins_by_category: dict[str, list[str]]
+) -> str:
     """Generate import statements for protocols (under TYPE_CHECKING)."""
     # Group protocols by their import module
     imports_by_module: dict[str, list[str]] = defaultdict(list)
 
-    # Always include Literal (stdlib) - PluginCategory is imported separately
+    # Always include Literal (stdlib)
     imports_by_module["typing"].append("Literal")
+
+    # Import plugin name Literals from enums
+    literal_names = []
+    for category_name in sorted(categories.keys()):
+        if plugins_by_category.get(category_name):
+            literal_names.append(get_literal_name(category_name))
+    if literal_names:
+        imports_by_module["aiperf.plugin.enums"].extend(literal_names)
 
     for category_data in categories.values():
         protocol_path = category_data.get("protocol", "")
@@ -119,10 +167,13 @@ def generate_imports(categories: dict) -> str:
     return "\n".join(lines)
 
 
-def generate_overloads(categories: dict) -> str:
+def generate_overloads(
+    categories: dict, plugins_by_category: dict[str, list[str]]
+) -> str:
     """Generate @overload decorated function stubs."""
     lines = []
 
+    # Generate overloads for each category
     for category_name, category_data in categories.items():
         protocol_path = category_data.get("protocol", "")
         # Convert category_name to enum member (e.g., timing_strategy -> TIMING_STRATEGY)
@@ -135,22 +186,49 @@ def generate_overloads(categories: dict) -> str:
         else:
             return_type = "type"
 
-        # Generate overload with docstring
+        # Get plugin names for this category
+        plugin_names = plugins_by_category.get(category_name, [])
+
+        # Determine the name parameter type
+        if plugin_names:
+            # Use Literal from enums.pyi for autocomplete + str for extensibility
+            literal_name = get_literal_name(category_name)
+            name_type = f"{literal_name} | str"
+        else:
+            name_type = "str"
+
+        # Generate TWO overloads per category:
+        # 1. Literal string category (e.g., "endpoint")
+        # 2. Enum category (e.g., PluginType.ENDPOINT)
+
+        # Overload 1: Literal string category
         lines.append("@overload")
         lines.append("def get_class(")
-        lines.append(
-            f"    category: Literal[PluginCategory.{enum_member}], name_or_class_path: str"
-        )
+        lines.append(f'    category: Literal["{category_name}"],')
+        lines.append(f"    name_or_class_path: {name_type},")
         lines.append(f") -> {return_type}: ...")
         lines.append("")
         lines.append("")
 
-    # Add fallback overload
+        # Overload 2: Enum category
+        lines.append("@overload")
+        lines.append("def get_class(")
+        lines.append(f"    category: Literal[PluginType.{enum_member}],")
+        lines.append(f"    name_or_class_path: {name_type},")
+        lines.append(f") -> {return_type}: ...")
+        lines.append("")
+        lines.append("")
+
+    # Add fallback overloads
     lines.append("# Fallback for unknown categories")
     lines.append("@overload")
     lines.append(
-        "def get_class(category: PluginCategory, name_or_class_path: str) -> type: ..."
+        "def get_class(category: PluginType, name_or_class_path: str) -> type: ..."
     )
+    lines.append("")
+    lines.append("")
+    lines.append("@overload")
+    lines.append("def get_class(category: str, name_or_class_path: str) -> type: ...")
     lines.append("")
     lines.append("")
 
@@ -182,11 +260,13 @@ def replace_between_markers(
     return pattern.sub(rf"\1\n{replacement}\n\3", content)
 
 
-def inject_generated_code(content: str, categories: dict) -> str:
+def inject_generated_code(
+    content: str, categories: dict, plugins_by_category: dict[str, list[str]]
+) -> str:
     """Inject generated imports and overloads into plugins.py content."""
     # Generate sections
-    imports_code = generate_imports(categories)
-    overloads_code = generate_overloads(categories)
+    imports_code = generate_imports(categories, plugins_by_category)
+    overloads_code = generate_overloads(categories, plugins_by_category)
 
     # Replace imports section
     content = replace_between_markers(content, IMPORTS_START, IMPORTS_END, imports_code)
@@ -228,11 +308,14 @@ def main() -> int:
         return 1
 
     categories = load_categories(CATEGORIES_YAML)
+    plugins_by_category = load_plugins_from_registry()
     current_content = PLUGINS_PY.read_text(encoding="utf-8")
 
     # Generate the updated content
     try:
-        generated_content = inject_generated_code(current_content, categories)
+        generated_content = inject_generated_code(
+            current_content, categories, plugins_by_category
+        )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -259,6 +342,11 @@ def main() -> int:
 
     PLUGINS_PY.write_text(generated_content, encoding="utf-8")
     print(f"Updated {PLUGINS_PY}")
+    print("\nGenerated overloads now support:")
+    print('  - Literal string categories: plugins.get_class("endpoint", ...)')
+    print("  - Enum categories: plugins.get_class(PluginType.ENDPOINT, ...)")
+    print('  - Literal plugin names: plugins.get_class("endpoint", "chat")')
+    print('  - 3rd party names (| str): plugins.get_class("endpoint", "custom")')
 
     return 0
 

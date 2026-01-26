@@ -13,7 +13,7 @@ from aiperf.common.utils import load_json_str
 from aiperf.dataset.composer.base import BaseDatasetComposer
 from aiperf.dataset.utils import check_file_exists
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import CustomDatasetType, PluginCategory
+from aiperf.plugin.enums import CustomDatasetType, PluginType
 
 
 @implements_protocol(ServiceProtocol)
@@ -115,7 +115,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
                 # Try to convert the type string to enum
                 explicit_type = CustomDatasetType(data["type"])
                 loader_class = plugins.get_class(
-                    PluginCategory.CUSTOM_DATASET_LOADER, explicit_type
+                    PluginType.CUSTOM_DATASET_LOADER, explicit_type
                 )
                 if not loader_class.can_load(data, filename):
                     raise ValueError(
@@ -130,7 +130,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
                 ) from e
 
         detected_type = None
-        for impl in plugins.list_types(PluginCategory.CUSTOM_DATASET_LOADER):
+        for impl in plugins.list_types(PluginType.CUSTOM_DATASET_LOADER):
             loader_class = impl.load()
             dataset_type = CustomDatasetType(impl.name)
             if loader_class.can_load(data, filename):
@@ -162,7 +162,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
         """
         if self.config.input.dataset_sampling_strategy is None:
             loader_class = plugins.get_class(
-                PluginCategory.CUSTOM_DATASET_LOADER, dataset_type
+                PluginType.CUSTOM_DATASET_LOADER, dataset_type
             )
             preferred_strategy = loader_class.get_preferred_sampling_strategy()
             self.config.input.dataset_sampling_strategy = preferred_strategy
@@ -202,9 +202,7 @@ class CustomDatasetComposer(BaseDatasetComposer):
         elif dataset_type == CustomDatasetType.RANDOM_POOL:
             kwargs["num_conversations"] = self.config.input.conversation.num
 
-        LoaderClass = plugins.get_class(
-            PluginCategory.CUSTOM_DATASET_LOADER, dataset_type
-        )
+        LoaderClass = plugins.get_class(PluginType.CUSTOM_DATASET_LOADER, dataset_type)
         self.loader = LoaderClass(
             filename=self.config.input.file,
             user_config=self.config,

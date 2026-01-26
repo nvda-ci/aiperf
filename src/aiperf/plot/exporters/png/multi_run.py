@@ -20,7 +20,7 @@ from aiperf.plot.core.data_preparation import flatten_config
 from aiperf.plot.core.plot_specs import ExperimentClassificationConfig, PlotSpec
 from aiperf.plot.exporters.png.base import BasePNGExporter
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import PluginCategory
+from aiperf.plugin.enums import PluginType
 
 
 class MultiRunPNGExporter(BasePNGExporter):
@@ -109,7 +109,7 @@ class MultiRunPNGExporter(BasePNGExporter):
         Returns:
             Plotly figure object
         """
-        HandlerClass = plugins.get_class(PluginCategory.PLOT, spec.plot_type)
+        HandlerClass = plugins.get_class(PluginType.PLOT, spec.plot_type)
         handler = HandlerClass(plot_generator=self.plot_generator)
 
         return handler.create_plot(spec, df, available_metrics)

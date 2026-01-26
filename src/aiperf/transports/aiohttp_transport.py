@@ -16,7 +16,7 @@ from aiperf.common.exceptions import NotInitializedError
 from aiperf.common.hooks import on_init, on_stop
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import ErrorDetails, RequestInfo, RequestRecord
-from aiperf.plugin.enums import PluginCategory, TransportType
+from aiperf.plugin.enums import PluginType, TransportType
 from aiperf.transports.aiohttp_client import AioHttpClient, create_tcp_connector
 from aiperf.transports.base_transports import (
     BaseTransport,
@@ -184,9 +184,7 @@ class AioHttpTransport(BaseTransport):
             # Get endpoint path from endpoint metadata
             from aiperf.plugin import plugins
 
-            endpoint_class = plugins.get_class(
-                PluginCategory.ENDPOINT, endpoint_info.type
-            )
+            endpoint_class = plugins.get_class(PluginType.ENDPOINT, endpoint_info.type)
             endpoint_metadata = endpoint_class.metadata()
             endpoint_path = endpoint_metadata.endpoint_path
             if (

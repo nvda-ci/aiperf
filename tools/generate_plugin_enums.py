@@ -180,7 +180,7 @@ def get_category_names(categories: dict, preserve_order: bool = False) -> list[s
 def get_enum_names(categories: dict, plugins: dict) -> list[str]:
     """Get sorted list of all enum names."""
     category_names = get_category_names(categories)
-    enum_names = ["PluginCategory"]
+    enum_names = ["PluginType"]
     for cat in category_names:
         cat_info = categories.get(cat, {})
         if isinstance(cat_info, dict) and cat_info.get("enum") and plugins.get(cat):
@@ -238,7 +238,7 @@ from aiperf.plugin import plugins
 """
     lines = header.split("\n")
 
-    # Generate PluginCategory with TYPE_CHECKING block
+    # Generate PluginType with TYPE_CHECKING block
     lines.extend(_generate_plugin_category_dynamic())
 
     # Group categories by section (preserving order from YAML)
@@ -283,7 +283,7 @@ from aiperf.plugin import plugins
 
 
 def _generate_plugin_category_dynamic() -> list[str]:
-    """Generate the PluginCategory with TYPE_CHECKING block."""
+    """Generate the PluginType with TYPE_CHECKING block."""
     code = """\
 # ============================================================================
 # Plugin Protocol Categories
@@ -291,12 +291,12 @@ def _generate_plugin_category_dynamic() -> list[str]:
 
 if TYPE_CHECKING:
     # Import the enum from the stubs file
-    from aiperf.plugin.enums import PluginCategory
+    from aiperf.plugin.enums import PluginType
 else:
     # Create runtime enum with all plugin category names from the registry
     _all_plugin_categories = plugins.list_categories()
-    PluginCategory = create_enum(
-        "PluginCategory",
+    PluginType = create_enum(
+        "PluginType",
         {
             category.replace("-", "_").upper(): category
             for category in _all_plugin_categories
@@ -306,7 +306,7 @@ else:
     Dynamic enum for plugin categories.
 
     Members are auto-generated from registered plugin categories in plugins.yaml.
-    Example: PluginCategory.ENDPOINT, PluginCategory.UI, PluginCategory.TRANSPORT, etc.
+    Example: PluginType.ENDPOINT, PluginType.UI, PluginType.TRANSPORT, etc.
     \"\"\"
 """
     return code.split("\n")
@@ -325,12 +325,12 @@ def _generate_dynamic_enum(
     example_str = ", ".join(f"{enum_name}.{e}" for e in examples)
 
     # Check line length - wrap if over 88 chars (ruff default)
-    single_line = f'{enum_name} = plugins.create_enum(PluginCategory.{category_member}, "{enum_name}")'
+    single_line = f'{enum_name} = plugins.create_enum(PluginType.{category_member}, "{enum_name}")'
     if len(single_line) <= 88:
         assignment = single_line
     else:
         assignment = f"""{enum_name} = plugins.create_enum(
-    PluginCategory.{category_member}, "{enum_name}"
+    PluginType.{category_member}, "{enum_name}"
 )"""
 
     code = f"""\
@@ -381,9 +381,11 @@ Type stubs for dynamically generated plugin enums.
 This file includes all currently loaded plugins, including 3rd-party plugins.
 \"\"\"
 
+from typing import Literal
+
 from aiperf.common.enums import ExtensibleStrEnum
 
-class PluginCategory(ExtensibleStrEnum):
+class PluginType(ExtensibleStrEnum):
     \"\"\"
     Dynamic enum for plugin categories.
 
@@ -413,7 +415,7 @@ class PluginCategory(ExtensibleStrEnum):
     lines.append("")
 
     # Build list of enum names
-    enum_names = ["PluginCategory"]
+    enum_names = ["PluginType"]
 
     # Generate enums for each category from runtime registry
     for category in category_names:
@@ -464,9 +466,53 @@ class PluginCategory(ExtensibleStrEnum):
 
         lines.append("")
 
+    # Generate Literal type aliases for plugin names (for autocomplete)
+    lines.append(
+        "# ============================================================================"
+    )
+    lines.append("# Plugin Name Literals (for autocomplete)")
+    lines.append(
+        "# ============================================================================"
+    )
+    lines.append("")
+
+    literal_names = []
+    for category in category_names:
+        category_info = categories.get(category, {})
+        if not isinstance(category_info, dict):
+            continue
+
+        # Get types from runtime registry
+        try:
+            type_entries = plugins.list_types(category)
+        except Exception:
+            type_entries = []
+
+        if not type_entries:
+            continue
+
+        # Create Literal type alias name: endpoint -> EndpointName
+        literal_name = "".join(word.title() for word in category.split("_")) + "Name"
+        literal_names.append(literal_name)
+
+        # Get sorted plugin names
+        plugin_names = sorted(e.name for e in type_entries)
+
+        # Format the literal
+        if len(plugin_names) <= 3:
+            values = ", ".join(f'"{n}"' for n in plugin_names)
+            lines.append(f"{literal_name} = Literal[{values}]")
+        else:
+            lines.append(f"{literal_name} = Literal[")
+            for name in plugin_names:
+                lines.append(f'    "{name}",')
+            lines.append("]")
+        lines.append("")
+
     # Add __all__ export
+    all_exports = sorted(set(enum_names + literal_names))
     lines.append("__all__ = [")
-    for name in sorted(set(enum_names)):
+    for name in all_exports:
         lines.append(f'    "{name}",')
     lines.append("]")
 

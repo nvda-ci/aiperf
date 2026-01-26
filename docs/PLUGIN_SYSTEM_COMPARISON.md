@@ -185,7 +185,7 @@ A comprehensive analysis of AIPerf's plugin system compared to major Python plug
 │  - PluginError, TypeNotFoundError                           │
 ├─────────────────────────────────────────────────────────────┤
 │                    enums.py (Runtime Enums)                  │
-│  - PluginCategory (ExtensibleStrEnum, dynamic)              │
+│  - PluginType (ExtensibleStrEnum, dynamic)              │
 │  - Category-specific type enums (EndpointType, etc.)        │
 │  - Works with both enum values AND plain strings            │
 ├─────────────────────────────────────────────────────────────┤
@@ -242,8 +242,8 @@ class TypeEntry(BaseModel):
 
 4. **Dynamic Enum Generation** (plugins.py:489-527, enums.py:38-47)
    - Creates `ExtensibleStrEnum` from registered types
-   - `PluginCategory` is dynamically generated at runtime from categories.yaml
-   - Both enum values and plain strings work: `PluginCategory.ENDPOINT == "endpoint"`
+   - `PluginType` is dynamically generated at runtime from categories.yaml
+   - Both enum values and plain strings work: `PluginType.ENDPOINT == "endpoint"`
    - Automatically updates when plugins added
    - Picklable (sets correct `__module__`)
 
@@ -937,17 +937,17 @@ custom = "my_package.endpoints:CustomEndpoint"
 **AIPerf**:
 ```python
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import PluginCategory
+from aiperf.plugin.enums import PluginType
 
 # Option 1: Type-safe enum (IDE knows this returns type[EndpointProtocol])
-EndpointClass = plugins.get_class(PluginCategory.ENDPOINT, 'custom')
+EndpointClass = plugins.get_class(PluginType.ENDPOINT, 'custom')
 endpoint = EndpointClass(config)
 
-# Option 2: Plain string (works because PluginCategory is an ExtensibleStrEnum)
+# Option 2: Plain string (works because PluginType is an ExtensibleStrEnum)
 EndpointClass = plugins.get_class("endpoint", 'custom')
 ```
 
-> **Note**: `PluginCategory` is an `ExtensibleStrEnum` (extends both `str` and `Enum`), so both enum values and plain strings work as category arguments. The enum provides IDE autocomplete and type checking; plain strings are convenient for dynamic use cases.
+> **Note**: `PluginType` is an `ExtensibleStrEnum` (extends both `str` and `Enum`), so both enum values and plain strings work as category arguments. The enum provides IDE autocomplete and type checking; plain strings are convenient for dynamic use cases.
 
 **Pluggy**:
 ```python
@@ -973,10 +973,10 @@ endpoint = mgr.driver
 **AIPerf**:
 ```python
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import PluginCategory
+from aiperf.plugin.enums import PluginType
 
 # Both enum and string forms work
-for entry in plugins.list_types(PluginCategory.ENDPOINT):  # or "endpoint"
+for entry in plugins.list_types(PluginType.ENDPOINT):  # or "endpoint"
     print(f"{entry.name}: {entry.description}")
     print(f"  Package: {entry.package}")
     print(f"  Priority: {entry.priority}")
@@ -1127,7 +1127,7 @@ results = pm.hook.process_record(record=record)  # returns list of results
 
 ### Module: `aiperf.plugin.plugins`
 
-> **Category Parameter**: All functions accepting a `category` parameter accept either a `PluginCategory` enum value (e.g., `PluginCategory.ENDPOINT`) or a plain string (e.g., `"endpoint"`). `PluginCategory` is an `ExtensibleStrEnum`, so enum values ARE strings. Use enums for type safety and IDE support; use strings for dynamic scenarios.
+> **Category Parameter**: All functions accepting a `category` parameter accept either a `PluginType` enum value (e.g., `PluginType.ENDPOINT`) or a plain string (e.g., `"endpoint"`). `PluginType` is an `ExtensibleStrEnum`, so enum values ARE strings. Use enums for type safety and IDE support; use strings for dynamic scenarios.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|

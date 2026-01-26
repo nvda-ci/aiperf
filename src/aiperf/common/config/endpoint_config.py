@@ -17,7 +17,7 @@ from aiperf.common.enums import (
     ModelSelectionStrategy,
 )
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import EndpointType, PluginCategory, TransportType
+from aiperf.plugin.enums import EndpointType, PluginType, TransportType
 
 _logger = AIPerfLogger(__name__)
 
@@ -35,7 +35,7 @@ class EndpointConfig(BaseConfig):
         if not self.streaming:
             return self
 
-        endpoint_class = plugins.get_class(PluginCategory.ENDPOINT, self.type)
+        endpoint_class = plugins.get_class(PluginType.ENDPOINT, self.type)
         metadata = endpoint_class.metadata()
         if not metadata.supports_streaming:
             _logger.warning(

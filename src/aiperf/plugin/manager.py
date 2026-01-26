@@ -153,7 +153,7 @@ class PluginManager(Singleton):
         """Get type class by name or fully qualified class path.
 
         Args:
-            category: Plugin category (e.g., PluginCategory.ENDPOINT).
+            category: Plugin category (e.g., PluginType.ENDPOINT).
             name_or_class_path: Either a short type name (e.g., 'chat') or
                 a fully qualified class path (e.g., 'aiperf.endpoints:ChatEndpoint').
 

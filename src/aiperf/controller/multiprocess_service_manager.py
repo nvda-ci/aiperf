@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# fmt: off
 import asyncio
 import multiprocessing
 import uuid
@@ -18,7 +19,9 @@ from aiperf.common.protocols import ServiceManagerProtocol
 from aiperf.common.types import ServiceTypeT
 from aiperf.controller.base_service_manager import BaseServiceManager
 from aiperf.plugin import plugins
-from aiperf.plugin.enums import PluginCategory
+from aiperf.plugin.enums import PluginType
+
+# fmt: on
 
 
 class MultiProcessRunInfo(BaseModel):
@@ -59,7 +62,7 @@ class MultiProcessServiceManager(BaseServiceManager):
         self, service_type: ServiceTypeT, num_replicas: int = 1
     ) -> None:
         """Run a service with the given number of replicas."""
-        service_class = plugins.get_class(PluginCategory.SERVICE, service_type)
+        service_class = plugins.get_class(PluginType.SERVICE, service_type)
 
         for _ in range(num_replicas):
             service_id = f"{service_type}_{uuid.uuid4().hex[:8]}"
