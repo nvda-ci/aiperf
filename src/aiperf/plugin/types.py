@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self
 
 from aiperf.common.aiperf_logger import AIPerfLogger
@@ -59,7 +60,7 @@ class TypeEntry(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Type-specific metadata from plugins.yaml"
     )
-    loaded_class: type | None = Field(
+    loaded_class: SkipJsonSchema[type | None] = Field(
         default=None, description="Cached class after loading"
     )
 

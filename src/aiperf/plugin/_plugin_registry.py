@@ -117,6 +117,13 @@ class PluginRegistry(Singleton):
 
         for ep in plugin_eps:
             try:
+                # Skip already-loaded plugins (e.g., builtin aiperf loaded in __init__)
+                if ep.name in self._loaded_plugins:
+                    _logger.debug(
+                        lambda name=ep.name: f"Skipping already-loaded plugin: {name}"
+                    )
+                    continue
+
                 # Load entry point (should return path to plugins.yaml)
                 module_name, _, filename = ep.value.rpartition(":")
                 registry_path = importlib.resources.files(module_name) / filename

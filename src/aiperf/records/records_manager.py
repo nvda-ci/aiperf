@@ -140,7 +140,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
                     # Store the accumulating processor separately for hierarchy access
                     if (
-                        results_processor_type
+                        results_processor_type.name
                         == ResultsProcessorType.GPU_TELEMETRY_ACCUMULATOR
                     ):
                         self._gpu_telemetry_accumulator = results_processor
@@ -150,7 +150,7 @@ class RecordsManager(PullClientMixin, BaseComponentService):
 
                     # Store the accumulating processor separately for hierarchy access
                     if (
-                        results_processor_type
+                        results_processor_type.name
                         == ResultsProcessorType.SERVER_METRICS_ACCUMULATOR
                     ):
                         self._server_metrics_accumulator = results_processor
