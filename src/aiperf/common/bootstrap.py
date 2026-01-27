@@ -76,6 +76,13 @@ def bootstrap_and_run_service(
             _start_yappi_profiling()
 
         from aiperf.common.aiperf_logger import AIPerfLogger
+        from aiperf.plugin import container, plugins
+
+        container.reset()
+        container.register(ServiceConfig, service_config)
+        container.register(UserConfig, user_config)
+
+        plugins.reset()
 
         logger = AIPerfLogger(__name__)
 

@@ -42,6 +42,10 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+__all__ = [
+    "PluginContainer",
+]
+
 
 class PluginContainer:
     """DI container for plugin instantiation with auto-wiring.
@@ -229,3 +233,22 @@ class PluginContainer:
     def __contains__(self, type_: type) -> bool:
         """Check if a type is explicitly registered (supports 'in' operator)."""
         return self.has(type_)
+
+    def reset(self) -> None:
+        """Reset the container to a fresh state.
+
+        Clears all registered dependencies. Intended for testing.
+        """
+        self._container = Container()
+
+
+# ==============================================================================
+# Module-Level Singleton
+# ==============================================================================
+
+_container = PluginContainer()
+
+# Public API - access container methods directly
+register = _container.register
+create = _container.create
+reset = _container.reset

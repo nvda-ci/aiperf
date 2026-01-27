@@ -11,7 +11,6 @@ import pytest
 from aiperf.plugin import plugins
 from aiperf.plugin.container import PluginContainer
 
-
 # ==============================================================================
 # Test Fixtures
 # ==============================================================================
@@ -26,9 +25,9 @@ def container() -> Generator[PluginContainer, None, None]:
 @pytest.fixture
 def reset_global_container() -> Generator[None, None, None]:
     """Reset the global container before and after each test."""
-    plugins.reset_container()
+    plugins.reset()
     yield
-    plugins.reset_container()
+    plugins.reset()
 
 
 # ==============================================================================
@@ -201,7 +200,9 @@ class TestContainerCreatePlugin:
         # Register the dependency type
         container.register(type(mock_model_endpoint), mock_model_endpoint)
 
-        with patch.object(plugins, "get_class", return_value=mock_endpoint_class) as mock_get_class:
+        with patch.object(
+            plugins, "get_class", return_value=mock_endpoint_class
+        ) as mock_get_class:
             container.create("endpoint", "chat")
 
             # Verify get_class was called correctly
@@ -303,7 +304,7 @@ class TestModuleLevelAPI:
     ) -> None:
         """Test that register_dependency() uses the global container."""
         config = DatabaseConfig()
-        plugins.register_dependency(DatabaseConfig, config)
+        plugins.register(DatabaseConfig, config)
 
         container = plugins.get_container()
         assert container.get(DatabaseConfig) is config
@@ -314,8 +315,10 @@ class TestModuleLevelAPI:
         """Test that create_instance() uses the global container."""
         mock_endpoint_class = MagicMock()
 
-        with patch.object(plugins, "get_class", return_value=mock_endpoint_class) as mock_get_class:
-            plugins.create_instance("endpoint", "chat")
+        with patch.object(
+            plugins, "get_class", return_value=mock_endpoint_class
+        ) as mock_get_class:
+            plugins.create("endpoint", "chat")
 
             # Verify get_class was called correctly
             mock_get_class.assert_called_once_with("endpoint", "chat")
@@ -325,10 +328,10 @@ class TestModuleLevelAPI:
     ) -> None:
         """Test that reset_container() clears the global container."""
         config = DatabaseConfig()
-        plugins.register_dependency(DatabaseConfig, config)
+        plugins.register(DatabaseConfig, config)
         container1 = plugins.get_container()
 
-        plugins.reset_container()
+        plugins.reset()
         container2 = plugins.get_container()
 
         assert container1 is not container2
