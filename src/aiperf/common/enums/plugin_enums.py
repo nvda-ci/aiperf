@@ -49,6 +49,9 @@ class EndpointType(CaseInsensitiveStrEnum):
     IMAGE_GENERATION = "image_generation"
     """OpenAI Image Generation API. Generates images from text prompts (e.g., FLUX.1)."""
 
+    NIM_EMBEDDINGS = "nim_embeddings"
+    """NVIDIA NIM Embeddings API. Generates vector embeddings for text (and image inputs)."""
+
     NIM_RANKINGS = "nim_rankings"
     """NVIDIA NIM Rankings API. Ranks passages by relevance scores for a given query."""
 
@@ -80,3 +83,14 @@ class ConnectionReuseStrategy(CaseInsensitiveStrEnum):
 
     STICKY_USER_SESSIONS = "sticky-user-sessions"
     """Connection persists across turns of a multi-turn conversation, closed on final turn (enables sticky load balancing)"""
+
+
+class URLSelectionStrategy(CaseInsensitiveStrEnum):
+    """Strategy for selecting URLs when multiple endpoint URLs are provided.
+
+    Simple string enum for URL selection strategies. Used for load balancing
+    across multiple inference server instances.
+    """
+
+    ROUND_ROBIN = "round_robin"
+    """Distribute requests evenly across URLs in sequential order. Each request goes to the next URL in the list, wrapping around when the end is reached."""
