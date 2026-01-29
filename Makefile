@@ -174,13 +174,14 @@ first-time-setup: #? convenience command to setup the environment for the first 
 	@printf "$(bold)$(green)Installing mock server...$(reset)\n"
 	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory install-mock-server
 
-	@# Generate plugin enum stubs for IDE autocomplete
-	@printf "$(bold)$(green)Generating plugin enum stubs...$(reset)\n"
-	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-enums
+# TODO: Enable these when plugin system is merged
+# @# Generate plugin enum stubs for IDE autocomplete
+# @printf "$(bold)$(green)Generating plugin enum stubs...$(reset)\n"
+# @PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-enums
 
-	@# Generate plugin overloads for IDE autocomplete
-	@printf "$(bold)$(green)Generating plugin overloads...$(reset)\n"
-	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-overloads
+# @# Generate plugin overloads for IDE autocomplete
+# @printf "$(bold)$(green)Generating plugin overloads...$(reset)\n"
+# @PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-overloads
 
 	@# Install pre-commit hooks
 	@printf "$(bold)$(green)Installing pre-commit hooks...$(reset)\n"
