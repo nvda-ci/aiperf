@@ -532,7 +532,12 @@ class _PluginRegistry:
         frame = sys._getframe(2)  # 2 because we're called via wrapper
         module = frame.f_globals.get("__name__", __name__)
 
-        return _create_enum(enum_name, members, module=module)
+        enum_cls = _create_enum(enum_name, members, module=module)
+
+        # Store the category on the enum for reverse lookup (used by docs generation)
+        enum_cls._plugin_category_ = str(category)
+
+        return enum_cls
 
     def _load_category_metadata(self) -> None:
         """Load category metadata from categories.yaml (lazy, cached)."""

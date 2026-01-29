@@ -49,6 +49,40 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.strip().split())
 
 
+def _extract_plugin_enum_descriptions(enum_class: type[Enum]) -> dict[str, str]:
+    """Extract descriptions for plugin enum members from the plugin registry.
+
+    Plugin enums are dynamically created at runtime, so they don't have source
+    code that can be parsed. Instead, their descriptions come from plugins.yaml.
+    Plugin enums have a `_plugin_category_` attribute set by `plugins.create_enum`.
+
+    Args:
+        enum_class: The enum class to extract descriptions from
+
+    Returns:
+        Dictionary mapping enum member names to their descriptions
+    """
+    from aiperf.plugin import plugins
+
+    # Plugin enums have _plugin_category_ set by plugins.create_enum
+    category = getattr(enum_class, "_plugin_category_", None)
+    if not category:
+        return {}
+
+    member_docs = {}
+    for member in enum_class:
+        try:
+            entry = plugins.get_entry(category, member.value)
+            if entry.description:
+                # Normalize multiline YAML descriptions into single line
+                desc = _normalize_text(entry.description)
+                member_docs[member.name] = desc
+        except Exception:
+            pass
+
+    return member_docs
+
+
 def _extract_enum_member_docstrings(enum_class: type[Enum]) -> dict[str, str]:
     """Extract docstrings for enum members by parsing the source code.
 
@@ -58,6 +92,11 @@ def _extract_enum_member_docstrings(enum_class: type[Enum]) -> dict[str, str]:
     Returns:
         Dictionary mapping enum member names to their docstrings
     """
+    # First try to get descriptions from plugin registry (for dynamic plugin enums)
+    plugin_docs = _extract_plugin_enum_descriptions(enum_class)
+    if plugin_docs:
+        return plugin_docs
+
     try:
         source = inspect.getsource(enum_class)
         tree = ast.parse(source)

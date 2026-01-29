@@ -125,8 +125,22 @@ Set a custom API endpoint path (e.g., `/v1/custom`, `/my-api/chat`). By default,
 #### `--endpoint-type` `<str>`
 
 The API endpoint type to benchmark. Determines request/response format and supported features. Common types: `chat` (multi-modal conversations), `embeddings` (vector generation), `completions` (text completion). See enum documentation for all supported endpoint types.
-<br>_Choices: [`chat`, `cohere_rankings`, `completions`, `embeddings`, `hf_tei_rankings`, `huggingface_generate`, `image_generation`, `nim_embeddings`, `nim_rankings`, `solido_rag`, `template`]_
-<br>_Default: `chat`_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `chat` | _default_ | OpenAI Chat Completions endpoint. Supports multi-modal inputs (text, images, audio, video) and both streaming and non-streaming responses. Uses /v1/chat/completions path. |
+| `cohere_rankings` |  | Cohere Rankings endpoint. Provides document ranking capabilities using Cohere's reranking API. |
+| `completions` |  | OpenAI Completions endpoint. Supports text completions with streaming for legacy completion-based models. Uses /v1/completions path. |
+| `embeddings` |  | OpenAI Embeddings endpoint. Generates vector embeddings for text inputs using embedding models. Uses /v1/embeddings path. Non-streaming only. |
+| `hf_tei_rankings` |  | Hugging Face TEI (Text Embeddings Inference) Rankings endpoint. Provides ranking using TEI reranking models. |
+| `huggingface_generate` |  | Hugging Face TGI (Text Generation Inference) endpoint. Supports both streaming (/generate_stream) and non-streaming (/generate) text generation. |
+| `image_generation` |  | OpenAI Image Generation endpoint. Generates images from text prompts using models like DALL-E. Supports streaming responses. Uses /v1/images/generations path. |
+| `nim_embeddings` |  | NVIDIA NIM Embeddings endpoint. Generates vector embeddings for text and/or images using NIM's embeddings API. Uses /v1/embeddings path. Non-streaming only. |
+| `nim_rankings` |  | NVIDIA NIM Rankings endpoint. Processes ranking requests by taking a query and passages, returning relevance scores. Uses /v1/ranking path. |
+| `solido_rag` |  | Solido RAG endpoint. Custom endpoint for Solido RAG pipeline integration with retrieval-augmented generation. |
+| `template` |  | Template endpoint for creating custom endpoint implementations. Serves as a starting point for plugin developers to implement new API formats. |
 
 #### `--streaming`
 
@@ -141,8 +155,12 @@ Base URL(s) of the API server(s) to benchmark. Multiple URLs can be specified fo
 #### `--url-strategy` `<str>`
 
 Strategy for selecting URLs when multiple `--url` values are provided. 'round_robin' (default): distribute requests evenly across URLs in sequential order.
-<br>_Choices: [`round_robin`]_
-<br>_Default: `round_robin`_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `round_robin` | _default_ | Round-robin URL sampler for even distribution across endpoints. Distributes requests evenly across URLs in sequential order. Each call to next_url_index() returns the next URL index in the list, wrapping around when the end is reached. |
 
 #### `--request-timeout-seconds` `<float>`
 
@@ -156,7 +174,12 @@ API authentication key for the endpoint. When provided, automatically included i
 #### `--transport`, `--transport-type` `<str>`
 
 Transport protocol to use for API requests. If not specified, auto-detected from the URL scheme (`http`/`https` → `TransportType.HTTP`). Currently supports `http` transport using aiohttp with connection pooling, TCP optimization, and Server-Sent Events (SSE) for streaming. Explicit override rarely needed.
-<br>_Choices: [`http`]_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `http` |  | HTTP/1.1 transport implementation using aiohttp. Provides high-performance async HTTP client with connection pooling, SSE streaming support, automatic error handling, and custom TCP connector configuration. |
 
 #### `--use-legacy-max-tokens`
 
@@ -229,12 +252,27 @@ Pre-configured public dataset to download and use for benchmarking (e.g., `share
 #### `--custom-dataset-type` `<str>`
 
 Format specification for custom dataset provided via `--input-file`. Determines parsing logic and expected file structure. Options: `single_turn` (JSONL with single exchanges), `multi_turn` (JSONL with conversation history), `mooncake_trace` (timestamped trace files), `random_pool` (directory of reusable prompts). Requires `--input-file`. Mutually exclusive with `--public-dataset`.
-<br>_Choices: [`mooncake_trace`, `multi_turn`, `random_pool`, `single_turn`]_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `mooncake_trace` |  | Mooncake trace dataset loader for loading Alibaba Mooncake trace format with timestamp-based replay support. Designed for fixed_schedule timing mode. |
+| `multi_turn` |  | Multi-turn dataset loader supporting conversation sessions with turn delays and multi-modal content. Enables realistic multi-turn conversation replay with session management. |
+| `random_pool` |  | Random pool dataset loader that creates conversations by randomly sampling from predefined pools of system/user/assistant messages with configurable distributions. |
+| `single_turn` |  | Single-turn dataset loader supporting multi-modal data and client-side batching. Supports text, images, audio with optional timestamps or delays. Does NOT support multi-turn features. |
 
 #### `--dataset-sampling-strategy` `<str>`
 
 Strategy for selecting entries from dataset during benchmarking. `sequential`: Iterate through dataset in order, wrapping to start after end. `random`: Randomly sample with replacement (entries may repeat before all are used). `shuffle`: Shuffle dataset and iterate without replacement, re-shuffling after exhaustion. Default behavior depends on dataset type (e.g., `sequential` for traces, `shuffle` for synthetic).
-<br>_Choices: [`random`, `sequential`, `shuffle`]_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `random` |  | Random sampler that randomly selects conversation IDs with replacement. Can return the same conversation ID multiple times before seeing all IDs. Uses derived RNG for reproducibility. |
+| `sequential` |  | Sequential sampler that iterates through conversation IDs in order. When reaching the end, wraps around to the beginning indefinitely. Completely deterministic with no randomness. |
+| `shuffle` |  | Shuffle sampler that randomly samples without replacement, then repeats. Ensures all conversations are seen before any repetition, similar to music shuffle. Uses derived RNG for reproducibility. |
 
 #### `--random-seed` `<int>`
 
@@ -622,8 +660,15 @@ Target request rate in requests per second. AIPerf generates request timing acco
 #### `--arrival-pattern`, `--request-rate-mode` `<str>`
 
 Sets the arrival pattern for the load generated by AIPerf. Valid values: constant, poisson, gamma. `constant`: Generate requests at a fixed rate. `poisson`: Generate requests using a poisson distribution. `gamma`: Generate requests using a gamma distribution with tunable smoothness.
-<br>_Choices: [`concurrency_burst`, `constant`, `gamma`, `poisson`]_
-<br>_Default: `poisson`_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `concurrency_burst` |  | Generate intervals as soon as possible, up to a max concurrency limit. Only allowed when a request rate is not specified. Useful for saturation/throughput testing. |
+| `constant` |  | Generate intervals at a constant rate. Useful for controlled request rate testing. |
+| `gamma` |  | Generate intervals using a gamma distribution with tunable smoothness. Use --arrival-smoothness to control the shape parameter: - smoothness = 1.0: Equivalent to Poisson (exponential inter-arrivals) - smoothness < 1.0: More bursty/clustered arrivals - smoothness > 1.0: More regular/smooth arrivals |
+| `poisson` | _default_ | Generate intervals using a poisson process. Useful for realistic traffic patterns. |
 
 #### `--arrival-smoothness`, `--vllm-burstiness` `<float>`
 
@@ -811,8 +856,14 @@ Number of `RecordProcessor` services to spawn for parallel metric computation. H
 #### `--ui-type`, `--ui` `<str>`
 
 Select the user interface type for displaying benchmark progress. `dashboard` (default) shows real-time metrics in a Textual TUI, `simple` uses TQDM progress bars, `none` disables UI completely. Automatically set to `simple` when using `--verbose` or `--extra-verbose`.
-<br>_Choices: [`dashboard`, `none`, `simple`]_
-<br>_Default: `dashboard`_
+
+**Choices:**
+
+| | | |
+|-------|:-------:|-------------|
+| `dashboard` | _default_ | Rich terminal dashboard UI with real-time progress tracking, metric updates, and visual components using Textual framework. Provides interactive TUI experience. |
+| `none` |  | No-op UI implementation. Disables all UI output for headless execution, automation scripts, or when output is not desired. |
+| `simple` |  | Simple progress bar UI using tqdm. Provides lightweight progress tracking suitable for simple terminals and logs with minimal resource overhead. |
 
 <hr>
 
