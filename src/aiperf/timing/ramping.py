@@ -43,6 +43,8 @@ Example:
     ```
 """
 
+from __future__ import annotations
+
 import asyncio
 import bisect
 import time
@@ -53,27 +55,9 @@ from typing import Protocol, runtime_checkable
 from pydantic import ConfigDict, Field
 
 from aiperf.common import random_generator as rng
-from aiperf.common.enums import CaseInsensitiveStrEnum
-from aiperf.common.factories import AIPerfFactory
 from aiperf.common.models import AIPerfBaseModel
-
-# =============================================================================
-# RampType - The different ramp algorithms for gradually transitioning numeric values
-# =============================================================================
-
-
-class RampType(CaseInsensitiveStrEnum):
-    """The different ramp algorithms for gradually transitioning numeric values."""
-
-    LINEAR = "linear"
-    """Linear ramp: steps by step_size (default 1) at evenly spaced intervals."""
-
-    EXPONENTIAL = "exponential"
-    """Exponential ease-in ramp: starts slow, accelerates toward target."""
-
-    POISSON = "poisson"
-    """Poisson ramp: exponentially-distributed intervals normalized to fit duration exactly."""
-
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import PluginType, RampType
 
 # =============================================================================
 # RampConfig - Configuration for ramp strategies
@@ -143,38 +127,6 @@ class RampStrategyProtocol(Protocol):
         ...
 
 
-# =============================================================================
-# RampStrategyFactory - Factory for creating RampStrategyProtocol instances
-# =============================================================================
-
-
-class RampStrategyFactory(AIPerfFactory[RampType, RampStrategyProtocol]):
-    """Factory for registering and creating RampStrategyProtocol instances based on the specified RampType.
-
-    Example:
-        ```python
-        from aiperf.common.factories import RampStrategyFactory
-        from aiperf.timing.ramping import RampConfig
-        from aiperf.common.enums import RampType
-
-        config = RampConfig(
-            ramp_type=RampType.LINEAR,
-            start=1,
-            target=100,
-            duration_sec=30.0,
-        )
-        strategy = RampStrategyFactory.create_instance(config)
-        ```
-    """
-
-    @classmethod
-    def create_instance(  # type: ignore[override]
-        cls,
-        config: RampConfig,
-    ) -> RampStrategyProtocol:
-        return super().create_instance(config.ramp_type, config=config)
-
-
 # ==============================================================================
 # Ramper
 # ==============================================================================
@@ -203,7 +155,8 @@ class Ramper:
         """
         self._setter = setter
         self._config = config
-        self._strategy = RampStrategyFactory.create_instance(config)
+        RampClass = plugins.get_class(PluginType.RAMP, config.ramp_type)
+        self._strategy = RampClass(config=config)
         self._task: asyncio.Task | None = None
 
     @property
@@ -403,7 +356,6 @@ class BaseRampStrategy(ABC):
 # =============================================================================
 
 
-@RampStrategyFactory.register(RampType.LINEAR)
 class LinearStrategy(BaseRampStrategy):
     """Linear ramp: steps by step_size (default 1) at evenly spaced intervals."""
 
@@ -423,7 +375,6 @@ class LinearStrategy(BaseRampStrategy):
 # =============================================================================
 
 
-@RampStrategyFactory.register(RampType.EXPONENTIAL)
 class ExponentialStrategy(BaseRampStrategy):
     """Exponential ease-in: slow start accelerating to target."""
 
@@ -452,7 +403,6 @@ class ExponentialStrategy(BaseRampStrategy):
 # =============================================================================
 
 
-@RampStrategyFactory.register(RampType.POISSON)
 class PoissonStrategy(BaseRampStrategy):
     """Poisson ramp: exponentially-distributed intervals normalized to fit duration.
 

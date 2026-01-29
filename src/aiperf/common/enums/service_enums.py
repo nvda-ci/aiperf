@@ -1,23 +1,11 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from aiperf.common.enums.base_enums import CaseInsensitiveStrEnum
 
 
-class ServiceRunType(CaseInsensitiveStrEnum):
-    """The different ways the SystemController should run the component services."""
-
-    MULTIPROCESSING = "process"
-    """Run each service as a separate process.
-    This is the default way for single-node deployments."""
-
-    KUBERNETES = "k8s"
-    """Run each service as a separate Kubernetes pod.
-    This is the default way for multi-node deployments."""
-
-
 class LifecycleState(CaseInsensitiveStrEnum):
-    """This is the various states a lifecycle can be in."""
+    """This is the various states a service can be in during its lifecycle."""
 
     CREATED = "created"
     INITIALIZING = "initializing"
@@ -27,25 +15,6 @@ class LifecycleState(CaseInsensitiveStrEnum):
     STOPPING = "stopping"
     STOPPED = "stopped"
     FAILED = "failed"
-
-
-class ServiceType(CaseInsensitiveStrEnum):
-    """Types of services in the AIPerf system.
-
-    This is used to identify the service type when registering with the
-    SystemController. It can also be used for tracking purposes if multiple
-    instances of the same service type are running.
-    """
-
-    SYSTEM_CONTROLLER = "system_controller"
-    DATASET_MANAGER = "dataset_manager"
-    TIMING_MANAGER = "timing_manager"
-    RECORD_PROCESSOR = "record_processor"
-    RECORDS_MANAGER = "records_manager"
-    WORKER_MANAGER = "worker_manager"
-    WORKER = "worker"
-    GPU_TELEMETRY_MANAGER = "gpu_telemetry_manager"
-    SERVER_METRICS_MANAGER = "server_metrics_manager"
 
 
 class ServiceRegistrationStatus(CaseInsensitiveStrEnum):

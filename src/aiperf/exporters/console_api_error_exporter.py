@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 
@@ -11,8 +11,6 @@ from rich.console import Console
 from rich.panel import Panel
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import ConsoleExporterType
-from aiperf.common.factories import ConsoleExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import ErrorDetailsCount
 from aiperf.common.protocols import ConsoleExporterProtocol
@@ -82,7 +80,6 @@ class MaxCompletionTokensDetector:
 
 
 @implements_protocol(ConsoleExporterProtocol)
-@ConsoleExporterFactory.register(ConsoleExporterType.API_ERRORS)
 class ConsoleApiErrorExporter(AIPerfLoggerMixin):
     """Displays helpful diagnostic panels for known API error patterns."""
 

@@ -14,11 +14,10 @@ from aiperf.common.config.config_validators import parse_str_or_list
 from aiperf.common.config.groups import Groups
 from aiperf.common.enums import (
     ConnectionReuseStrategy,
-    EndpointType,
     ModelSelectionStrategy,
-    TransportType,
-    URLSelectionStrategy,
 )
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import EndpointType, TransportType, URLSelectionStrategy
 
 _logger = AIPerfLogger(__name__)
 
@@ -36,13 +35,7 @@ class EndpointConfig(BaseConfig):
         if not self.streaming:
             return self
 
-        # Lazy import to avoid circular dependency
-        from aiperf.common.factories import EndpointFactory
-        from aiperf.module_loader import ensure_modules_loaded
-
-        ensure_modules_loaded()
-
-        metadata = EndpointFactory.get_metadata(self.type)
+        metadata = plugins.get_endpoint_metadata(self.type)
         if not metadata.supports_streaming:
             _logger.warning(
                 f"Streaming is not supported for --endpoint-type {self.type}, setting streaming to False"

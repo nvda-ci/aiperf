@@ -21,17 +21,18 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from aiperf.common.base_comms import BaseCommunication
-from aiperf.common.enums import (
-    CommAddress,
-    CommClientType,
-    CommunicationBackend,
-    ZMQProxyType,
-)
-from aiperf.common.factories import CommunicationFactory, ZMQProxyFactory
+from aiperf.common.enums import CommAddress
 from aiperf.common.hooks import on_stop
 from aiperf.common.messages import TargetedServiceMessage
 from aiperf.common.mixins import AIPerfLifecycleMixin
 from aiperf.common.types import CommAddressType, MessageCallbackMapT, MessageTypeT
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import (
+    CommClientType,
+    CommunicationBackend,
+    PluginType,
+    ZMQProxyType,
+)
 from aiperf.zmq.zmq_defaults import TOPIC_DELIMITER
 
 
@@ -53,9 +54,6 @@ class CapturedPayload:
 # =============================================================================
 
 
-@ZMQProxyFactory.register(ZMQProxyType.XPUB_XSUB, override_priority=sys.maxsize)
-@ZMQProxyFactory.register(ZMQProxyType.DEALER_ROUTER, override_priority=sys.maxsize)
-@ZMQProxyFactory.register(ZMQProxyType.PUSH_PULL, override_priority=sys.maxsize)
 class FakeProxy(AIPerfLifecycleMixin):
     """No-op fake proxy replacing ZMQ proxies (test double: Fake).
 
@@ -406,9 +404,6 @@ class FakeCommunicationBus:
 # =============================================================================
 
 
-@CommunicationFactory.register(
-    CommunicationBackend.ZMQ_IPC, override_priority=sys.maxsize
-)
 class FakeCommunication(BaseCommunication):
     """In-memory communication backend replacing ZMQ (test double: Fake).
 
@@ -585,3 +580,36 @@ class FakeCommunication(BaseCommunication):
         self.request_clients.clear()
         self.reply_clients.clear()
         self.clients_cache.clear()
+
+
+# =============================================================================
+# Plugin Registration - Hot-swap production implementations when imported
+# =============================================================================
+
+# Register FakeProxy for all ZMQ proxy types at max priority
+plugins.register(
+    PluginType.ZMQ_PROXY,
+    ZMQProxyType.XPUB_XSUB,
+    FakeProxy,
+    priority=sys.maxsize,
+)
+plugins.register(
+    PluginType.ZMQ_PROXY,
+    ZMQProxyType.DEALER_ROUTER,
+    FakeProxy,
+    priority=sys.maxsize,
+)
+plugins.register(
+    PluginType.ZMQ_PROXY,
+    ZMQProxyType.PUSH_PULL,
+    FakeProxy,
+    priority=sys.maxsize,
+)
+
+# Register FakeCommunication for ZMQ IPC backend at max priority
+plugins.register(
+    PluginType.COMMUNICATION,
+    CommunicationBackend.ZMQ_IPC,
+    FakeCommunication,
+    priority=sys.maxsize,
+)

@@ -4,22 +4,6 @@
 from aiperf.common.enums.base_enums import CaseInsensitiveStrEnum
 
 
-class CommunicationBackend(CaseInsensitiveStrEnum):
-    ZMQ_TCP = "zmq_tcp"
-    ZMQ_IPC = "zmq_ipc"
-
-
-class CommClientType(CaseInsensitiveStrEnum):
-    PUB = "pub"
-    SUB = "sub"
-    PUSH = "push"
-    PULL = "pull"
-    REQUEST = "request"
-    REPLY = "reply"
-    STREAMING_ROUTER = "streaming_router"
-    STREAMING_DEALER = "streaming_dealer"
-
-
 class CommAddress(CaseInsensitiveStrEnum):
     """Enum for specifying the address type for communication clients.
     This is used to lookup the address in the communication config."""
@@ -47,9 +31,3 @@ class CommAddress(CaseInsensitiveStrEnum):
 
     RAW_INFERENCE_PROXY_BACKEND = "raw_inference_proxy_backend"
     """Backend address for the InferenceParser to receive raw inference messages from Workers."""
-
-
-class ZMQProxyType(CaseInsensitiveStrEnum):
-    DEALER_ROUTER = "dealer_router"
-    XPUB_XSUB = "xpub_xsub"
-    PUSH_PULL = "push_pull"

@@ -20,8 +20,8 @@ import zmq.asyncio
 from aiperf.common import random_generator as rng
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import CommunicationBackend, ServiceRunType
 from aiperf.common.messages import Message
+from aiperf.common.mixins import MessageBusClientMixin
 from aiperf.common.models import (
     Conversation,
     ParsedResponse,
@@ -36,7 +36,9 @@ from aiperf.common.models.record_models import TokenCounts
 from aiperf.common.tokenizer import Tokenizer
 from aiperf.common.types import MessageTypeT
 from aiperf.exporters.exporter_config import ExporterConfig
-from aiperf.module_loader import ensure_modules_loaded
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import CommunicationBackend, ServiceRunType
+from aiperf.plugin.plugins import _PluginRegistry as PluginRegistry
 from tests.harness.fake_tokenizer import FakeTokenizer
 from tests.harness.time_traveler import TimeTraveler
 
@@ -167,8 +169,11 @@ def fake_tokenizer():
 
 @pytest.fixture
 def skip_service_registration():
-    """Patch BaseComponentService._register_service_on_start to do nothing."""
-    with patch.object(BaseComponentService, "_register_service_on_start", AsyncMock()):
+    """Patch service registration and message bus probe to allow isolated testing."""
+    with (
+        patch.object(BaseComponentService, "_register_service_on_start", AsyncMock()),
+        patch.object(MessageBusClientMixin, "_wait_for_successful_probe", AsyncMock()),
+    ):
         yield
 
 
@@ -258,13 +263,16 @@ def mock_zmq(monkeypatch) -> MockZmqFixture:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def load_aiperf_modules() -> None:
-    """Load all AIPerf modules for testing.
+def load_builtin_registry() -> None:
+    """Ensure the AIPerf plugin registry is loaded for testing.
 
-    This fixture is automatically used for all tests and ensures that all AIPerf
-    modules are loaded for registration purposes.
+    This fixture is automatically used for all tests. The registry
+    auto-loads builtins in its __init__, so we just need to access
+    it to ensure it's initialized.
     """
-    ensure_modules_loaded()
+    # Registry auto-loads builtins on first access via singleton __init__
+    # Just access it to ensure it's initialized
+    _ = plugins.list_categories()
 
 
 @pytest.fixture(autouse=True)
@@ -293,9 +301,8 @@ def reset_singleton_factories():
     """Reset singleton factory instances between tests to prevent state leakage.
 
     This fixture runs automatically for every test and clears the singleton
-    instances in factories like CommunicationFactory. This prevents tests from
-    interfering with each other when they create services that use singleton
-    communication instances.
+    instances managed by the Singleton metaclass. This prevents tests from interfering
+    with each other when they create services that use singleton communication instances.
 
     The error "Communication clients must be created before the ZMQIPCCommunication
     class is initialized" occurs when a singleton instance from a previous test
@@ -303,17 +310,39 @@ def reset_singleton_factories():
     """
     yield  # Run the test first
 
-    # Clean up after test completes
-    from aiperf.common.factories import AIPerfUIFactory, CommunicationFactory
+    # Clean up after test completes - clear per-process singleton instances
+    from aiperf.common.singleton import SingletonMeta
 
-    if hasattr(CommunicationFactory, "_instances"):
-        CommunicationFactory._instances.clear()
-    if hasattr(CommunicationFactory, "_instances_pid"):
-        CommunicationFactory._instances_pid.clear()
-    if hasattr(AIPerfUIFactory, "_instances"):
-        AIPerfUIFactory._instances.clear()
-    if hasattr(AIPerfUIFactory, "_instances_pid"):
-        AIPerfUIFactory._instances_pid.clear()
+    SingletonMeta._instances.clear()
+
+
+@pytest.fixture
+def temporary_registry() -> Generator[PluginRegistry, None, None]:
+    """Fixture for isolated plugin registry testing.
+
+    Creates a temporary registry for the duration of the test,
+    then restores the original registry on exit.
+
+    Yields:
+        Fresh PluginRegistry instance
+
+    Example:
+        def test_custom_plugin(temporary_registry):
+            temporary_registry.load_builtin_registry(test_registry_path)
+            cls = temporary_registry.get('endpoint', 'test')
+            # Original registry restored after test
+    """
+    # Save the current singleton instance
+    old_instance = PluginRegistry._instance
+
+    # Create a fresh singleton
+    PluginRegistry._reset_singleton()
+    fresh_registry = PluginRegistry()
+
+    yield fresh_registry
+
+    # Restore the original singleton
+    PluginRegistry._instance = old_instance
 
 
 @pytest.fixture
@@ -507,13 +536,17 @@ def sample_conversations() -> dict[str, Conversation]:
 @pytest.fixture
 def sample_request_info() -> RequestInfo:
     """Create a sample RequestInfo for testing."""
-    from aiperf.common.enums import CreditPhase, EndpointType, ModelSelectionStrategy
+    from aiperf.common.enums import (
+        CreditPhase,
+        ModelSelectionStrategy,
+    )
     from aiperf.common.models.model_endpoint_info import (
         EndpointInfo,
         ModelEndpointInfo,
         ModelInfo,
         ModelListInfo,
     )
+    from aiperf.plugin.enums import EndpointType
 
     return RequestInfo(
         model_endpoint=ModelEndpointInfo(

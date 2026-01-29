@@ -13,7 +13,6 @@ from aiperf.common.models import (
     RequestInfo,
     RequestRecord,
     SSEMessage,
-    TransportMetadata,
 )
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.types import RequestInputT
@@ -47,16 +46,6 @@ class BaseTransport(AIPerfLifecycleMixin, ABC):
         self.base_headers: dict[str, str] = {
             "User-Agent": self.user_agent,
         }
-
-    @classmethod
-    @abstractmethod
-    def metadata(cls) -> TransportMetadata:
-        """Return transport metadata for discovery and registration.
-
-        Returns:
-            Metadata describing transport type and supported URL schemes
-        """
-        ...
 
     def get_transport_headers(self, request_info: RequestInfo) -> dict[str, str]:
         """Get protocol-specific headers (e.g., Content-Type, Accept).

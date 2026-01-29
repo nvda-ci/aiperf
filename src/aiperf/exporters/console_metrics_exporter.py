@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import sys
@@ -9,8 +9,6 @@ from rich.table import Table
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import MetricFlags
-from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
-from aiperf.common.factories import ConsoleExporterFactory
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult
 from aiperf.common.protocols import ConsoleExporterProtocol
@@ -20,7 +18,6 @@ from aiperf.metrics.metric_registry import MetricRegistry
 
 
 @implements_protocol(ConsoleExporterProtocol)
-@ConsoleExporterFactory.register(ConsoleExporterType.METRICS)
 class ConsoleMetricsExporter(AIPerfLoggerMixin):
     """A class that exports data to the console"""
 
@@ -96,7 +93,7 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
         return row
 
     def _get_title(self) -> str:
-        from aiperf.common.factories import EndpointFactory
+        from aiperf.plugin import plugins
 
-        metadata = EndpointFactory.get_metadata(self._endpoint_type)
+        metadata = plugins.get_endpoint_metadata(self._endpoint_type)
         return f"NVIDIA AIPerf | {metadata.metrics_title}"

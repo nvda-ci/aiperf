@@ -3,9 +3,7 @@
 
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import MetricFlags
-from aiperf.common.enums.data_exporter_enums import ConsoleExporterType
 from aiperf.common.exceptions import ConsoleExporterDisabled
-from aiperf.common.factories import ConsoleExporterFactory
 from aiperf.common.models import MetricResult
 from aiperf.common.protocols import ConsoleExporterProtocol
 from aiperf.exporters.console_metrics_exporter import ConsoleMetricsExporter
@@ -14,7 +12,6 @@ from aiperf.metrics.metric_registry import MetricRegistry
 
 
 @implements_protocol(ConsoleExporterProtocol)
-@ConsoleExporterFactory.register(ConsoleExporterType.HTTP_TRACE)
 class HttpTraceConsoleExporter(ConsoleMetricsExporter):
     """A class that exports HTTP trace timing metrics to the console.
 

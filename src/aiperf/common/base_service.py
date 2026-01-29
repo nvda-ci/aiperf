@@ -5,17 +5,16 @@ import os
 import signal
 import uuid
 from abc import ABC
-from typing import ClassVar
 
 from aiperf.common.config import ServiceConfig, UserConfig
-from aiperf.common.enums import CommandType, LifecycleState, ServiceType
+from aiperf.common.enums import CommandType, LifecycleState
 from aiperf.common.exceptions import ServiceError
 from aiperf.common.hooks import on_command
 from aiperf.common.messages import CommandMessage
 from aiperf.common.messages.command_messages import CommandAcknowledgedResponse
 from aiperf.common.mixins import CommandHandlerMixin
 from aiperf.common.mixins.process_health_mixin import ProcessHealthMixin
-from aiperf.common.types import ServiceTypeT
+from aiperf.plugin.enums import PluginType, ServiceType
 
 
 class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
@@ -29,8 +28,40 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
     are still required to be implemented by derived classes.
     """
 
-    service_type: ClassVar[ServiceTypeT]
-    """The type of service this class implements. This is set by the ServiceFactory.register decorator."""
+    _service_type_cache: ServiceType | None = None
+    """Cached service type (class-level)."""
+
+    @classmethod
+    def get_service_type(cls) -> ServiceType:
+        """The type of service this class implements.
+
+        This is derived from _registered_name which is set when the class is
+        loaded via plugins. Falls back to reverse lookup if needed.
+        """
+        # Check class-level cache first
+        if cls._service_type_cache is not None:
+            return cls._service_type_cache
+
+        # Try _registered_name (set when loaded via plugins.get())
+        registered_name = getattr(cls, "_registered_name", None)
+        if not registered_name:
+            # Fallback: reverse lookup in the registry for direct instantiation
+            from aiperf.plugin import plugins
+
+            registered_name = plugins.find_registered_name(PluginType.SERVICE, cls)
+
+        if registered_name:
+            cls._service_type_cache = ServiceType(registered_name)
+            return cls._service_type_cache
+
+        raise AttributeError(
+            f"Cannot determine service_type for {cls.__name__}. "
+            f"Class must be registered in plugins.yaml or loaded via plugins."
+        )
+
+    @property
+    def service_type(self) -> ServiceType:
+        return self.get_service_type()
 
     def __init__(
         self,
@@ -41,7 +72,9 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
     ) -> None:
         self.service_config = service_config
         self.user_config = user_config
-        self.service_id = service_id or f"{self.service_type}_{uuid.uuid4().hex[:8]}"
+        self.service_id = (
+            service_id or f"{self.get_service_type()}_{uuid.uuid4().hex[:8]}"
+        )
         super().__init__(
             service_id=self.service_id,
             id=self.service_id,
@@ -50,7 +83,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
             **kwargs,
         )
         self.debug(
-            lambda: f"__init__ {self.service_type} service (id: {self.service_id})"
+            lambda: f"__init__ {self.get_service_type()} service (id: {self.service_id})"
         )
         self._set_process_title()
 
@@ -66,7 +99,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
     def _service_error(self, message: str) -> ServiceError:
         return ServiceError(
             message=message,
-            service_type=self.service_type,
+            service_type=self.get_service_type(),
             service_id=self.service_id,
         )
 
@@ -90,7 +123,7 @@ class BaseService(CommandHandlerMixin, ProcessHealthMixin, ABC):
         """This overrides the base class stop method to handle the case where the service is already stopping.
         In this case, we need to kill the process to be safe."""
         if self.stop_requested:
-            if self.service_type != ServiceType.SYSTEM_CONTROLLER:
+            if self.get_service_type() != ServiceType.SYSTEM_CONTROLLER:
                 self.error(f"Attempted to stop {self} in state {self.state}. Ignoring.")
                 return
             self.error(f"Attempted to stop {self} in state {self.state}. Killing.")

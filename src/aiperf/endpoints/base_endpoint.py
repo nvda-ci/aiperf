@@ -11,7 +11,6 @@ from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import (
     BaseResponseData,
     EmbeddingResponseData,
-    EndpointMetadata,
     Media,
     ModelEndpointInfo,
     ParsedResponse,
@@ -37,11 +36,6 @@ class BaseEndpoint(AIPerfLoggerMixin, ABC):
     def __init__(self, model_endpoint: ModelEndpointInfo, **kwargs):
         super().__init__(**kwargs)
         self.model_endpoint = model_endpoint
-
-    @classmethod
-    @abstractmethod
-    def metadata(cls) -> EndpointMetadata:
-        """Return endpoint metadata."""
 
     def get_endpoint_headers(self, request_info: RequestInfo) -> dict[str, str]:
         """Get endpoint headers (auth + user custom). Override to customize."""

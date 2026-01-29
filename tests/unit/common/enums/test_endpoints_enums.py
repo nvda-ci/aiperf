@@ -1,10 +1,10 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
 
-from aiperf.common.enums import EndpointType
-from aiperf.common.factories import EndpointFactory
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import EndpointType
 
 
 class TestEndpointType:
@@ -80,21 +80,23 @@ class TestEndpointType:
         expected_path,
         expected_title,
     ):
-        """Verify EndpointType metadata returned by factory."""
+        """Verify EndpointType metadata returned by plugin registry."""
         assert str(endpoint_type) == expected_tag
         assert endpoint_type.value == expected_tag
 
-        metadata = EndpointFactory.get_metadata(endpoint_type)
-        assert metadata.endpoint_path == expected_path
-        assert metadata.supports_streaming == expected_streaming
-        assert metadata.produces_tokens == expected_tokens
-        assert metadata.metrics_title == expected_title
+        # Get metadata from plugin entry (not from class method)
+        entry = plugins.get_entry("endpoint", endpoint_type)
+        metadata = entry.metadata
+        assert metadata["endpoint_path"] == expected_path
+        assert metadata["supports_streaming"] == expected_streaming
+        assert metadata["produces_tokens"] == expected_tokens
+        assert metadata["metrics_title"] == expected_title
 
         # Optional sanity check for completeness
-        assert hasattr(metadata, "endpoint_path")
-        assert hasattr(metadata, "supports_streaming")
-        assert hasattr(metadata, "produces_tokens")
-        assert hasattr(metadata, "metrics_title")
+        assert "endpoint_path" in metadata
+        assert "supports_streaming" in metadata
+        assert "produces_tokens" in metadata
+        assert "metrics_title" in metadata
 
     @pytest.mark.parametrize(
         "tag_value",
@@ -122,10 +124,11 @@ class TestEndpointType:
         assert EndpointType("chat") == EndpointType.CHAT
 
     def test_all_endpoint_types_have_valid_metadata(self):
-        """Ensure all EndpointType members have valid metadata via factory."""
+        """Ensure all EndpointType members have valid metadata via plugin registry."""
         for endpoint_type in EndpointType:
-            metadata = EndpointFactory.get_metadata(endpoint_type)
-            assert isinstance(metadata.supports_streaming, bool)
-            assert isinstance(metadata.produces_tokens, bool)
-            assert metadata.metrics_title
-            assert isinstance(metadata.metrics_title, str)
+            entry = plugins.get_entry("endpoint", endpoint_type)
+            metadata = entry.metadata
+            assert isinstance(metadata["supports_streaming"], bool)
+            assert isinstance(metadata["produces_tokens"], bool)
+            assert metadata["metrics_title"]
+            assert isinstance(metadata["metrics_title"], str)

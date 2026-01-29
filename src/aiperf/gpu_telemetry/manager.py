@@ -9,10 +9,8 @@ from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     CommAddress,
     CommandType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
-from aiperf.common.factories import ServiceFactory
 from aiperf.common.hooks import on_command, on_init, on_stop
 from aiperf.common.messages import (
     ProfileCancelCommand,
@@ -31,7 +29,6 @@ __all__ = ["GPUTelemetryManager"]
 
 
 @implements_protocol(ServiceProtocol)
-@ServiceFactory.register(ServiceType.GPU_TELEMETRY_MANAGER)
 class GPUTelemetryManager(BaseComponentService):
     """Coordinates multiple TelemetryDataCollector instances for GPU telemetry collection.
 

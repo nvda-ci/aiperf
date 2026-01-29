@@ -3,12 +3,12 @@
 
 import pytest
 
-from aiperf.common.enums import EndpointType
 from aiperf.common.models import ParsedResponse, TextResponse, TextResponseData
-from aiperf.common.models.metadata import EndpointMetadata
 from aiperf.common.models.record_models import RequestInfo, RequestRecord
 from aiperf.common.protocols import InferenceServerResponse
 from aiperf.endpoints.base_endpoint import BaseEndpoint
+from aiperf.plugin.enums import EndpointType
+from aiperf.plugin.schema import EndpointMetadata
 from tests.unit.endpoints.conftest import (
     create_endpoint_with_mock_transport,
     create_model_endpoint,
@@ -252,29 +252,10 @@ class TestBaseEndpointAbstractMethods:
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
             BaseEndpoint(model_endpoint=test_model_endpoint)
 
-    def test_must_implement_metadata(self, test_model_endpoint):
-        """Test that subclasses must implement metadata()."""
-
-        class IncompleteEndpoint(BaseEndpoint):
-            def format_payload(self, request_info: RequestInfo) -> dict:
-                return {}
-
-            def parse_response(
-                self, response: InferenceServerResponse
-            ) -> ParsedResponse | None:
-                return None
-
-        with pytest.raises(TypeError):
-            IncompleteEndpoint(model_endpoint=test_model_endpoint)
-
     def test_must_implement_format_payload(self, test_model_endpoint):
         """Test that subclasses must implement format_payload()."""
 
         class IncompleteEndpoint(BaseEndpoint):
-            @classmethod
-            def metadata(cls) -> EndpointMetadata:
-                return EndpointMetadata(endpoint_path="/test")
-
             def parse_response(
                 self, response: InferenceServerResponse
             ) -> ParsedResponse | None:
@@ -287,10 +268,6 @@ class TestBaseEndpointAbstractMethods:
         """Test that subclasses must implement parse_response()."""
 
         class IncompleteEndpoint(BaseEndpoint):
-            @classmethod
-            def metadata(cls) -> EndpointMetadata:
-                return EndpointMetadata(endpoint_path="/test")
-
             def format_payload(self, request_info: RequestInfo) -> dict:
                 return {}
 

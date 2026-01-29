@@ -7,7 +7,6 @@ Shared fixtures for testing AIPerf metrics.
 
 from aiperf.common.enums import (
     CreditPhase,
-    EndpointType,
     MetricType,
     ModelSelectionStrategy,
 )
@@ -29,6 +28,7 @@ from aiperf.common.models.record_models import TextResponseData, TokenCounts
 from aiperf.common.types import MetricTagT
 from aiperf.metrics.metric_dicts import MetricArray, MetricRecordDict, MetricResultsDict
 from aiperf.metrics.metric_registry import MetricRegistry
+from aiperf.plugin.enums import EndpointType
 
 
 def _create_test_request_info(model_name: str = "test-model") -> RequestInfo:

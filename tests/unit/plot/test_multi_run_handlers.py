@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -15,12 +15,13 @@ import pytest
 
 from aiperf.plot.constants import DEFAULT_PERCENTILE
 from aiperf.plot.core.plot_generator import PlotGenerator
-from aiperf.plot.core.plot_specs import DataSource, MetricSpec, PlotSpec, PlotType
+from aiperf.plot.core.plot_specs import DataSource, MetricSpec, PlotSpec
 from aiperf.plot.handlers.multi_run_handlers import (
     BaseMultiRunHandler,
     ParetoHandler,
     ScatterLineHandler,
 )
+from aiperf.plugin.enums import PlotType
 
 
 @pytest.fixture

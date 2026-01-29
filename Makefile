@@ -21,7 +21,9 @@
 		integration-tests integration-tests-ci integration-tests-verbose integration-tests-ci-macos \
 		test-integration test-integration-ci test-integration-verbose test-integration-ci-macos \
 		test-component-integration test-component-integration-ci test-component-integration-verbose \
-		generate-cli-docs generate-env-vars-docs test-stress stress-tests internal-help help
+		generate-cli-docs generate-env-vars-docs generate-plugin-enums \
+		generate-plugin-overloads check-plugin-overloads generate-plugin-schemas \
+		generate-all-plugin-files generate-all-docs test-stress stress-tests internal-help help
 
 
 # Include user-defined environment variables
@@ -172,6 +174,14 @@ first-time-setup: #? convenience command to setup the environment for the first 
 	@printf "$(bold)$(green)Installing mock server...$(reset)\n"
 	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory install-mock-server
 
+	@# Generate plugin enum stubs for IDE autocomplete
+	@printf "$(bold)$(green)Generating plugin enum stubs...$(reset)\n"
+	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-enums
+
+	@# Generate plugin overloads for IDE autocomplete
+	@printf "$(bold)$(green)Generating plugin overloads...$(reset)\n"
+	@PATH=$(UV_PATH):$(PATH) $(MAKE) --no-print-directory generate-plugin-overloads
+
 	@# Install pre-commit hooks
 	@printf "$(bold)$(green)Installing pre-commit hooks...$(reset)\n"
 	$(activate_venv) && pre-commit install --install-hooks
@@ -240,4 +250,26 @@ generate-cli-docs: #? generate the CLI documentation.
 	$(activate_venv) && tools/generate_cli_docs.py
 
 generate-env-vars-docs: #? generate the environment variables documentation.
+	$(activate_venv) && tools/generate_env_vars_docs.py
+
+generate-plugin-enums: #? generate the plugin enum stubs (enums.py and enums.pyi).
+	$(activate_venv) && python tools/generate_plugin_artifacts.py --enums
+
+generate-plugin-overloads: #? generate the get_class() overloads in plugins.py.
+	$(activate_venv) && python tools/generate_plugin_artifacts.py --overloads
+
+check-plugin-overloads: #? check if the get_class() overloads are up-to-date.
+	$(activate_venv) && python tools/generate_plugin_artifacts.py --overloads --check
+
+generate-plugin-schemas: #? generate JSON schemas for categories.yaml and plugins.yaml.
+	$(activate_venv) && python tools/generate_plugin_artifacts.py --schemas
+
+validate-plugin-schemas: #? validate categories.yaml and plugins.yaml against their schemas.
+	$(activate_venv) && python tools/validate_plugin_schemas.py
+
+generate-all-plugin-files: #? generate all plugin files (enums, overloads, schemas).
+	$(activate_venv) && python tools/generate_plugin_artifacts.py
+
+generate-all-docs: #? generate all documentation files.
+	$(activate_venv) && tools/generate_cli_docs.py
 	$(activate_venv) && tools/generate_env_vars_docs.py

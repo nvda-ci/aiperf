@@ -11,7 +11,8 @@ import warnings
 
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.environment import Environment
-from aiperf.common.protocols import ServiceProtocol
+from aiperf.common.types import ServiceTypeT
+from aiperf.plugin.enums import PluginType
 
 # Suppress ZMQ RuntimeWarning about dropped messages during shutdown.
 # This is expected behavior when async tasks are cancelled while ZMQ messages are in-flight.
@@ -34,7 +35,7 @@ warnings.filterwarnings(
 
 
 def bootstrap_and_run_service(
-    service_class: type[ServiceProtocol],
+    service_type: ServiceTypeT,
     service_config: ServiceConfig | None = None,
     user_config: UserConfig | None = None,
     service_id: str | None = None,
@@ -47,8 +48,7 @@ def bootstrap_and_run_service(
     create an instance of the service, and run it.
 
     Args:
-        service_class: The python class of the service to run. This should be a subclass of
-            BaseService. This should be a type and not an instance.
+        service_type: The type of the service to run. This should be a ServiceType.
         service_config: The service configuration to use. If not provided, the service
             configuration will be loaded from the environment variables.
         user_config: The user configuration to use. If not provided, the user configuration
@@ -57,7 +57,6 @@ def bootstrap_and_run_service(
             the child process logging will be set up.
         kwargs: Additional keyword arguments to pass to the service constructor.
     """
-
     # Load the service configuration
     if service_config is None:
         from aiperf.common.config import load_service_config
@@ -75,11 +74,14 @@ def bootstrap_and_run_service(
         if Environment.DEV.ENABLE_YAPPI:
             _start_yappi_profiling()
 
-        from aiperf.module_loader import ensure_modules_loaded
+        from aiperf.common.aiperf_logger import AIPerfLogger
+        from aiperf.plugin import plugins
 
-        ensure_modules_loaded()
+        logger = AIPerfLogger(__name__)
+        service_metadata = plugins.get_service_metadata(service_type)
+        ServiceClass = plugins.get_class(PluginType.SERVICE, service_type)
 
-        if service_class.__name__ in ("Worker", "TimingManager"):
+        if service_metadata.disable_gc:
             # Disable garbage collection in child processes to prevent unpredictable latency spikes.
             # Only required in timing critical services such as Worker and TimingManager.
             import gc
@@ -89,6 +91,39 @@ def bootstrap_and_run_service(
             gc.freeze()
             gc.set_threshold(0)
             gc.disable()
+
+        # ===================================================================
+        # Initialize plugin system EARLY (before service creation)
+        # ===================================================================
+        # This must happen BEFORE any factory is used to ensure all
+        # implementations (built-in + plugins) are available.
+        # ===================================================================
+
+        logger.info("Initializing plugin system...")
+
+        try:
+            # 1. Initialize plugin registry (loads built-in + discovers plugins automatically)
+            from aiperf.plugin import plugins
+
+            # Check for external plugins
+            all_plugins = plugins.list_packages()
+            builtin_plugins = plugins.list_packages(builtin_only=True)
+            external_plugins = [p for p in all_plugins if p not in builtin_plugins]
+
+            if external_plugins:
+                logger.info(
+                    f"Discovered {len(external_plugins)} external plugin(s): {', '.join(external_plugins)}"
+                )
+            else:
+                logger.debug("No external plugins discovered")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize plugin registry: {e!r}")
+            raise RuntimeError(
+                f"Plugin system initialization failed. This is a critical error. {e!r}"
+            ) from e
+
+        logger.info("Plugin system initialized successfully")
 
         # Load and apply custom GPU metrics in child process
         if user_config.gpu_telemetry_metrics_file:
@@ -103,7 +138,7 @@ def bootstrap_and_run_service(
             constants.GPU_TELEMETRY_METRICS_CONFIG.extend(custom_metrics)
             constants.DCGM_TO_FIELD_MAPPING.update(new_dcgm_mappings)
 
-        service = service_class(
+        service = ServiceClass(
             service_config=service_config,
             user_config=user_config,
             service_id=service_id,

@@ -10,6 +10,7 @@ __ignore__ = ["main"]
 ########################################################################
 from aiperf.workers.inference_client import (
     InferenceClient,
+    detect_transport_from_url,
 )
 from aiperf.workers.session_manager import (
     UserSession,
@@ -30,4 +31,5 @@ __all__ = [
     "Worker",
     "WorkerManager",
     "WorkerStatusInfo",
+    "detect_transport_from_url",
 ]

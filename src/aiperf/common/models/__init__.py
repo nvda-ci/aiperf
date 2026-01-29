@@ -57,10 +57,6 @@ from aiperf.common.models.health_models import (
     IOCounters,
     ProcessHealth,
 )
-from aiperf.common.models.metadata import (
-    EndpointMetadata,
-    TransportMetadata,
-)
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
     ModelEndpointInfo,
@@ -187,7 +183,6 @@ __all__ = [
     "EmbeddingResponseData",
     "EndpointData",
     "EndpointInfo",
-    "EndpointMetadata",
     "ErrorDetails",
     "ErrorDetailsCount",
     "ExitErrorInfo",
@@ -263,7 +258,6 @@ __all__ = [
     "TimesliceData",
     "TokenCounts",
     "TraceDataExport",
-    "TransportMetadata",
     "Turn",
     "TurnMetadata",
     "Usage",

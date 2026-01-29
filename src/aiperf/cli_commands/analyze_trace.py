@@ -2,13 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """CLI command for analyzing mooncake traces."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from cyclopts import App
 from rich.console import Console
 from rich.table import Table
 
-from aiperf.dataset.synthesis import MetricStats, PrefixAnalyzer
+if TYPE_CHECKING:
+    from aiperf.dataset.synthesis import MetricStats
 
 analyze_app = App(
     name="analyze-trace", help="Analyze mooncake trace for prefix statistics"
@@ -62,6 +66,8 @@ def analyze_trace(
         block_size: KV cache block size for analysis (default: 512)
         output_file: Optional output path for analysis report (JSON)
     """
+    from aiperf.dataset.synthesis import PrefixAnalyzer
+
     if not input_file.exists():
         print(f"Error: Input file not found: {input_file}")
         return

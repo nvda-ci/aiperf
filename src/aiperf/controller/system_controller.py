@@ -18,15 +18,9 @@ from aiperf.common.enums import (
     CommandType,
     MessageType,
     ServiceRegistrationStatus,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import LifecycleOperationError
-from aiperf.common.factories import (
-    AIPerfUIFactory,
-    ServiceFactory,
-    ServiceManagerFactory,
-)
 from aiperf.common.hooks import on_command, on_init, on_message, on_start, on_stop
 from aiperf.common.logging import cleanup_global_log_queue, get_global_log_queue
 from aiperf.common.messages import (
@@ -64,15 +58,48 @@ from aiperf.controller.proxy_manager import ProxyManager
 from aiperf.controller.system_mixins import SignalHandlerMixin
 from aiperf.credit.messages import CreditsCompleteMessage
 from aiperf.exporters.exporter_manager import ExporterManager
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import PluginType, ServiceType
 
 
-@ServiceFactory.register(ServiceType.SYSTEM_CONTROLLER)
 class SystemController(SignalHandlerMixin, BaseService):
     """System Controller service.
 
     This service is responsible for managing the lifecycle of all other services.
     It will start, stop, and configure all other services.
     """
+
+    @staticmethod
+    def _build_required_services_from_registry() -> dict[ServiceTypeT, int]:
+        """Build required services dict dynamically from the plugin registry.
+
+        Scans all registered services and returns those where:
+        - metadata.required == True
+        - metadata.auto_start == True
+
+        Returns:
+            Dict mapping ServiceType to replica count (1 by default).
+        """
+        required: dict[ServiceTypeT, int] = {}
+        for entry in plugins.iter_entries(PluginType.SERVICE):
+            meta = plugins.get_service_metadata(entry.name)
+            if meta.required and meta.auto_start:
+                required[ServiceType(entry.name)] = 1
+        return required
+
+    @staticmethod
+    def _get_optional_services_from_registry() -> list[ServiceTypeT]:
+        """Get optional services (required=False, auto_start=True) from registry.
+
+        Returns:
+            List of ServiceType values for optional services.
+        """
+        optional: list[ServiceTypeT] = []
+        for entry in plugins.iter_entries(PluginType.SERVICE):
+            meta = plugins.get_service_metadata(entry.name)
+            if not meta.required and meta.auto_start:
+                optional.append(ServiceType(entry.name))
+        return optional
 
     def __init__(
         self,
@@ -91,14 +118,18 @@ class SystemController(SignalHandlerMixin, BaseService):
             print_developer_mode_warning()
 
         self._was_cancelled = False
-        # List of required service types, in no particular order
-        # These are services that must be running before the system controller can start profiling
-        self.required_services: dict[ServiceTypeT, int] = {
-            ServiceType.DATASET_MANAGER: 1,
-            ServiceType.TIMING_MANAGER: 1,
-            ServiceType.WORKER_MANAGER: 1,
-            ServiceType.RECORDS_MANAGER: 1,
-        }
+        # Build required services dynamically from the plugin registry
+        # These are services where metadata.required=True and metadata.auto_start=True
+        self.required_services: dict[ServiceTypeT, int] = (
+            self._build_required_services_from_registry()
+        )
+        # Get optional services from registry (required=False, auto_start=True)
+        self._optional_services = self._get_optional_services_from_registry()
+        self.debug(
+            f"Required services from registry: {list(self.required_services.keys())}"
+        )
+        self.debug(f"Optional services from registry: {self._optional_services}")
+
         if self.service_config.record_processor_service_count is not None:
             self.required_services[ServiceType.RECORD_PROCESSOR] = (
                 self.service_config.record_processor_service_count
@@ -110,17 +141,17 @@ class SystemController(SignalHandlerMixin, BaseService):
         self.proxy_manager: ProxyManager = ProxyManager(
             service_config=self.service_config
         )
-        self.service_manager: ServiceManagerProtocol = (
-            ServiceManagerFactory.create_instance(
-                self.service_config.service_run_type.value,
-                required_services=self.required_services,
-                user_config=self.user_config,
-                service_config=self.service_config,
-                log_queue=get_global_log_queue(),
-            )
+        ServiceManagerClass = plugins.get_class(
+            PluginType.SERVICE_MANAGER, self.service_config.service_run_type
         )
-        self.ui: AIPerfUIProtocol = AIPerfUIFactory.create_instance(
-            self.service_config.ui_type,
+        self.service_manager: ServiceManagerProtocol = ServiceManagerClass(
+            required_services=self.required_services,
+            user_config=self.user_config,
+            service_config=self.service_config,
+            log_queue=get_global_log_queue(),
+        )
+        UIClass = plugins.get_class(PluginType.UI, self.service_config.ui_type)
+        self.ui: AIPerfUIProtocol = UIClass(
             service_config=self.service_config,
             user_config=self.user_config,
             log_queue=get_global_log_queue(),
@@ -316,10 +347,10 @@ class SystemController(SignalHandlerMixin, BaseService):
         self.service_manager.service_map[message.service_type].append(service_info)
 
         try:
-            type_name = ServiceType(message.service_type).name.title().replace("_", " ")
+            name = ServiceType(message.service_type).name.title().replace("_", " ")
         except (TypeError, ValueError):
-            type_name = message.service_type
-        self.info(lambda: f"Registered {type_name} (id: '{message.service_id}')")
+            name = message.service_type
+        self.info(lambda: f"Registered {name} (id: '{message.service_id}')")
 
     @on_message(MessageType.HEARTBEAT)
     async def _process_heartbeat_message(self, message: HeartbeatMessage) -> None:
@@ -927,7 +958,7 @@ def main() -> None:
 
     from aiperf.common.bootstrap import bootstrap_and_run_service
 
-    bootstrap_and_run_service(SystemController)
+    bootstrap_and_run_service(SystemController.get_service_type())
 
 
 if __name__ == "__main__":

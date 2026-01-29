@@ -5,7 +5,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from aiperf.common.enums import CommClientType, LifecycleState
+from aiperf.common.enums import LifecycleState
 from aiperf.common.environment import Environment
 from aiperf.common.hooks import Hook, HookType
 from aiperf.common.models import (
@@ -30,6 +30,7 @@ from aiperf.common.types import (
     RequestOutputT,
     ServiceTypeT,
 )
+from aiperf.plugin.enums import CommClientType
 
 if TYPE_CHECKING:
     import multiprocessing
@@ -38,10 +39,8 @@ if TYPE_CHECKING:
     from rich.console import Console
 
     from aiperf.common.config import ServiceConfig, UserConfig
-    from aiperf.common.enums import DatasetSamplingStrategy
     from aiperf.common.messages.inference_messages import MetricRecordsData
     from aiperf.common.models.dataset_models import DatasetClientMetadata
-    from aiperf.common.models.metadata import EndpointMetadata, TransportMetadata
     from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
     from aiperf.common.models.record_models import MetricResult
     from aiperf.common.models.server_metrics_models import (
@@ -53,6 +52,7 @@ if TYPE_CHECKING:
     from aiperf.dataset.loader.models import CustomDatasetT
     from aiperf.exporters.exporter_config import ExporterConfig, FileExportInfo
     from aiperf.metrics.metric_dicts import MetricRecordDict
+    from aiperf.plugin.enums import DatasetSamplingStrategy
 
 
 ################################################################################
@@ -633,9 +633,6 @@ class EndpointProtocol(Protocol):
 
     def __init__(self, model_endpoint: "ModelEndpointInfo", **kwargs) -> None: ...
 
-    @classmethod
-    def metadata(cls) -> "EndpointMetadata": ...
-
     def format_payload(self, request_info: RequestInfo) -> RequestOutputT: ...
     def extract_response_data(self, record: RequestRecord) -> list[ParsedResponse]: ...
     def get_endpoint_headers(self, request_info: RequestInfo) -> dict[str, str]: ...
@@ -866,9 +863,6 @@ class TransportProtocol(AIPerfLifecycleProtocol, Protocol):
     """Protocol for a transport that sends requests to an inference server."""
 
     def __init__(self, **kwargs) -> None: ...
-
-    @classmethod
-    def metadata(cls) -> "TransportMetadata": ...
 
     def get_transport_headers(self, request_info: RequestInfo) -> dict[str, str]: ...
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
@@ -7,12 +7,16 @@ import orjson
 import pytest
 
 from aiperf.common.config import EndpointConfig, OutputConfig, ServiceConfig, UserConfig
-from aiperf.common.enums import EndpointType, PrometheusMetricType, ServerMetricsFormat
+from aiperf.common.enums import (
+    PrometheusMetricType,
+    ServerMetricsFormat,
+)
 from aiperf.common.models.server_metrics_models import (
     MetricFamily,
     MetricSample,
     ServerMetricsRecord,
 )
+from aiperf.plugin.enums import EndpointType
 from aiperf.server_metrics.jsonl_writer import ServerMetricsJSONLWriter
 from tests.unit.post_processors.conftest import aiperf_lifecycle
 

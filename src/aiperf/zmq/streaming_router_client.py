@@ -12,9 +12,7 @@ import zmq
 from msgspec import Struct
 
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import CommClientType
 from aiperf.common.environment import Environment
-from aiperf.common.factories import CommunicationClientFactory
 from aiperf.common.hooks import background_task, on_stop
 from aiperf.common.protocols import StreamingRouterClientProtocol
 from aiperf.common.utils import yield_to_event_loop
@@ -31,7 +29,6 @@ WorkerToRouterHandler: TypeAlias = Callable[
 
 
 @implements_protocol(StreamingRouterClientProtocol)
-@CommunicationClientFactory.register(CommClientType.STREAMING_ROUTER)
 class ZMQStreamingRouterClient(BaseZMQClient):
     """
     ZMQ ROUTER socket client for bidirectional streaming with DEALER clients.

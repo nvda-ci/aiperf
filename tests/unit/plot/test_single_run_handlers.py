@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from aiperf.plot.core.plot_generator import PlotGenerator
-from aiperf.plot.core.plot_specs import DataSource, MetricSpec, PlotSpec, PlotType
+from aiperf.plot.core.plot_specs import DataSource, MetricSpec, PlotSpec
 from aiperf.plot.exceptions import PlotGenerationError
 from aiperf.plot.handlers.single_run_handlers import (
     AreaHandler,
@@ -26,6 +26,7 @@ from aiperf.plot.handlers.single_run_handlers import (
     TimeSliceHandler,
     _is_single_stat_metric,
 )
+from aiperf.plugin.enums import PlotType
 
 
 class TestIsSingleStatMetric:

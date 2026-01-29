@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Any
@@ -14,11 +14,9 @@ from aiperf.common.constants import (
 from aiperf.common.decorators import implements_protocol
 from aiperf.common.enums import (
     PrometheusMetricType,
-    ResultsProcessorType,
     ServerMetricsFormat,
 )
 from aiperf.common.exceptions import DataExporterDisabled, PostProcessorDisabled
-from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.models import MetricResult
 from aiperf.common.models.error_models import ErrorDetailsCount
 from aiperf.common.models.server_metrics_models import (
@@ -40,7 +38,6 @@ from aiperf.server_metrics.storage import ServerMetricsHierarchy
 
 
 @implements_protocol(ServerMetricsAccumulatorProtocol)
-@ResultsProcessorFactory.register(ResultsProcessorType.SERVER_METRICS_ACCUMULATOR)
 class ServerMetricsAccumulator(BaseMetricsProcessor):
     """Process individual ServerMetricsRecord objects into hierarchical storage.
 

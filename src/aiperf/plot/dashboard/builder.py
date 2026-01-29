@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -30,7 +30,7 @@ from aiperf.plot.constants import (
 from aiperf.plot.core.data_loader import RunData
 from aiperf.plot.core.mode_detector import VisualizationMode
 from aiperf.plot.core.plot_generator import PlotGenerator
-from aiperf.plot.core.plot_specs import PlotType, get_plot_type_info
+from aiperf.plot.core.plot_specs import get_plot_type_info
 from aiperf.plot.core.swept_params import detect_swept_parameters
 from aiperf.plot.dashboard.components import (
     create_button,
@@ -60,6 +60,7 @@ from aiperf.plot.metric_names import (
     get_metric_display_name_with_unit,
 )
 from aiperf.plot.utils import get_server_metrics_summary
+from aiperf.plugin.enums import PlotType
 
 CATEGORY_HEADERS = {
     "per_request": "── Per-Request Plots ──",

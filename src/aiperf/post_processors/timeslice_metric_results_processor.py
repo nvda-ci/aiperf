@@ -6,9 +6,7 @@ from typing import Any
 from aiperf.common.config import UserConfig
 from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.decorators import implements_protocol
-from aiperf.common.enums import ResultsProcessorType
 from aiperf.common.exceptions import NoMetricValue, PostProcessorDisabled
-from aiperf.common.factories import ResultsProcessorFactory
 from aiperf.common.models import MetricResult
 from aiperf.common.protocols import ResultsProcessorProtocol
 from aiperf.common.types import MetricTagT, TimeSliceT
@@ -19,7 +17,6 @@ from aiperf.post_processors.metric_results_processor import MetricResultsProcess
 
 
 @implements_protocol(ResultsProcessorProtocol)
-@ResultsProcessorFactory.register(ResultsProcessorType.TIMESLICE)
 class TimesliceMetricResultsProcessor(MetricResultsProcessor):
     """Processor for metric results in timeslice mode.
 

@@ -14,7 +14,7 @@ from aiperf.common.config import (
     ServiceConfig,
     UserConfig,
 )
-from aiperf.common.enums import CreditPhase, EndpointType
+from aiperf.common.enums import CreditPhase
 from aiperf.common.enums.data_exporter_enums import ExportLevel
 from aiperf.common.environment import Environment
 from aiperf.common.exceptions import PostProcessorDisabled
@@ -26,6 +26,7 @@ from aiperf.common.models.record_models import (
 )
 from aiperf.common.models.trace_models import AioHttpTraceData
 from aiperf.metrics.metric_dicts import MetricRecordDict
+from aiperf.plugin.enums import EndpointType
 from aiperf.post_processors.record_export_results_processor import (
     RecordExportResultsProcessor,
 )

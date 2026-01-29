@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -24,7 +24,6 @@ from aiperf.plot.core.plot_specs import (
     ExperimentClassificationConfig,
     MetricSpec,
     PlotSpec,
-    PlotType,
     Style,
     TimeSlicePlotSpec,
 )
@@ -34,6 +33,7 @@ from aiperf.plot.metric_names import (
     get_request_metrics,
     get_timeslice_metrics,
 )
+from aiperf.plugin.enums import PlotType
 
 _logger = logging.getLogger(__name__)
 

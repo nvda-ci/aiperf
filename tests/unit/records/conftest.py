@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aiperf.common.config import ServiceConfig
-from aiperf.common.enums import CreditPhase, EndpointType, ModelSelectionStrategy
+from aiperf.common.enums import (
+    CreditPhase,
+    ModelSelectionStrategy,
+)
 from aiperf.common.models import (
     ErrorDetails,
     RequestInfo,
@@ -24,6 +27,7 @@ from aiperf.common.models.model_endpoint_info import (
     ModelListInfo,
 )
 from aiperf.common.tokenizer import Tokenizer
+from aiperf.plugin.enums import EndpointType
 from aiperf.records.inference_result_parser import InferenceResultParser
 
 
@@ -87,14 +91,27 @@ def inference_result_parser(user_config):
         ]:
             setattr(self, method, MagicMock())
 
+    # Create a real ModelEndpointInfo with a valid endpoint type
+    mock_model_endpoint = ModelEndpointInfo(
+        models=ModelListInfo(
+            models=[ModelInfo(name="test-model")],
+            model_selection_strategy=ModelSelectionStrategy.ROUND_ROBIN,
+        ),
+        endpoint=EndpointInfo(
+            type=EndpointType.CHAT,
+            base_url="http://localhost:8000/v1/test",
+        ),
+    )
+
     with (
         patch(
             "aiperf.common.mixins.CommunicationMixin.__init__", mock_communication_init
         ),
         patch(
-            "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config"
+            "aiperf.common.models.model_endpoint_info.ModelEndpointInfo.from_user_config",
+            return_value=mock_model_endpoint,
         ),
-        patch("aiperf.common.factories.EndpointFactory.create_instance"),
+        patch("aiperf.records.inference_result_parser.plugins.get_class"),
     ):
         parser = InferenceResultParser(
             service_config=ServiceConfig(),

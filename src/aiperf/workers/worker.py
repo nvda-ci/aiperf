@@ -11,12 +11,10 @@ from aiperf.common.enums import (
     CommAddress,
     CommandType,
     MessageType,
-    ServiceType,
 )
 from aiperf.common.environment import Environment
 from aiperf.common.event_loop_monitor import EventLoopMonitor
 from aiperf.common.exceptions import NotInitializedError
-from aiperf.common.factories import DatasetClientStoreFactory, ServiceFactory
 from aiperf.common.hooks import (
     background_task,
     on_command,
@@ -63,11 +61,11 @@ from aiperf.credit.messages import (
     WorkerShutdown,
 )
 from aiperf.credit.structs import Credit, CreditContext
+from aiperf.plugin import plugins
 from aiperf.workers.inference_client import InferenceClient
 from aiperf.workers.session_manager import UserSession, UserSessionManager
 
 
-@ServiceFactory.register(ServiceType.WORKER)
 class Worker(BaseComponentService, ProcessHealthMixin):
     """Worker processes credits from the TimingManager and makes API calls to inference servers.
 
@@ -231,9 +229,10 @@ class Worker(BaseComponentService, ProcessHealthMixin):
         the discriminated union pattern for type-safe routing. This allows new
         storage backends (S3, Redis, etc.) to work without modifying Worker code.
         """
-        self._dataset_client = DatasetClientStoreFactory.create_instance(
-            client_metadata=msg.client_metadata,
+        DatasetClientClass = plugins.get_class(
+            "dataset_client_store", msg.client_metadata.client_type
         )
+        self._dataset_client = DatasetClientClass(client_metadata=msg.client_metadata)
         await self._dataset_client.initialize()
         self._dataset_configured_event.set()
         self.debug(
@@ -698,7 +697,7 @@ class Worker(BaseComponentService, ProcessHealthMixin):
 def main() -> None:
     from aiperf.common.bootstrap import bootstrap_and_run_service
 
-    bootstrap_and_run_service(Worker)
+    bootstrap_and_run_service(Worker.get_service_type())
 
 
 if __name__ == "__main__":

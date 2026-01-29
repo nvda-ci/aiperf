@@ -6,11 +6,7 @@ Provides URL selection strategies for distributing requests across multiple
 endpoint URLs when multiple `--url` values are provided.
 """
 
-from aiperf.common.enums import URLSelectionStrategy
-from aiperf.common.factories import URLSelectionStrategyFactory
 
-
-@URLSelectionStrategyFactory.register(URLSelectionStrategy.ROUND_ROBIN)
 class RoundRobinURLSampler:
     """Round-robin URL sampler for even distribution across endpoints.
 
