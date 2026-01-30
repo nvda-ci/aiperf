@@ -3,7 +3,9 @@
 
 import contextlib
 import io
+import logging
 import os
+import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -15,6 +17,8 @@ from aiperf.common.exceptions import (
     InitializationError,
     NotInitializedError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Tokenizer:
@@ -38,6 +42,7 @@ class Tokenizer:
         name: str,
         trust_remote_code: bool = False,
         revision: str = "main",
+        max_retries: int = 5,
     ) -> "Tokenizer":
         """
         Factory to load a tokenizer for the given pretrained model name.
@@ -46,38 +51,75 @@ class Tokenizer:
             name: The name or path of the pretrained tokenizer model.
             trust_remote_code: Whether to trust remote code when loading the tokenizer.
             revision: The specific model version to use.
+            max_retries: Maximum number of retry attempts for network failures.
         """
-        try:
-            # Silence tokenizer warning on import and first use
-            with (
-                contextlib.redirect_stdout(io.StringIO()) as _,
-                contextlib.redirect_stderr(io.StringIO()),
+        # Silence tokenizer warning on import and first use
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as _,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            from transformers import AutoTokenizer
+
+            # Use local cache only when HuggingFace offline mode is enabled
+            if bool(os.environ.get("HF_HUB_OFFLINE", "")) or bool(
+                os.environ.get("TRANSFORMERS_OFFLINE", "")
             ):
-                from transformers import AutoTokenizer
-
-                # Use local cache only when HuggingFace offline mode is enabled
-                if bool(os.environ.get("HF_HUB_OFFLINE", "")) or bool(
-                    os.environ.get("TRANSFORMERS_OFFLINE", "")
-                ):
-                    return cls._from_pretrained_local(
-                        AutoTokenizer.from_pretrained,
-                        name,
-                        trust_remote_code=trust_remote_code,
-                        revision=revision,
-                    )
-
-                tokenizer_cls = cls()
-                tokenizer_cls._tokenizer = AutoTokenizer.from_pretrained(
+                return cls._from_pretrained_local(
+                    AutoTokenizer.from_pretrained,
                     name,
                     trust_remote_code=trust_remote_code,
                     revision=revision,
                 )
-        except Exception as e:
+
+            # Retry logic for network failures
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    tokenizer_cls = cls()
+                    tokenizer_cls._tokenizer = AutoTokenizer.from_pretrained(
+                        name,
+                        trust_remote_code=trust_remote_code,
+                        revision=revision,
+                    )
+                    return tokenizer_cls
+                except Exception as e:
+                    last_exception = e
+                    # Check if this is a retryable network error
+                    error_str = str(e).lower()
+                    is_network_error = any(
+                        keyword in error_str
+                        for keyword in [
+                            "connection",
+                            "timeout",
+                            "network",
+                            "http",
+                            "429",
+                            "500",
+                            "502",
+                            "503",
+                            "504",
+                        ]
+                    )
+
+                    if is_network_error and attempt < max_retries - 1:
+                        delay = 2**attempt  # Exponential backoff: 1, 2, 4, 8, 16 seconds
+                        logger.warning(
+                            f"Network error loading tokenizer '{name}' (attempt {attempt + 1}/{max_retries}): {e!r}. "
+                            f"Retrying in {delay}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        # Not a network error or last attempt, raise immediately
+                        raise InitializationError.from_tokenizer_error(
+                            original_error=e,
+                            tokenizer_name=name,
+                        ) from e
+
+            # If we exhausted all retries
             raise InitializationError.from_tokenizer_error(
-                original_error=e,
+                original_error=last_exception,
                 tokenizer_name=name,
-            ) from e
-        return tokenizer_cls
+            ) from last_exception
 
     @classmethod
     def _from_pretrained_local(
