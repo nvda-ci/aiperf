@@ -28,6 +28,7 @@ from aiperf.plugin.enums import (
     ArrivalPattern,
     DatasetSamplingStrategy,
     EndpointType,
+    GPUTelemetryCollectorType,
     TimingMode,
 )
 
@@ -306,7 +307,6 @@ class TestGPUTelemetryConfig:
                 "dashboard",
                 "http://node1:9401/metrics",
                 "https://node2:9401/metrics",
-                "summary",
             ],
         )
 
@@ -314,7 +314,6 @@ class TestGPUTelemetryConfig:
         assert "http://node1:9401/metrics" in config.gpu_telemetry_urls
         assert "https://node2:9401/metrics" in config.gpu_telemetry_urls
         assert "dashboard" not in config.gpu_telemetry_urls
-        assert "summary" not in config.gpu_telemetry_urls
 
     @pytest.mark.parametrize(
         "gpu_telemetry,expected_urls",
@@ -351,6 +350,59 @@ class TestGPUTelemetryConfig:
         """Test that GPU metrics CSV file validation raises error if file doesn't exist."""
         with pytest.raises(ValueError, match="GPU metrics file not found"):
             make_config(gpu_telemetry=["dashboard", "/nonexistent/path/metrics.csv"])
+
+    def test_pynvml_with_urls_raises_error(self):
+        """Test that using pynvml with DCGM URLs raises an error."""
+        with pytest.raises(ValueError, match="Cannot use pynvml with DCGM URLs"):
+            make_config(gpu_telemetry=["pynvml", "http://localhost:9401/metrics"])
+
+    def test_pynvml_with_multiple_urls_raises_error(self):
+        """Test that using pynvml with multiple DCGM URLs raises an error."""
+        with pytest.raises(ValueError, match="Cannot use pynvml with DCGM URLs"):
+            make_config(
+                gpu_telemetry=[
+                    "pynvml",
+                    "http://node1:9401/metrics",
+                    "http://node2:9401/metrics",
+                ]
+            )
+
+    def test_pynvml_with_dashboard_allowed(self):
+        """Test that pynvml can be used with dashboard mode."""
+        config = make_config(gpu_telemetry=["pynvml", "dashboard"])
+
+        assert config.gpu_telemetry_collector_type == GPUTelemetryCollectorType.PYNVML
+        assert config.gpu_telemetry_mode == GPUTelemetryMode.REALTIME_DASHBOARD
+        assert config.gpu_telemetry_urls == []
+
+    def test_pynvml_only(self):
+        """Test that pynvml can be used alone."""
+        config = make_config(gpu_telemetry=["pynvml"])
+
+        assert config.gpu_telemetry_collector_type == GPUTelemetryCollectorType.PYNVML
+        assert config.gpu_telemetry_mode == GPUTelemetryMode.SUMMARY
+        assert config.gpu_telemetry_urls == []
+
+    @pytest.mark.parametrize(
+        "invalid_item",
+        [
+            "unknown",
+            "invalid_option",
+            "dcgm",
+            "gpu",
+            "telemetry",
+            "metrics",
+        ],
+    )
+    def test_unknown_item_raises_error(self, invalid_item):
+        """Test that unknown items in gpu_telemetry raise an error."""
+        with pytest.raises(ValueError, match="Invalid GPU telemetry item"):
+            make_config(gpu_telemetry=[invalid_item])
+
+    def test_unknown_item_with_valid_items_raises_error(self):
+        """Test that unknown items mixed with valid items still raise an error."""
+        with pytest.raises(ValueError, match="Invalid GPU telemetry item"):
+            make_config(gpu_telemetry=["dashboard", "unknown_option"])
 
 
 # =============================================================================
