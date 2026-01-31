@@ -25,6 +25,14 @@ schema_version: "1.0"
 # Each service runs in a separate process and communicates via ZMQ message bus.
 # =============================================================================
 service:
+  api:
+    class: aiperf.api.api_service:APIService
+    description: |
+      API service for exposing benchmark metrics and real-time streaming.
+    metadata:
+      required: false
+      auto_start: false
+
   dataset_manager:
     class: aiperf.dataset.dataset_manager:DatasetManager
     description: |

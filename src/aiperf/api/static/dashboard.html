@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIPerf Live Dashboard</title>
+    <style>
+        :root {
+            --nvidia-green: #76B900;
+            --nvidia-green-light: #93d50a;
+            --nvidia-green-dark: #5a8f00;
+            --nvidia-green-glow: rgba(118, 185, 0, 0.3);
+            --bg-primary: #0d0d0d;
+            --bg-card: #161616;
+            --bg-dark: #0a0a0a;
+            --bg-elevated: #1e1e1e;
+            --border: #2a2a2a;
+            --border-subtle: #222222;
+            --text: #f0f0f0;
+            --text-muted: #999999;
+            --text-dim: #666666;
+            --error: #ef4444;
+            --error-glow: rgba(239, 68, 68, 0.3);
+            --warning: #eab308;
+            --phase-warmup: #eab308;
+            --phase-profiling: #3b82f6;
+            --phase-records: #06b6d4;
+            --phase-complete: #22c55e;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #0a0f05 100%);
+            color: var(--text);
+            padding: 1.5rem 2rem;
+            min-height: 100vh;
+        }
+        h1 {
+            color: var(--text);
+            font-size: 1.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h1::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.5rem;
+            background: var(--nvidia-green);
+            border-radius: 2px;
+        }
+        h2 {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .status {
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .connected {
+            background: rgba(118, 185, 0, 0.15);
+            color: var(--nvidia-green);
+            box-shadow: 0 0 12px var(--nvidia-green-glow);
+            animation: pulse-green 2s ease-in-out infinite;
+        }
+        .disconnected {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+            box-shadow: 0 0 12px var(--error-glow);
+        }
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 12px var(--nvidia-green-glow); }
+            50% { box-shadow: 0 0 20px var(--nvidia-green-glow); }
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1rem;
+        }
+        @media (max-width: 1200px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 7rem);
+            gap: 1rem;
+        }
+        .right-column .card {
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .right-column .card .metrics-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-sm);
+        }
+        .card:last-child { margin-bottom: 0; }
+
+        /* Phase Progress Bars */
+        .phase-section { margin-bottom: 1rem; display: none; }
+        .phase-section.visible { display: block; }
+        .phase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.4rem;
+        }
+        .phase-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .phase-label .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+        .phase-label .dot.inactive { animation: none; opacity: 0.3; }
+        .phase-label .dot.complete { animation: none; }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .phase-warmup .phase-name { color: var(--phase-warmup); }
+        .phase-warmup .dot { background: var(--phase-warmup); }
+        .phase-profiling .phase-name { color: var(--phase-profiling); }
+        .phase-profiling .dot { background: var(--phase-profiling); }
+        .phase-records .phase-name { color: var(--phase-records); }
+        .phase-records .dot { background: var(--phase-records); }
+        .phase-complete .phase-name { color: var(--phase-complete); }
+        .phase-complete .dot { background: var(--phase-complete); }
+        .phase-stats {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .progress-bar {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            height: 24px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--bg-primary);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            min-width: 36px;
+        }
+        .progress-fill.warmup { background: linear-gradient(90deg, #a16207, var(--phase-warmup), #facc15); }
+        .progress-fill.profiling { background: linear-gradient(90deg, #1d4ed8, var(--phase-profiling), #60a5fa); }
+        .progress-fill.records { background: linear-gradient(90deg, #0891b2, var(--phase-records), #22d3ee); }
+        .progress-fill.complete { background: linear-gradient(90deg, #15803d, var(--phase-complete), #4ade80); }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.6rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+        .stat-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--text);
+        }
+        .stat-value.green { color: var(--nvidia-green); }
+        .stat-value.yellow { color: var(--warning); }
+        .stat-value.red { color: var(--error); }
+
+        /* Metrics Table */
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .metrics-table th {
+            text-align: left;
+            padding: 0.5rem 0.6rem;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-dark);
+            position: sticky;
+            top: 0;
+        }
+        .metrics-table th:not(:first-child) { text-align: right; }
+        .metrics-table td {
+            padding: 0.5rem 0.6rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .metrics-table td:not(:first-child) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: var(--nvidia-green);
+        }
+        .metrics-table tr:hover { background: var(--bg-elevated); }
+        .metric-name { font-weight: 500; color: var(--text); }
+        .metric-unit { font-size: 0.7rem; color: var(--text-dim); margin-left: 0.25rem; }
+        .metrics-scroll {
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        /* Log Section */
+        #log {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-subtle);
+            padding: 0.6rem 0.8rem;
+            border-radius: var(--radius-sm);
+            font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+            font-size: 0.7rem;
+            max-height: 100px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        .log-entry {
+            padding: 0.15rem 0;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .log-entry:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+    <div class="header-row">
+        <h1>AIPerf Live Dashboard</h1>
+        <span id="status" class="status disconnected">Disconnected</span>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="left-column">
+            <div class="card">
+                <h2>Progress</h2>
+                <div id="warmup-section" class="phase-section">
+                    <div class="phase-header">
+                        <span class="phase-label phase-warmup">
+                            <span class="dot inactive"></span>
+                            <span class="phase-name">Warmup</span>
+                        </span>
+                        <span id="warmup-stats" class="phase-stats">--</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="warmup-fill" class="progress-fill warmup" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div id="profiling-section" class="phase-section">
+                    <div class="phase-header">
+                        <span class="phase-label phase-profiling">
+                            <span class="dot inactive"></span>
+                            <span class="phase-name">Profiling</span>
+                        </span>
+                        <span id="profiling-stats" class="phase-stats">--</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="profiling-fill" class="progress-fill profiling" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div id="records-section" class="phase-section">
+                    <div class="phase-header">
+                        <span class="phase-label phase-records">
+                            <span class="dot inactive"></span>
+                            <span class="phase-name">Records</span>
+                        </span>
+                        <span id="records-stats" class="phase-stats">--</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="records-fill" class="progress-fill records" style="width: 0%">0%</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Status</span>
+                        <span id="current-status" class="stat-value">Waiting</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Live Concurrency</span>
+                        <span id="in-flight" class="stat-value">0 requests</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Errors</span>
+                        <span id="errors" class="stat-value green">0 / 0 (0.0%)</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Rate</span>
+                        <span id="request-rate" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Elapsed</span>
+                        <span id="elapsed" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">ETA</span>
+                        <span id="eta" class="stat-value">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Event Log</h2>
+                <div id="log"></div>
+            </div>
+        </div>
+
+        <div class="right-column">
+            <div class="card" style="flex: 1; min-height: 0;">
+                <h2>Real-Time Metrics</h2>
+                <div class="metrics-scroll">
+                    <table class="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>avg</th>
+                                <th>min</th>
+                                <th>max</th>
+                                <th>p99</th>
+                                <th>p90</th>
+                                <th>p50</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-body-main">
+                            <tr><td colspan="7" style="color: var(--text-dim)">Waiting for data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card" style="flex: 0 0 160px;">
+                <h2>GPU Telemetry</h2>
+                <div class="metrics-scroll">
+                    <table class="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>avg</th>
+                                <th>min</th>
+                                <th>max</th>
+                                <th>p99</th>
+                                <th>p90</th>
+                                <th>p50</th>
+                            </tr>
+                        </thead>
+                        <tbody id="telemetry-body">
+                            <tr><td colspan="7" style="color: var(--text-dim)">Waiting for GPU data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var elements = {
+            status: document.getElementById('status'),
+            warmupSection: document.getElementById('warmup-section'),
+            warmupFill: document.getElementById('warmup-fill'),
+            warmupStats: document.getElementById('warmup-stats'),
+            profilingSection: document.getElementById('profiling-section'),
+            profilingFill: document.getElementById('profiling-fill'),
+            profilingStats: document.getElementById('profiling-stats'),
+            recordsSection: document.getElementById('records-section'),
+            recordsFill: document.getElementById('records-fill'),
+            recordsStats: document.getElementById('records-stats'),
+            currentStatus: document.getElementById('current-status'),
+            inFlight: document.getElementById('in-flight'),
+            errors: document.getElementById('errors'),
+            requestRate: document.getElementById('request-rate'),
+            elapsed: document.getElementById('elapsed'),
+            eta: document.getElementById('eta'),
+            metricsBody: document.getElementById('metrics-body-main'),
+            telemetryBody: document.getElementById('telemetry-body'),
+            log: document.getElementById('log')
+        };
+
+        var state = {
+            warmup: {
+                completed: 0, sent: 0, errors: 0,
+                totalExpectedRequests: null, expectedDurationSec: null, expectedNumSessions: null,
+                completedSessions: 0,
+                startNs: null, active: false, complete: false
+            },
+            profiling: {
+                completed: 0, sent: 0, errors: 0,
+                totalExpectedRequests: null, expectedDurationSec: null, expectedNumSessions: null,
+                completedSessions: 0,
+                startNs: null, active: false, complete: false
+            },
+            records: {
+                completed: 0, total: 0,
+                startNs: null, active: false, complete: false
+            },
+            currentPhase: null
+        };
+
+        function log(msg) {
+            var entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+            elements.log.appendChild(entry);
+            elements.log.scrollTop = elements.log.scrollHeight;
+            if (elements.log.children.length > 20) elements.log.removeChild(elements.log.firstChild);
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function formatNumber(n) {
+            return n != null ? n.toLocaleString() : '--';
+        }
+
+        function formatValue(v) {
+            if (v == null) return '--';
+            if (typeof v !== 'number') return String(v);
+            if (Math.abs(v) >= 1000) return Math.round(v).toLocaleString();
+            return v < 1 ? v.toFixed(3) : v.toFixed(2);
+        }
+
+        function formatTime(seconds) {
+            if (seconds == null || seconds < 0) return '--';
+            var d = Math.floor(seconds / 86400);
+            var h = Math.floor((seconds % 86400) / 3600);
+            var m = Math.floor((seconds % 3600) / 60);
+            var s = Math.floor(seconds % 60);
+            if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+            if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+            if (m > 0) return m + 'm ' + s + 's';
+            return s + 's';
+        }
+
+        // Calculate progress percentage using the same algorithm as terminal UI:
+        // max(request%, time%, session%), capped at 100%
+        function calculateProgress(phaseState) {
+            if (phaseState.complete) return 100;
+
+            var percentages = [];
+
+            // Request-based progress
+            if (phaseState.totalExpectedRequests > 0) {
+                var reqPct = (phaseState.completed / phaseState.totalExpectedRequests) * 100;
+                percentages.push(reqPct);
+            }
+
+            // Time-based progress
+            if (phaseState.expectedDurationSec > 0 && phaseState.startNs) {
+                var elapsedSec = (Date.now() * 1e6 - phaseState.startNs) / 1e9;
+                var timePct = (elapsedSec / phaseState.expectedDurationSec) * 100;
+                percentages.push(timePct);
+            }
+
+            // Session-based progress
+            if (phaseState.expectedNumSessions > 0) {
+                var sessPct = (phaseState.completedSessions / phaseState.expectedNumSessions) * 100;
+                percentages.push(sessPct);
+            }
+
+            if (percentages.length === 0) return 0;
+            return Math.min(Math.max.apply(null, percentages), 100);
+        }
+
+        function getProgressLabel(phaseState) {
+            var pct = calculateProgress(phaseState);
+
+            if (phaseState.totalExpectedRequests > 0) {
+                return formatNumber(phaseState.completed) + ' / ' + formatNumber(phaseState.totalExpectedRequests) + ' requests (' + pct.toFixed(1) + '%)';
+            } else if (phaseState.expectedDurationSec > 0) {
+                var elapsedSec = phaseState.startNs ? (Date.now() * 1e6 - phaseState.startNs) / 1e9 : 0;
+                return formatTime(elapsedSec) + ' / ' + formatTime(phaseState.expectedDurationSec) + ' (' + pct.toFixed(1) + '%)';
+            } else if (phaseState.expectedNumSessions > 0) {
+                return formatNumber(phaseState.completedSessions) + ' / ' + formatNumber(phaseState.expectedNumSessions) + ' sessions (' + pct.toFixed(1) + '%)';
+            }
+            return pct.toFixed(1) + '%';
+        }
+
+        function updatePhaseProgress(phase, phaseState) {
+            var section, fill, statsEl, phaseClass;
+            if (phase === 'warmup') {
+                section = elements.warmupSection;
+                fill = elements.warmupFill;
+                statsEl = elements.warmupStats;
+                phaseClass = 'warmup';
+            } else if (phase === 'records') {
+                section = elements.recordsSection;
+                fill = elements.recordsFill;
+                statsEl = elements.recordsStats;
+                phaseClass = 'records';
+            } else {
+                section = elements.profilingSection;
+                fill = elements.profilingFill;
+                statsEl = elements.profilingStats;
+                phaseClass = 'profiling';
+            }
+            var dot = section.querySelector('.dot');
+            var label = section.querySelector('.phase-label');
+
+            // Calculate progress
+            var pct = phase === 'records'
+                ? (phaseState.total > 0 ? (phaseState.completed / phaseState.total * 100) : 0)
+                : calculateProgress(phaseState);
+
+            fill.style.width = Math.min(pct, 100) + '%';
+            fill.textContent = Math.round(pct) + '%';
+
+            // Update stats label
+            if (phase === 'records') {
+                statsEl.textContent = formatNumber(phaseState.completed) + ' / ' + formatNumber(phaseState.total) + ' (' + pct.toFixed(1) + '%)';
+            } else {
+                statsEl.textContent = getProgressLabel(phaseState);
+            }
+
+            // Show section
+            section.classList.add('visible');
+
+            // Update dot and label status
+            var labelPhaseClass = 'phase-' + phaseClass;
+            dot.classList.remove('inactive', 'complete');
+            label.classList.remove('phase-complete', 'phase-warmup', 'phase-profiling', 'phase-records');
+            fill.classList.remove('complete');
+            fill.classList.add(phaseClass);
+
+            if (phaseState.complete) {
+                dot.classList.add('complete');
+                label.classList.add('phase-complete');
+                fill.classList.add('complete');
+                fill.classList.remove(phaseClass);
+            } else {
+                label.classList.add(labelPhaseClass);
+                if (!phaseState.active) {
+                    dot.classList.add('inactive');
+                }
+            }
+        }
+
+        function updateStats() {
+            var phase = state.currentPhase;
+            // Use whichever credit phase is active or has data
+            var creditPhase = state.profiling.active || state.profiling.completed > 0 ? state.profiling :
+                              state.warmup.active || state.warmup.completed > 0 ? state.warmup : state.profiling;
+
+            // Status - prioritize credit phase status
+            if (!phase && !creditPhase.active && creditPhase.completed === 0) {
+                elements.currentStatus.textContent = 'Waiting';
+            } else if (creditPhase.active) {
+                elements.currentStatus.textContent = (creditPhase === state.warmup ? 'Warmup' : 'Profiling');
+            } else if (state.records.active && !state.records.complete) {
+                elements.currentStatus.textContent = 'Processing Records';
+            } else if (state.records.complete && creditPhase.complete) {
+                elements.currentStatus.textContent = 'Complete';
+            } else if (creditPhase.complete) {
+                elements.currentStatus.textContent = (creditPhase === state.warmup ? 'Warmup' : 'Profiling') + ' Complete';
+            } else {
+                elements.currentStatus.textContent = 'Profiling';
+            }
+
+            // In-flight
+            var inFlight = creditPhase.sent - creditPhase.completed;
+            elements.inFlight.textContent = formatNumber(Math.max(0, inFlight)) + ' requests';
+
+            // Errors
+            var totalErrors = state.warmup.errors + state.profiling.errors;
+            var totalCompleted = state.warmup.completed + state.profiling.completed;
+            var errorPct = totalCompleted > 0 ? (totalErrors / totalCompleted * 100).toFixed(1) : '0.0';
+            elements.errors.textContent = formatNumber(totalErrors) + ' / ' + formatNumber(totalCompleted) + ' (' + errorPct + '%)';
+            elements.errors.className = 'stat-value ' + (parseFloat(errorPct) > 10 ? 'red' : parseFloat(errorPct) > 0 ? 'yellow' : 'green');
+
+            // Elapsed and rate - always show credit phase stats if available
+            if (creditPhase.startNs) {
+                var elapsedSec = (Date.now() * 1e6 - creditPhase.startNs) / 1e9;
+                elements.elapsed.textContent = formatTime(elapsedSec);
+
+                if (elapsedSec > 0 && creditPhase.completed > 0) {
+                    var rate = creditPhase.completed / elapsedSec;
+                    elements.requestRate.textContent = rate.toFixed(1) + ' requests/s';
+
+                    // ETA based on progress percentage
+                    var pct = calculateProgress(creditPhase);
+                    if (pct > 0 && pct < 100) {
+                        var totalEstSec = elapsedSec / (pct / 100);
+                        var etaSec = totalEstSec - elapsedSec;
+                        elements.eta.textContent = formatTime(etaSec);
+                    } else {
+                        elements.eta.textContent = '--';
+                    }
+                }
+            }
+
+            // Override with records rate only if profiling is complete and records is active
+            if (state.records.active && creditPhase.complete && state.records.startNs && state.records.completed > 0) {
+                var recElapsed = (Date.now() * 1e6 - state.records.startNs) / 1e9;
+                var procRate = state.records.completed / recElapsed;
+                elements.requestRate.textContent = procRate.toFixed(1) + ' records/s';
+
+                if (state.records.total > 0 && state.records.completed < state.records.total) {
+                    var remaining = state.records.total - state.records.completed;
+                    elements.eta.textContent = formatTime(remaining / procRate);
+                }
+            }
+        }
+
+        function updateMetrics(metrics) {
+            if (!metrics || !metrics.length) return;
+            var html = metrics.map(function(m) {
+                return '<tr>' +
+                    '<td><span class="metric-name">' + escapeHtml(m.header || m.tag) + '</span>' +
+                    '<span class="metric-unit">' + escapeHtml(m.unit || '') + '</span></td>' +
+                    '<td>' + formatValue(m.avg) + '</td>' +
+                    '<td>' + formatValue(m.min) + '</td>' +
+                    '<td>' + formatValue(m.max) + '</td>' +
+                    '<td>' + formatValue(m.p99) + '</td>' +
+                    '<td>' + formatValue(m.p90) + '</td>' +
+                    '<td>' + formatValue(m.p50) + '</td>' +
+                    '</tr>';
+            }).join('');
+            elements.metricsBody.innerHTML = html;
+        }
+
+        function updateTelemetry(metrics) {
+            if (!metrics || !metrics.length) return;
+            var html = metrics.map(function(m) {
+                return '<tr>' +
+                    '<td><span class="metric-name">' + escapeHtml(m.header || m.tag) + '</span>' +
+                    '<span class="metric-unit">' + escapeHtml(m.unit || '') + '</span></td>' +
+                    '<td>' + formatValue(m.avg) + '</td>' +
+                    '<td>' + formatValue(m.min) + '</td>' +
+                    '<td>' + formatValue(m.max) + '</td>' +
+                    '<td>' + formatValue(m.p99) + '</td>' +
+                    '<td>' + formatValue(m.p90) + '</td>' +
+                    '<td>' + formatValue(m.p50) + '</td>' +
+                    '</tr>';
+            }).join('');
+            elements.telemetryBody.innerHTML = html;
+        }
+
+        function handleMessage(msg) {
+            if (msg.type === 'subscribed') {
+                log('Subscribed: ' + msg.message_types.join(', '));
+                return;
+            }
+
+            var stats = msg.stats || msg.processing_stats || {};
+            var phase = stats.phase || msg.phase;
+
+            switch (msg.message_type) {
+                case 'credit_phase_start':
+                    var phaseKey = phase === 'warmup' ? 'warmup' : 'profiling';
+                    state[phaseKey].totalExpectedRequests = stats.total_expected_requests != null ? Number(stats.total_expected_requests) : null;
+                    state[phaseKey].expectedDurationSec = stats.expected_duration_sec != null ? Number(stats.expected_duration_sec) : null;
+                    state[phaseKey].expectedNumSessions = stats.expected_num_sessions != null ? Number(stats.expected_num_sessions) : null;
+                    state[phaseKey].completed = 0;
+                    state[phaseKey].sent = 0;
+                    state[phaseKey].errors = 0;
+                    state[phaseKey].completedSessions = 0;
+                    state[phaseKey].startNs = stats.start_ns ? Number(stats.start_ns) : (Date.now() * 1e6);
+                    state[phaseKey].active = true;
+                    state[phaseKey].complete = false;
+                    state.currentPhase = phaseKey;
+                    log('Phase started: ' + phase);
+                    updatePhaseProgress(phaseKey, state[phaseKey]);
+                    updateStats();
+                    break;
+
+                case 'credit_phase_progress':
+                    var phaseKey = phase === 'warmup' ? 'warmup' : 'profiling';
+                    state[phaseKey].completed = Number(stats.requests_completed) || 0;
+                    state[phaseKey].sent = Number(stats.requests_sent) || state[phaseKey].sent;
+                    state[phaseKey].errors = Number(stats.request_errors) || 0;
+                    state[phaseKey].completedSessions = Number(stats.completed_sessions) || 0;
+                    if (stats.total_expected_requests != null) {
+                        state[phaseKey].totalExpectedRequests = Number(stats.total_expected_requests);
+                    }
+                    if (stats.expected_duration_sec != null) {
+                        state[phaseKey].expectedDurationSec = Number(stats.expected_duration_sec);
+                    }
+                    if (stats.expected_num_sessions != null) {
+                        state[phaseKey].expectedNumSessions = Number(stats.expected_num_sessions);
+                    }
+                    // Capture start_ns from progress messages (for late-joining clients)
+                    if (stats.start_ns && !state[phaseKey].startNs) {
+                        state[phaseKey].startNs = Number(stats.start_ns);
+                    }
+                    state[phaseKey].active = true;
+                    state.currentPhase = phaseKey;
+                    updatePhaseProgress(phaseKey, state[phaseKey]);
+                    updateStats();
+                    break;
+
+                case 'credit_phase_complete':
+                    var phaseKey = phase === 'warmup' ? 'warmup' : 'profiling';
+                    state[phaseKey].active = false;
+                    state[phaseKey].complete = true;
+                    state[phaseKey].completed = stats.final_requests_completed || state[phaseKey].completed;
+                    log('Phase complete: ' + phase);
+                    updatePhaseProgress(phaseKey, state[phaseKey]);
+                    updateStats();
+                    break;
+
+                case 'processing_stats':
+                    // Records processing progress - runs in parallel with profiling
+                    var successRecords = stats.success_records || 0;
+                    var errorRecords = stats.error_records || 0;
+                    state.records.completed = successRecords + errorRecords;
+                    // Total is the expected total from profiling phase
+                    // Use final_requests_completed if available, else totalExpectedRequests, else profiling completed
+                    var newTotal = stats.final_requests_completed ||
+                                   state.profiling.totalExpectedRequests ||
+                                   state.profiling.completed || 0;
+                    // Keep the larger total to avoid records > total race condition
+                    state.records.total = Math.max(state.records.total, newTotal, state.records.completed);
+                    if (stats.start_ns && !state.records.startNs) {
+                        state.records.startNs = stats.start_ns;
+                    }
+                    state.records.active = true;
+                    // Don't change currentPhase if profiling is still active
+                    if (!state.profiling.active) {
+                        state.currentPhase = 'records';
+                    }
+                    updatePhaseProgress('records', state.records);
+                    updateStats();
+                    break;
+
+                case 'all_records_received':
+                    state.records.active = false;
+                    state.records.complete = true;
+                    state.records.completed = state.records.total;
+                    log('Records processing complete');
+                    updatePhaseProgress('records', state.records);
+                    updateStats();
+                    break;
+
+                case 'realtime_metrics':
+                    if (msg.metrics) updateMetrics(msg.metrics);
+                    break;
+
+                case 'realtime_telemetry_metrics':
+                    if (msg.metrics) updateTelemetry(msg.metrics);
+                    break;
+            }
+        }
+
+        function connect() {
+            var wsUrl = 'ws://' + window.location.host + '/ws';
+            var ws = new WebSocket(wsUrl);
+            log('Connecting...');
+
+            ws.onopen = function() {
+                elements.status.textContent = 'Connected';
+                elements.status.className = 'status connected';
+                log('Connected');
+                ws.send(JSON.stringify({
+                    type: 'subscribe',
+                    message_types: [
+                        'realtime_metrics',
+                        'realtime_telemetry_metrics',
+                        'credit_phase_progress',
+                        'credit_phase_start',
+                        'credit_phase_complete',
+                        'processing_stats',
+                        'all_records_received'
+                    ]
+                }));
+            };
+
+            ws.onclose = function() {
+                elements.status.textContent = 'Disconnected';
+                elements.status.className = 'status disconnected';
+                log('Disconnected, reconnecting...');
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = function() { log('WebSocket error'); };
+
+            ws.onmessage = function(event) {
+                try { handleMessage(JSON.parse(event.data)); }
+                catch (e) { log('Parse error: ' + e.message); }
+            };
+        }
+
+        setInterval(updateStats, 1000);
+        connect();
+    </script>
+</body>
+</html>

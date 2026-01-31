@@ -86,6 +86,7 @@ Features
 | **[Visualization & Plotting](docs/tutorials/plot.md)** | Generate PNG visualizations with automatic mode detection (single-run analysis or multi-run comparison) | Parameter sweep analysis, performance debugging, model comparison |
 | **[GPU Telemetry](docs/tutorials/gpu-telemetry.md)** | Real-time GPU metrics collection via DCGM (power, utilization, memory, temperature, etc) | Performance optimization, resource monitoring, multi-node telemetry |
 | **[Server Metrics](docs/server_metrics/server-metrics.md)** | Collect Prometheus-compatible server metrics during benchmarking | Performance optimization, resource monitoring, multi-node telemetry |
+| **[API Service](docs/tutorials/api-service.md)** | HTTP + WebSocket server for metrics export and real-time streaming | Prometheus scraping, custom dashboards, live monitoring |
 
 ### Quick Navigation
 ```bash

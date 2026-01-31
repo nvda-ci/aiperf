@@ -814,6 +814,14 @@ Select the user interface type for displaying benchmark progress. `dashboard` (d
 <br>_Choices: [`dashboard`, `none`, `simple`]_
 <br>_Default: `dashboard`_
 
+#### `--api-port` `<int>`
+
+AIPerf API port (enables HTTP + WebSocket endpoints).
+
+#### `--api-host` `<str>`
+
+AIPerf API host (requires --api-port).
+
 <hr>
 
 ## `aiperf plot`

@@ -165,6 +165,45 @@ class ServiceConfig(BaseConfig):
         ),
     ] = ServiceDefaults.UI_TYPE
 
+    api_port: Annotated[
+        int | None,
+        Field(
+            description="AIPerf API port (enables HTTP + WebSocket endpoints)",
+        ),
+        CLIParameter(
+            name="--api-port",
+            group=_CLI_GROUP,
+        ),
+    ] = None
+
+    api_host: Annotated[
+        str | None,
+        Field(
+            description="AIPerf API host (requires --api-port)",
+        ),
+        CLIParameter(
+            name="--api-host",
+            group=_CLI_GROUP,
+        ),
+    ] = None
+
+    @model_validator(mode="after")
+    def validate_api_config(self) -> Self:
+        """Validate API configuration.
+
+        Rules:
+        - If host is set, port must also be set
+        - If port is set without host, default host to 127.0.0.1
+        """
+        if self.api_host and not self.api_port:
+            raise ValueError("--api-host requires --api-port to be set")
+
+        if self.api_port and not self.api_host:
+            self.api_host = "127.0.0.1"
+            _logger.info(f"API host not specified, defaulting to {self.api_host}")
+
+        return self
+
     @property
     def comm_config(self) -> BaseZMQCommunicationConfig:
         """Get the communication configuration."""

@@ -16,6 +16,7 @@ from aiperf.common.config.config_defaults import OutputDefaults
 from aiperf.common.enums import (
     CommandResponseStatus,
     CommandType,
+    LifecycleState,
     MessageType,
     ServiceRegistrationStatus,
 )
@@ -27,6 +28,8 @@ from aiperf.common.messages import (
     CommandErrorResponse,
     CommandResponse,
     CommandSuccessResponse,
+    GetAPIStatusCommand,
+    GetAPIStatusResponse,
     HeartbeatMessage,
     ProcessRecordsResultMessage,
     ProcessServerMetricsResultMessage,
@@ -199,6 +202,13 @@ class SystemController(SignalHandlerMixin, BaseService):
         else:
             self.info("Server metrics disabled via --no-server-metrics")
             self._should_wait_for_server_metrics = False
+
+        # Start AIPerf API if enabled
+        if self.service_config.api_port:
+            self.info(
+                f"Starting AIPerf API at http://{self.service_config.api_host}:{self.service_config.api_port}/"
+            )
+            await self.service_manager.run_service(ServiceType.API)
 
         async with self.try_operation_or_stop("Register Services"):
             await self.service_manager.wait_for_all_services_registration(
@@ -483,6 +493,21 @@ class SystemController(SignalHandlerMixin, BaseService):
         await self.service_manager.stop_service(ServiceType.WORKER)
         if self.scale_record_processors_with_workers:
             await self.service_manager.stop_service(ServiceType.RECORD_PROCESSOR)
+
+    @on_command(CommandType.GET_API_STATUS)
+    async def _handle_get_api_status_command(
+        self, message: GetAPIStatusCommand
+    ) -> GetAPIStatusResponse:
+        """Handle API status request."""
+        return GetAPIStatusResponse(
+            service_id=self.service_id,
+            target_service_id=message.service_id,
+            command_id=message.command_id,
+            state=LifecycleState(self.state.value),
+            phase=None,
+            profile_id=None,
+            error=None,
+        )
 
     @on_message(MessageType.PROCESS_RECORDS_RESULT)
     async def _on_process_records_result_message(

@@ -76,12 +76,13 @@ class CommAddress(CaseInsensitiveStrEnum):
 
 
 class CommandType(CaseInsensitiveStrEnum):
-    REALTIME_METRICS = "realtime_metrics"
+    GET_API_STATUS = "get_api_status"
     PROCESS_RECORDS = "process_records"
     PROFILE_CANCEL = "profile_cancel"
     PROFILE_COMPLETE = "profile_complete"
     PROFILE_CONFIGURE = "profile_configure"
     PROFILE_START = "profile_start"
+    REALTIME_METRICS = "realtime_metrics"
     REGISTER_SERVICE = "register_service"
     SHUTDOWN = "shutdown"
     SHUTDOWN_WORKERS = "shutdown_workers"
