@@ -20,10 +20,14 @@ from aiperf.common.models import (
     TelemetryExportData,
     TelemetrySummary,
 )
+from aiperf.common.models.server_metrics_models import TimeRangeFilter
 from aiperf.common.models.telemetry_models import TelemetryHierarchy, TelemetryRecord
 from aiperf.common.protocols import PubClientProtocol
 from aiperf.exporters.display_units_utils import normalize_endpoint_display
-from aiperf.gpu_telemetry.constants import get_gpu_telemetry_metrics_config
+from aiperf.gpu_telemetry.constants import (
+    GPU_TELEMETRY_COUNTER_METRICS,
+    get_gpu_telemetry_metrics_config,
+)
 from aiperf.plugin.enums import UIType
 from aiperf.post_processors.base_metrics_processor import BaseMetricsProcessor
 
@@ -173,10 +177,8 @@ class GPUTelemetryAccumulator(BaseMetricsProcessor):
 
                         header = f"{metric_display} | {endpoint_display} | GPU {gpu_index} | {model_name}"
 
-                        unit = unit_enum.value
-
                         result = telemetry_data.get_metric_result(
-                            metric_name, tag, header, unit
+                            metric_name, tag, header, unit_enum
                         )
                         results.append(result)
                     except NoMetricValue:
@@ -203,14 +205,20 @@ class GPUTelemetryAccumulator(BaseMetricsProcessor):
         Transforms the internal numpy-backed telemetry hierarchy into a serializable
         format with pre-computed metric statistics for each GPU.
 
+        Time filtering is applied to exclude warmup periods from statistics:
+        - Gauge metrics (power, utilization, etc.): Stats computed on filtered data only
+        - Counter metrics (energy, errors): Delta computed from baseline before start_ns
+
         Args:
-            start_ns: Start time of collection in nanoseconds
-            end_ns: End time of collection in nanoseconds
+            start_ns: Start time of profiling phase in nanoseconds (excludes warmup)
+            end_ns: End time of profiling phase in nanoseconds
             error_summary: Optional list of error counts
 
         Returns:
             TelemetryExportData object with pre-computed metrics for each GPU
         """
+        # Create time filter for warmup exclusion
+        time_filter = TimeRangeFilter(start_ns=start_ns, end_ns=end_ns)
 
         # Build summary
         summary = TelemetrySummary(
@@ -235,16 +243,27 @@ class GPUTelemetryAccumulator(BaseMetricsProcessor):
                     metrics_dict = {}
 
                     for (
-                        _metric_display,
+                        metric_display,
                         metric_key,
-                        unit,
+                        unit_enum,
                     ) in get_gpu_telemetry_metrics_config():
                         try:
+                            is_counter = metric_key in GPU_TELEMETRY_COUNTER_METRICS
                             metric_result = gpu_data.get_metric_result(
-                                metric_key, metric_key, metric_key, unit
+                                metric_key,
+                                metric_key,
+                                metric_display,
+                                unit_enum,
+                                time_filter=time_filter,
+                                is_counter=is_counter,
                             )
                             metrics_dict[metric_key] = metric_result.to_json_result()
-                        except Exception:
+                        except NoMetricValue:
+                            continue
+                        except Exception as e:
+                            self.warning(
+                                f"Failed to compute metric '{metric_key}' for GPU {gpu_uuid[:12]}: {e}"
+                            )
                             continue
 
                     gpu_summary = GpuSummary(
