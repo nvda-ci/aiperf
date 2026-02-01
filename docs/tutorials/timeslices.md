@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 SPDX-License-Identifier: Apache-2.0
 -->
 
@@ -57,6 +57,22 @@ aiperf profile \
   --model Qwen/Qwen3-0.6B \
   --benchmark-duration 60 \
   --slice-duration 10
+```
+
+**Sample Output (Successful Run):**
+```
+INFO     Starting AIPerf System
+INFO     Timeslice analysis enabled: 10 second intervals
+INFO     AIPerf System is PROFILING
+
+Profiling: [01:00] - Running for 60 seconds...
+
+INFO     Benchmark completed successfully
+INFO     Results saved to: artifacts/Qwen_Qwen3-0.6B-chat-duration60/
+
+JSON Export: artifacts/Qwen_Qwen3-0.6B-chat-duration60/profile_export_aiperf.json
+Timeslices: artifacts/Qwen_Qwen3-0.6B-chat-duration60/profile_export_aiperf_timeslices.json
+Timeslices CSV: artifacts/Qwen_Qwen3-0.6B-chat-duration60/profile_export_aiperf_timeslices.csv
 ```
 
 This creates 6 time slices (0-10s, 10-20s, 20-30s, 30-40s, 40-50s, 50-60s), each with independent metrics.

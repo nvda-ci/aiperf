@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 SPDX-License-Identifier: Apache-2.0
 -->
 
@@ -30,6 +30,31 @@ aiperf profile \
   --output-tokens-mean 50 \
   --concurrency 4 \
   --request-count 20
+```
+
+**Sample Output (Successful Run):**
+```
+INFO     Starting AIPerf System
+INFO     Using template endpoint with custom payload
+INFO     AIPerf System is PROFILING
+
+Profiling: 20/20 |████████████████████████| 100% [00:28<00:00]
+
+INFO     Benchmark completed successfully
+INFO     Results saved to: artifacts/your-model-template-concurrency4/
+
+            NVIDIA AIPerf | LLM Metrics
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
+┃                      Metric ┃    avg ┃    min ┃    max ┃    p99 ┃    p50 ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│        Request Latency (ms) │ 456.78 │ 389.23 │ 567.45 │ 554.32 │ 452.34 │
+│    Time to First Token (ms) │  89.34 │  67.45 │ 112.34 │ 109.23 │  87.56 │
+│    Inter Token Latency (ms) │  11.23 │   9.45 │  14.56 │  14.12 │  11.01 │
+│ Output Token Count (tokens) │  50.00 │  48.00 │  52.00 │  51.89 │  50.00 │
+│  Request Throughput (req/s) │   8.78 │      - │      - │      - │      - │
+└─────────────────────────────┴────────┴────────┴────────┴────────┴────────┘
+
+JSON Export: artifacts/your-model-template-concurrency4/profile_export_aiperf.json
 ```
 
 ## Configuration
