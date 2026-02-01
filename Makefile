@@ -270,7 +270,7 @@ generate-plugin-schemas: #? generate JSON schemas for categories.yaml and plugin
 	$(activate_venv) && python tools/generate_plugin_artifacts.py --schemas
 
 validate-plugin-schemas: #? validate categories.yaml and plugins.yaml against their schemas.
-	$(activate_venv) && python tools/validate_plugin_schemas.py
+	$(activate_venv) && python tools/generate_plugin_artifacts.py --validate
 
 generate-all-plugin-files: #? generate all plugin files (enums, overloads, schemas).
 	$(activate_venv) && python tools/generate_plugin_artifacts.py

@@ -1,12 +1,142 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Generate environment variable documentation for AIPerf."""
+"""Generate environment variable documentation for AIPerf.
 
+This script parses the environment.py file to extract Pydantic Settings classes
+and generates markdown documentation for all environment variables.
+
+Usage:
+    python tools/generate_env_vars_docs.py              # Generate docs
+    python tools/generate_env_vars_docs.py --check      # Verify docs are up-to-date
+    python tools/generate_env_vars_docs.py --verbose    # Show detailed progress
+"""
+
+from __future__ import annotations
+
+import argparse
 import ast
 import re
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.traceback import Traceback
+
+# =============================================================================
+# Console Setup
+# =============================================================================
+
+console = Console()
+error_console = Console(stderr=True)
+
+# =============================================================================
+# Paths
+# =============================================================================
+
+ENV_FILE = Path("src/aiperf/common/environment.py")
+OUTPUT_FILE = Path("docs/environment_variables.md")
+
+# =============================================================================
+# Rich Output Helpers
+# =============================================================================
+
+
+def print_section(title: str) -> None:
+    """Print a section header."""
+    console.print(f"\n[bold cyan]━━━ {title} ━━━[/]")
+
+
+def print_generated(path: Path) -> None:
+    """Print generated file message."""
+    console.print(f"  [green]✓[/] Generated [cyan]{path}[/]")
+
+
+def print_up_to_date(message: str) -> None:
+    """Print up-to-date message."""
+    console.print(f"  [dim]✓[/] {message}")
+
+
+def print_warning(message: str) -> None:
+    """Print warning message."""
+    console.print(f"  [yellow]⚠[/] {message}")
+
+
+def print_step(message: str, timing_ms: float | None = None) -> None:
+    """Print a step with optional timing."""
+    if timing_ms is not None:
+        console.print(f"  [dim]•[/] {message} [dim]({timing_ms:.0f}ms)[/]")
+    else:
+        console.print(f"  [dim]•[/] {message}")
+
+
+# =============================================================================
+# Error Classes
+# =============================================================================
+
+
+class GeneratorError(Exception):
+    """Base exception for generator errors."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
+
+
+class ParseError(GeneratorError):
+    """Error parsing source file."""
+
+
+def print_error(error: Exception, verbose: bool = False) -> None:
+    """Print error with optional traceback."""
+    if isinstance(error, GeneratorError):
+        console.print(
+            Panel(
+                f"[red]{error.message}[/]\n\n"
+                + "\n".join(f"[dim]{k}:[/] {v}" for k, v in error.details.items()),
+                title="[red]Error[/]",
+                border_style="red",
+            )
+        )
+    else:
+        console.print(f"  [red]✗[/] {error}")
+
+    if verbose:
+        console.print()
+        error_console.print(
+            Traceback.from_exception(type(error), error, error.__traceback__)
+        )
+
+
+# =============================================================================
+# File Writing
+# =============================================================================
+
+
+def write_if_changed(path: Path, content: str) -> bool:
+    """Write file only if content has changed.
+
+    Returns True if file was written, False if unchanged.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if path.exists():
+        existing = path.read_text()
+        if existing == content:
+            return False
+
+    path.write_text(content)
+    return True
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
 
 
 @dataclass
@@ -29,9 +159,19 @@ class SettingsClass:
     fields: list[FieldDefinition]
 
 
+# =============================================================================
+# Text Helpers
+# =============================================================================
+
+
 def _normalize_text(text: str) -> str:
     """Normalize text by replacing newlines with spaces and stripping whitespace."""
     return " ".join(text.strip().split())
+
+
+# =============================================================================
+# AST Parsing
+# =============================================================================
 
 
 def _extract_field_call_args(
@@ -157,7 +297,7 @@ def _parse_settings_class(class_node: ast.ClassDef) -> SettingsClass | None:
                 and not field_def.name.startswith("_")
                 and "default_factory" not in field_def.default
             ):
-                # Skip private fields and nested settings fields (they use default_factory)
+                # Skip private fields and nested settings fields
                 fields.append(field_def)
 
     return SettingsClass(
@@ -168,7 +308,7 @@ def _parse_settings_class(class_node: ast.ClassDef) -> SettingsClass | None:
     )
 
 
-def _parse_environment_file(file_path: Path) -> list[SettingsClass]:
+def parse_environment_file(file_path: Path) -> list[SettingsClass]:
     """Parse the environment.py file and extract settings classes."""
     content = file_path.read_text()
     tree = ast.parse(content)
@@ -188,6 +328,11 @@ def _parse_environment_file(file_path: Path) -> list[SettingsClass]:
                 settings_classes.append(settings_class)
 
     return settings_classes
+
+
+# =============================================================================
+# Markdown Formatting
+# =============================================================================
 
 
 def _format_default_value(default: str) -> str:
@@ -245,7 +390,8 @@ def generate_markdown_docs(settings_classes: list[SettingsClass]) -> str:
         "> documentation for your specific release version and test thoroughly when upgrading AIPerf.",
         "",
     ]
-    # Sort by env_prefix for consistent output, except DEV which should be last (least important to end users)
+
+    # Sort by env_prefix for consistent output, except DEV which should be last
     settings_classes = sorted(
         settings_classes,
         key=lambda x: x.env_prefix if x.env_prefix != "AIPERF_DEV_" else "Z" * 100,
@@ -279,26 +425,158 @@ def generate_markdown_docs(settings_classes: list[SettingsClass]) -> str:
     return "\n".join(line.rstrip() for line in lines)
 
 
-def main():
+# =============================================================================
+# Main CLI
+# =============================================================================
+
+
+def main() -> int:
     """Generate environment variable documentation."""
-    env_file = Path("src/aiperf/common/environment.py")
-    if not env_file.exists():
-        print(f"Error: {env_file} not found")
-        return
+    parser = argparse.ArgumentParser(
+        description="Generate environment variable documentation for AIPerf",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python tools/generate_env_vars_docs.py              # Generate docs
+  python tools/generate_env_vars_docs.py --check      # Verify docs are up-to-date
+  python tools/generate_env_vars_docs.py --verbose    # Show detailed progress
+""",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check if docs are up-to-date (exit 1 if not)",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed progress and full tracebacks",
+    )
+    args = parser.parse_args()
 
-    settings_classes = _parse_environment_file(env_file)
+    total_start = time.perf_counter()
 
-    if not settings_classes:
-        print("Warning: No settings classes found")
-        return
+    print_section("Environment Variables Documentation")
 
-    markdown_content = generate_markdown_docs(settings_classes)
+    # Check source file exists
+    if not ENV_FILE.exists():
+        print_error(
+            ParseError(
+                f"Source file not found: {ENV_FILE}",
+                {"hint": "Ensure you're running from the project root"},
+            ),
+            verbose=args.verbose,
+        )
+        return 1
 
-    output_file = Path("docs/environment_variables.md")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file.write_text(markdown_content)
-    print(f"Documentation written to {output_file}")
+    # Parse environment file
+    start = time.perf_counter()
+    try:
+        settings_classes = parse_environment_file(ENV_FILE)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        if not settings_classes:
+            print_warning("No settings classes found")
+            return 1
+
+        total_fields = sum(len(sc.fields) for sc in settings_classes)
+
+        if args.verbose:
+            print_step(
+                f"Parsed {len(settings_classes)} settings classes ({total_fields} fields)",
+                elapsed_ms,
+            )
+            for sc in settings_classes:
+                print_step(f"  {sc.name}: {len(sc.fields)} fields ({sc.env_prefix}*)")
+    except SyntaxError as e:
+        print_error(
+            ParseError(
+                "Failed to parse environment.py",
+                {"error": str(e), "line": e.lineno},
+            ),
+            verbose=args.verbose,
+        )
+        return 1
+    except Exception as e:
+        print_error(
+            ParseError("Failed to parse environment.py", {"error": str(e)}),
+            verbose=args.verbose,
+        )
+        return 1
+
+    # Generate markdown
+    start = time.perf_counter()
+    try:
+        markdown_content = generate_markdown_docs(settings_classes)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        if args.verbose:
+            print_step(
+                f"Generated markdown ({len(markdown_content)} bytes)", elapsed_ms
+            )
+    except Exception as e:
+        print_error(
+            ParseError("Failed to generate markdown", {"error": str(e)}),
+            verbose=args.verbose,
+        )
+        return 1
+
+    # Write output
+    start = time.perf_counter()
+    if args.check:
+        # Check mode - verify file is up-to-date
+        if OUTPUT_FILE.exists():
+            existing = OUTPUT_FILE.read_text()
+            if existing == markdown_content:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                print_up_to_date(
+                    f"{OUTPUT_FILE} is up-to-date [dim]({elapsed_ms:.0f}ms)[/]"
+                )
+            else:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                console.print(
+                    f"  [yellow]⚠[/] {OUTPUT_FILE} needs updating [dim]({elapsed_ms:.0f}ms)[/]"
+                )
+                total_elapsed = time.perf_counter() - total_start
+                console.print()
+                console.print(
+                    f"[bold yellow]1[/] file(s) would be updated. [dim]({total_elapsed:.2f}s)[/]"
+                )
+                console.print("Run without [cyan]--check[/] to apply.")
+                return 1
+        else:
+            console.print(f"  [yellow]⚠[/] {OUTPUT_FILE} does not exist")
+            total_elapsed = time.perf_counter() - total_start
+            console.print()
+            console.print(
+                f"[bold yellow]1[/] file(s) would be created. [dim]({total_elapsed:.2f}s)[/]"
+            )
+            console.print("Run without [cyan]--check[/] to apply.")
+            return 1
+    else:
+        # Write mode
+        if write_if_changed(OUTPUT_FILE, markdown_content):
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            print_generated(OUTPUT_FILE)
+            if args.verbose:
+                print_step(f"Wrote file [dim]({elapsed_ms:.0f}ms)[/]")
+        else:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            print_up_to_date(
+                f"{OUTPUT_FILE.name} is up-to-date [dim]({elapsed_ms:.0f}ms)[/]"
+            )
+
+    # Summary
+    total_elapsed = time.perf_counter() - total_start
+    console.print()
+
+    console.print(
+        f"[bold green]✓[/] Documented [bold]{len(settings_classes)}[/] subsystems "
+        f"with [bold]{total_fields}[/] environment variables. [dim]({total_elapsed:.2f}s)[/]"
+    )
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

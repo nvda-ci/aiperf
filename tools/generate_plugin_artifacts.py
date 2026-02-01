@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Generate all plugin system artifacts from categories.yaml.
+"""Generate all plugin system artifacts from YAML files.
 
 This script generates:
 - JSON schemas (categories.schema.json, plugins.schema.json)
 - Enum files (enums.py, enums.pyi)
 - Type overloads in plugins.py
+
+All generation is done from YAML files only - no Python imports required.
 
 Usage:
     python tools/generate_plugin_artifacts.py [--all] [--schemas] [--enums] [--overloads]
@@ -16,14 +18,26 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import re
 import sys
+import time
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import yaml
+from rich.console import Console
+from rich.panel import Panel
+from rich.traceback import Traceback
+
+# =============================================================================
+# Console Setup
+# =============================================================================
+
+console = Console()
+error_console = Console(stderr=True)
 
 # =============================================================================
 # Paths and Constants
@@ -34,13 +48,14 @@ PROJECT_ROOT = TOOLS_DIR.parent
 PLUGIN_DIR = PROJECT_ROOT / "src/aiperf/plugin"
 SCHEMA_DIR = PLUGIN_DIR / "schema"
 CATEGORIES_YAML = PLUGIN_DIR / "categories.yaml"
+PLUGINS_YAML = PLUGIN_DIR / "plugins.yaml"
 
 # Output files
 ENUMS_PY = PLUGIN_DIR / "enums.py"
 ENUMS_PYI = PLUGIN_DIR / "enums.pyi"
 PLUGINS_PY = PLUGIN_DIR / "plugins.py"
 
-# Keys in categories.yaml that are metadata, not plugin categories
+# Keys in YAML files that are metadata, not plugin categories
 METADATA_KEYS = frozenset({"schema_version"})
 
 # Header for generated files
@@ -67,25 +82,184 @@ OVERLOADS_END = "    # </generated-overloads>"
 
 
 # =============================================================================
+# Error Handling
+# =============================================================================
+
+
+class GeneratorError(Exception):
+    """Base exception for generator errors with rich context."""
+
+    def __init__(self, message: str, context: dict | None = None):
+        self.message = message
+        self.context = context or {}
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        parts = [self.message]
+        if self.context:
+            parts.append("\nContext:")
+            for key, value in self.context.items():
+                parts.append(f"  {key}: {value}")
+        return "\n".join(parts)
+
+
+class YAMLLoadError(GeneratorError):
+    """Error loading or parsing a YAML file."""
+
+    pass
+
+
+class SchemaGenerationError(GeneratorError):
+    """Error generating JSON schemas."""
+
+    pass
+
+
+class EnumGenerationError(GeneratorError):
+    """Error generating enum files."""
+
+    pass
+
+
+class OverloadGenerationError(GeneratorError):
+    """Error generating type overloads."""
+
+    pass
+
+
+def print_error(error: Exception, verbose: bool = True) -> None:
+    """Print error with rich formatting and optional traceback."""
+    error_type = type(error).__name__
+
+    # Build error content
+    message = error.message if isinstance(error, GeneratorError) else str(error)
+    lines = [f"[bold white]{message}[/]"]
+
+    # Add context if available
+    if isinstance(error, GeneratorError) and error.context:
+        lines.append("\n[bold cyan]Context:[/]")
+        for key, value in error.context.items():
+            lines.append(f"  [cyan]{key}:[/] {value}")
+
+    # Create error panel
+    error_panel = Panel(
+        "\n".join(lines),
+        title=f"[bold red]✗ {error_type}[/]",
+        border_style="red",
+        padding=(1, 2),
+    )
+    error_console.print(error_panel)
+
+    # Show traceback if verbose
+    if verbose:
+        error_console.print()
+        error_console.print(
+            Traceback.from_exception(type(error), error, error.__traceback__)
+        )
+
+
+def print_section(name: str) -> None:
+    """Print a styled section header."""
+    console.print(f"\n[bold blue]━━━[/] [bold cyan]{name}[/] [bold blue]━━━[/]")
+
+
+def print_generated(path: Path) -> None:
+    """Print a generated file message."""
+    console.print(f"  [green]✓[/] Generated: [dim]{path}[/]")
+
+
+def print_updated(path: Path) -> None:
+    """Print an updated file message."""
+    console.print(f"  [green]✓[/] Updated: [dim]{path}[/]")
+
+
+def print_up_to_date(message: str) -> None:
+    """Print an up-to-date message."""
+    console.print(f"  [dim]• {message}[/]")
+
+
+def print_warning(message: str) -> None:
+    """Print a warning message."""
+    console.print(f"  [yellow]⚠[/] Warning: {message}")
+
+
+def print_out_of_date(message: str) -> None:
+    """Print an out-of-date message."""
+    console.print(f"  [red]✗[/] {message}")
+
+
+# =============================================================================
 # Shared Utilities
 # =============================================================================
 
 
 def load_categories() -> dict[str, dict]:
     """Load categories.yaml, filtering out metadata keys."""
-    data = yaml.safe_load(CATEGORIES_YAML.read_text())
-    return {
-        k: v for k, v in data.items() if k not in METADATA_KEYS and isinstance(v, dict)
-    }
+    try:
+        if not CATEGORIES_YAML.exists():
+            raise YAMLLoadError(
+                "Categories file not found",
+                {"expected_path": str(CATEGORIES_YAML)},
+            )
+        content = CATEGORIES_YAML.read_text()
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict):
+            raise YAMLLoadError(
+                "Invalid categories.yaml: expected a dictionary at root level",
+                {"actual_type": type(data).__name__, "file": str(CATEGORIES_YAML)},
+            )
+        return {
+            k: v
+            for k, v in data.items()
+            if k not in METADATA_KEYS and isinstance(v, dict)
+        }
+    except yaml.YAMLError as e:
+        raise YAMLLoadError(
+            "Failed to parse categories.yaml",
+            {"file": str(CATEGORIES_YAML), "yaml_error": str(e)},
+        ) from e
+
+
+def load_plugins() -> dict[str, dict[str, dict]]:
+    """Load plugins.yaml, filtering out metadata keys."""
+    try:
+        if not PLUGINS_YAML.exists():
+            raise YAMLLoadError(
+                "Plugins file not found",
+                {"expected_path": str(PLUGINS_YAML)},
+            )
+        content = PLUGINS_YAML.read_text()
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict):
+            raise YAMLLoadError(
+                "Invalid plugins.yaml: expected a dictionary at root level",
+                {"actual_type": type(data).__name__, "file": str(PLUGINS_YAML)},
+            )
+        return {
+            k: v
+            for k, v in data.items()
+            if k not in METADATA_KEYS and isinstance(v, dict)
+        }
+    except yaml.YAMLError as e:
+        raise YAMLLoadError(
+            "Failed to parse plugins.yaml",
+            {"file": str(PLUGINS_YAML), "yaml_error": str(e)},
+        ) from e
 
 
 def write_if_changed(path: Path, content: str) -> bool:
     """Write file only if content differs. Returns True if written."""
-    if path.exists() and path.read_text() == content:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    return True
+    try:
+        if path.exists() and path.read_text() == content:
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return True
+    except OSError as e:
+        raise GeneratorError(
+            "Failed to write file",
+            {"path": str(path), "error": str(e)},
+        ) from e
 
 
 def parse_class_path(class_path: str) -> tuple[str, str]:
@@ -122,60 +296,77 @@ def replace_between_markers(
     """Replace content between markers in a file."""
     pattern = re.compile(rf"({re.escape(start)})\n(.*?)({re.escape(end)})", re.DOTALL)
     if not pattern.search(content):
-        raise ValueError(f"Markers not found: {start} ... {end}")
+        raise OverloadGenerationError(
+            "Markers not found in file",
+            {"start_marker": start, "end_marker": end},
+        )
     return pattern.sub(rf"\1\n{replacement}\n\3", content)
 
 
-def iter_categories_with_plugins(builtin_only: bool = False):
-    """Yield (name, spec, entries) for categories with enums and registered plugins.
+def iter_categories_with_plugins():
+    """Yield (name, spec, plugin_names, category_plugins) for categories with enums.
 
-    Args:
-        builtin_only: If True, only include builtin plugins (for .py examples).
-                      If False, include all plugins (for .pyi stubs).
+    Reads directly from YAML files to avoid importing the plugin system.
     """
-    from aiperf.plugin import plugins
-
     categories = load_categories()
+    plugins_data = load_plugins()
+
     for name, spec in categories.items():
         if not spec.get("enum"):
             continue
-        if builtin_only:
-            entries = [entry for entry, _ in plugins.iter_all(name) if entry.is_builtin]
-        else:
-            entries = plugins.list_entries(name)
-        if entries:
-            yield name, spec, entries
+        category_plugins = plugins_data.get(name, {})
+        if category_plugins:
+            plugin_names = sorted(category_plugins.keys())
+            yield name, spec, plugin_names, category_plugins
 
 
 # =============================================================================
-# Schema Generation
+# Schema Generation (Pydantic models + YAML data)
 # =============================================================================
 
 
 def generate_schemas() -> int:
     """Generate JSON schema files for categories.yaml and plugins.yaml.
 
-    Schema generation is done here rather than in model_json_schema overrides
-    to keep all schema customization logic in one place.
+    Uses Pydantic models for schema structure, with category/plugin data from YAML.
+    No dynamic plugin discovery - all data comes from YAML files.
     """
     import copy
+    import importlib
 
-    from aiperf.plugin.schema import (
-        CategoriesManifest,
-        CategorySpec,
-        PluginsManifest,
-        PluginSpec,
-    )
+    try:
+        categories = load_categories()
+    except YAMLLoadError:
+        raise
 
-    categories = load_categories()
+    # Import Pydantic schema models
+    try:
+        from aiperf.plugin.schema import (
+            CategoriesManifest,
+            CategorySpec,
+            PluginsManifest,
+            PluginSpec,
+        )
+    except ImportError as e:
+        raise SchemaGenerationError(
+            "Failed to import schema models from aiperf.plugin.schema",
+            {
+                "error": str(e),
+                "hint": "Ensure aiperf is installed: uv pip install -e .",
+            },
+        ) from e
 
     # ==========================================================================
     # Build categories.schema.json
     # ==========================================================================
-    # CategoriesManifest uses extra="allow" for arbitrary category keys.
-    # We customize additionalProperties to reference CategorySpec schema.
-    categories_schema = CategoriesManifest.model_json_schema()
-    category_spec_schema = CategorySpec.model_json_schema()
+    try:
+        categories_schema = CategoriesManifest.model_json_schema()
+        category_spec_schema = CategorySpec.model_json_schema()
+    except Exception as e:
+        raise SchemaGenerationError(
+            "Failed to generate categories schema from Pydantic models",
+            {"error": str(e)},
+        ) from e
 
     # Merge any $defs from CategorySpec into root schema
     if "$defs" in category_spec_schema:
@@ -189,11 +380,16 @@ def generate_schemas() -> int:
     # ==========================================================================
     # Build plugins.schema.json
     # ==========================================================================
-    # PluginsManifest uses extra="allow" for arbitrary category sections.
-    # We build per-category schemas with typed metadata where available.
-    plugins_schema = PluginsManifest.model_json_schema()
-    plugin_entry_schema = PluginSpec.model_json_schema()
+    try:
+        plugins_schema = PluginsManifest.model_json_schema()
+        plugin_entry_schema = PluginSpec.model_json_schema()
+    except Exception as e:
+        raise SchemaGenerationError(
+            "Failed to generate plugins schema from Pydantic models",
+            {"error": str(e)},
+        ) from e
 
+    # Build per-category schemas from YAML data
     for name, spec in categories.items():
         # Deep copy properties to avoid mutation affecting other categories
         entry_schema = {
@@ -209,18 +405,18 @@ def generate_schemas() -> int:
         if category_desc:
             entry_schema["description"] = category_desc
 
+        # If category has a metadata_class, import it and add its schema
         if metadata_class := spec.get("metadata_class"):
             try:
                 mod, cls = parse_class_path(metadata_class)
-                metadata_schema = getattr(
-                    importlib.import_module(mod), cls
-                ).model_json_schema()
+                metadata_model = getattr(importlib.import_module(mod), cls)
+                metadata_schema = metadata_model.model_json_schema()
                 plugins_schema.setdefault("$defs", {}).update(
                     metadata_schema.pop("$defs", {})
                 )
                 entry_schema["properties"]["metadata"] = metadata_schema
-            except Exception:
-                pass
+            except Exception as e:
+                print_warning(f"Could not load metadata schema for {name}: {e}")
 
         plugins_schema.setdefault("$defs", {})[def_name] = entry_schema
         plugins_schema["properties"][name] = {
@@ -242,18 +438,25 @@ def generate_schemas() -> int:
 
     files_written = 0
     for filename, schema in schemas.items():
-        schema = {
+        final_schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": filename,
             **schema,
         }
-        content = json.dumps(schema, indent=2) + "\n"
-        if write_if_changed(SCHEMA_DIR / filename, content):
-            print(f"  Generated: {SCHEMA_DIR / filename}")
-            files_written += 1
+        content = json.dumps(final_schema, indent=2) + "\n"
+        output_path = SCHEMA_DIR / filename
+        try:
+            if write_if_changed(output_path, content):
+                print_generated(output_path)
+                files_written += 1
+        except GeneratorError as e:
+            raise SchemaGenerationError(
+                f"Failed to write schema file: {filename}",
+                {"file": str(output_path), "original_error": str(e)},
+            ) from e
 
     if files_written == 0:
-        print("  Schema files are already up-to-date")
+        print_up_to_date("Schema files are already up-to-date")
     return files_written
 
 
@@ -263,14 +466,34 @@ def generate_schemas() -> int:
 
 
 def generate_enums_py_content() -> str:
-    """Generate enums.py content with dynamic plugins.create_enum() calls."""
-    # Get categories with builtin plugins only (for docstring examples)
-    category_data = list(iter_categories_with_plugins(builtin_only=True))
+    """Generate enums.py content with dynamic plugins.create_enum() calls.
+
+    Reads category and plugin data from YAML files to determine what to generate,
+    but the generated code uses plugins.create_enum() at runtime.
+    """
+    try:
+        category_data = list(iter_categories_with_plugins())
+    except YAMLLoadError:
+        raise
+
+    if not category_data:
+        raise EnumGenerationError(
+            "No categories with plugins found",
+            {
+                "categories_file": str(CATEGORIES_YAML),
+                "plugins_file": str(PLUGINS_YAML),
+            },
+        )
 
     # Collect all exported names for __all__
     exported_names = ["PluginType", "PluginTypeStr"]
-    for _name, spec, _entries in category_data:
-        enum_name = spec["enum"]
+    for _name, spec, _plugin_names, _plugins in category_data:
+        enum_name = spec.get("enum")
+        if not enum_name:
+            raise EnumGenerationError(
+                "Category missing 'enum' field",
+                {"category": _name, "spec": spec},
+            )
         exported_names.extend([enum_name, f"{enum_name}Str"])
 
     all_names = ", ".join(f'"{name}"' for name in sorted(exported_names))
@@ -299,12 +522,11 @@ def generate_enums_py_content() -> str:
         "",
     ]
 
-    for name, spec, entries in category_data:
+    for name, spec, plugin_names, _plugins in category_data:
         enum_name = spec["enum"]
         member = to_enum_member(name)
         examples = ", ".join(
-            f"{enum_name}.{to_enum_member(e.name)}"
-            for e in sorted(entries, key=lambda x: x.name)[:3]
+            f"{enum_name}.{to_enum_member(n)}" for n in plugin_names[:3]
         )
         lines.extend(
             [
@@ -318,35 +540,53 @@ def generate_enums_py_content() -> str:
     return "\n".join(lines)
 
 
-def generate_enums_pyi_content() -> str:
-    """Generate enums.pyi type stub content."""
-    from aiperf.plugin import plugins
+def generate_enums_pyi_content() -> str | None:
+    """Generate enums.pyi type stub content using runtime plugin discovery.
+
+    This provides enhanced type hints with docstrings for IDE support.
+    Uses the actual plugin system to discover all plugins (including third-party).
+
+    Returns:
+        Generated content string, or None if plugin system failed to load.
+    """
+    # Try to load from runtime plugin system for full discovery (including third-party)
+    try:
+        from aiperf.plugin import plugins
+
+        runtime_categories = list(plugins.list_categories())
+    except Exception as e:
+        print_warning(f"Could not load plugin system for .pyi generation: {e}")
+        print_warning("Skipping enums.pyi update (existing file preserved)")
+        return None
+
+    # Load category specs from YAML for descriptions and enum names
+    try:
+        categories = load_categories()
+    except YAMLLoadError:
+        raise
 
     lines = [
         *GENERATED_HEADER,
-        '"""Type stubs for dynamically generated plugin enums."""',
+        '"""Type stubs for plugin enums with enhanced docstrings."""',
         "",
         "from typing import Literal, TypeAlias",
         "",
         "from aiperf.plugin.extensible_enums import ExtensibleStrEnum",
         "",
         "class PluginType(ExtensibleStrEnum):",
-        '    """Dynamic enum for plugin categories."""',
+        '    """Enum for all plugin categories."""',
         "",
     ]
 
-    # Generate PluginType enum members
-    all_categories = sorted(plugins.list_categories())
+    # Generate PluginType enum members - use runtime categories but YAML for descriptions
+    all_categories = sorted(set(runtime_categories) | set(categories.keys()))
     for category in all_categories:
-        desc = (
-            plugins.get_category_metadata(category)["description"]
-            .strip()
-            .split("\n")[0]
-        )
+        spec = categories.get(category, {})
+        desc = spec.get("description", "").strip().split("\n")[0] if spec else ""
         lines.extend(
             [
                 f'    {to_enum_member(category)} = "{category}"',
-                f'    """{desc}"""',
+                f'    """{desc}"""' if desc else f'    """{category} plugins."""',
             ]
         )
 
@@ -360,28 +600,52 @@ def generate_enums_pyi_content() -> str:
         ]
     )
 
-    # Generate per-category enum classes (include all plugins for type stubs)
-    for name, spec, entries in iter_categories_with_plugins(builtin_only=False):
+    # Generate per-category enum classes with plugin docstrings
+    for category in all_categories:
+        spec = categories.get(category, {})
+        if not spec.get("enum"):
+            continue
+
         enum_name = spec["enum"]
-        sorted_entries = sorted(entries, key=lambda x: x.name)
+
+        # Get plugins from runtime (includes third-party)
+        try:
+            runtime_entries = list(plugins.list_entries(category))
+        except Exception:
+            runtime_entries = []
+
+        # Also load YAML plugins for descriptions
+        yaml_plugins = load_plugins().get(category, {})
+
+        # Merge: runtime plugins with YAML descriptions where available
+        plugin_names = sorted(
+            set(e.name for e in runtime_entries) | set(yaml_plugins.keys())
+        )
+
+        if not plugin_names:
+            continue
 
         lines.extend(
             [
                 f"class {enum_name}(ExtensibleStrEnum):",
-                f'    """Dynamic enum for {name} plugins."""',
+                f'    """Enum for {category.replace("_", " ")} plugins."""',
                 "",
             ]
         )
 
-        for entry in sorted_entries:
-            lines.append(f'    {to_enum_member(entry.name)} = "{entry.name}"')
-            if entry.description:
-                desc = entry.description.strip().split("\n")[0]
-                lines.append(f'    """{desc}"""')
+        for plugin_name in plugin_names:
+            lines.append(f'    {to_enum_member(plugin_name)} = "{plugin_name}"')
+            # Try YAML description first, then runtime entry description
+            if yaml_spec := yaml_plugins.get(plugin_name):
+                if desc := yaml_spec.get("description"):
+                    desc = desc.strip().split("\n")[0]
+                    lines.append(f'    """{desc}"""')
+            else:
+                # Runtime-only plugin (third-party) - no description available
+                pass
         lines.append("")
 
-        names = [e.name for e in sorted_entries]
-        quoted = ", ".join(f'"{n}"' for n in names)
+        quoted = ", ".join(f'"{n}"' for n in plugin_names)
         lines.extend([f"{enum_name}Str: TypeAlias = Literal[{quoted}]", ""])
 
     return "\n".join(lines) + "\n"
@@ -391,16 +655,39 @@ def generate_enums() -> int:
     """Generate enums.py and enums.pyi files."""
     files_written = 0
 
-    if write_if_changed(ENUMS_PY, generate_enums_py_content()):
-        print(f"  Generated: {ENUMS_PY}")
-        files_written += 1
+    try:
+        py_content = generate_enums_py_content()
+        if write_if_changed(ENUMS_PY, py_content):
+            print_generated(ENUMS_PY)
+            files_written += 1
+        else:
+            print_up_to_date(f"{ENUMS_PY.name} is up-to-date")
+    except (YAMLLoadError, EnumGenerationError):
+        raise
+    except Exception as e:
+        raise EnumGenerationError(
+            "Failed to generate enums.py",
+            {"file": str(ENUMS_PY), "error": str(e)},
+        ) from e
 
-    if write_if_changed(ENUMS_PYI, generate_enums_pyi_content()):
-        print(f"  Generated: {ENUMS_PYI}")
-        files_written += 1
+    try:
+        pyi_content = generate_enums_pyi_content()
+        if pyi_content is None:
+            # Plugin system failed - warning already printed, skip .pyi
+            pass
+        elif write_if_changed(ENUMS_PYI, pyi_content):
+            print_generated(ENUMS_PYI)
+            files_written += 1
+        else:
+            print_up_to_date(f"{ENUMS_PYI.name} is up-to-date")
+    except (YAMLLoadError, EnumGenerationError):
+        raise
+    except Exception as e:
+        raise EnumGenerationError(
+            "Failed to generate enums.pyi",
+            {"file": str(ENUMS_PYI), "error": str(e)},
+        ) from e
 
-    if files_written == 0:
-        print("  Enum files are already up-to-date")
     return files_written
 
 
@@ -417,9 +704,14 @@ def generate_imports_content(categories: dict) -> str:
 
     for spec in categories.values():
         if protocol := spec.get("protocol"):
-            mod, cls = parse_class_path(protocol)
-            imports[mod].append(cls)
-        # Import enum types for use in name_or_class_path parameter
+            try:
+                mod, cls = parse_class_path(protocol)
+                imports[mod].append(cls)
+            except ValueError as e:
+                raise OverloadGenerationError(
+                    f"Invalid protocol path: {protocol}",
+                    {"protocol": protocol, "error": str(e)},
+                ) from e
         if enum_name := spec.get("enum"):
             imports["aiperf.plugin.enums"].append(enum_name)
 
@@ -435,10 +727,15 @@ def generate_overloads_content(categories: dict) -> str:
     lines = []
     for name, spec in categories.items():
         protocol = spec.get("protocol", "")
-        _, cls = parse_class_path(protocol) if protocol else ("", "")
+        if protocol:
+            try:
+                _, cls = parse_class_path(protocol)
+            except ValueError:
+                cls = ""
+        else:
+            cls = ""
         ret = f"type[{cls}]" if cls else "type"
         member = to_enum_member(name)
-        # Use enum type for name_or_class_path if available, otherwise just str
         enum_name = spec.get("enum")
         name_type = f"{enum_name} | str" if enum_name else "str"
         lines.append("    @overload")
@@ -460,27 +757,327 @@ def generate_overloads_content(categories: dict) -> str:
 
 def generate_overloads(check_mode: bool = False) -> int:
     """Generate type overloads in plugins.py."""
-    categories = load_categories()
-    content = PLUGINS_PY.read_text()
+    try:
+        categories = load_categories()
+    except YAMLLoadError:
+        raise
 
-    updated = replace_between_markers(
-        content, IMPORTS_START, IMPORTS_END, generate_imports_content(categories)
-    )
-    updated = replace_between_markers(
-        updated, OVERLOADS_START, OVERLOADS_END, generate_overloads_content(categories)
-    )
+    if not PLUGINS_PY.exists():
+        raise OverloadGenerationError(
+            "plugins.py not found",
+            {"expected_path": str(PLUGINS_PY)},
+        )
+
+    try:
+        content = PLUGINS_PY.read_text()
+    except OSError as e:
+        raise OverloadGenerationError(
+            "Failed to read plugins.py",
+            {"file": str(PLUGINS_PY), "error": str(e)},
+        ) from e
+
+    try:
+        updated = replace_between_markers(
+            content, IMPORTS_START, IMPORTS_END, generate_imports_content(categories)
+        )
+        updated = replace_between_markers(
+            updated,
+            OVERLOADS_START,
+            OVERLOADS_END,
+            generate_overloads_content(categories),
+        )
+    except OverloadGenerationError:
+        raise
 
     if content == updated:
-        print("  Overloads are up-to-date")
+        print_up_to_date("Overloads are up-to-date")
         return 0
 
     if check_mode:
-        print("  Overloads are out of date!")
-        return -1  # Indicate failure for check mode
+        print_out_of_date("Overloads are out of date!")
+        return -1
 
-    PLUGINS_PY.write_text(updated)
-    print(f"  Updated: {PLUGINS_PY}")
+    try:
+        PLUGINS_PY.write_text(updated)
+    except OSError as e:
+        raise OverloadGenerationError(
+            "Failed to write plugins.py",
+            {"file": str(PLUGINS_PY), "error": str(e)},
+        ) from e
+
+    print_updated(PLUGINS_PY)
     return 1
+
+
+# =============================================================================
+# Plugin Validation
+# =============================================================================
+
+
+def validate_categories_schema(
+    categories_data: dict[str, Any],
+) -> list[str]:
+    """Validate categories data against CategoriesManifest schema."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from aiperf.plugin.schema import CategoriesManifest
+
+    errors: list[str] = []
+    try:
+        CategoriesManifest.model_validate(categories_data)
+    except PydanticValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err["loc"]) if err["loc"] else "(root)"
+            errors.append(f"{loc}: {err['msg']}")
+    return errors
+
+
+def validate_plugins_schema(
+    plugins_data: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Validate plugins data against PluginsManifest schema."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from aiperf.plugin.schema import PluginsManifest
+
+    errors: list[str] = []
+    try:
+        PluginsManifest.model_validate(plugins_data)
+    except PydanticValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err["loc"]) if err["loc"] else "(root)"
+            errors.append(f"{loc}: {err['msg']}")
+    return errors
+
+
+def validate_category_references(
+    categories: dict[str, Any],
+    plugins_data: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Validate that all categories in plugins.yaml exist in categories.yaml."""
+    errors: list[str] = []
+    category_names = set(categories.keys())
+    for category in plugins_data:
+        if category not in category_names:
+            errors.append(f"'{category}' not defined in categories.yaml")
+    return errors
+
+
+def validate_category_classes(
+    categories: dict[str, Any],
+    show_details: bool = False,
+) -> list[str]:
+    """Validate all category protocol and metadata classes can be loaded.
+
+    Args:
+        categories: Category data from categories.yaml
+        show_details: If True, print each class as it's validated
+    """
+    import importlib
+
+    errors: list[str] = []
+    for name, spec in categories.items():
+        # Validate protocol class
+        if protocol := spec.get("protocol"):
+            start = time.perf_counter()
+            try:
+                mod, cls = parse_class_path(protocol)
+                getattr(importlib.import_module(mod), cls)
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [dim]•[/] {name}.protocol [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [red]•[/] {name}.protocol [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+                errors.append(f"{name}.protocol ({protocol}): {e}")
+
+        # Validate metadata_class
+        if metadata_class := spec.get("metadata_class"):
+            start = time.perf_counter()
+            try:
+                mod, cls = parse_class_path(metadata_class)
+                getattr(importlib.import_module(mod), cls)
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [dim]•[/] {name}.metadata_class [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [red]•[/] {name}.metadata_class [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+                errors.append(f"{name}.metadata_class ({metadata_class}): {e}")
+
+    return errors
+
+
+def validate_plugin_classes(show_details: bool = False) -> tuple[list[str], int]:
+    """Validate all registered plugin classes can be loaded.
+
+    Args:
+        show_details: If True, print each plugin as it's validated
+
+    Returns:
+        Tuple of (errors, count of plugins validated)
+    """
+    from aiperf.plugin import plugins
+
+    errors: list[str] = []
+    count = 0
+
+    for category in plugins.list_categories():
+        for entry in plugins.list_entries(category):
+            count += 1
+            start = time.perf_counter()
+            try:
+                entry.load()
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [dim]•[/] {category}.{entry.name} [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                if show_details:
+                    console.print(
+                        f"      [red]•[/] {category}.{entry.name} [dim]({elapsed_ms:.0f}ms)[/]"
+                    )
+                errors.append(f"{category}.{entry.name}: {e}")
+
+    return errors, count
+
+
+def validate_plugins(verbose: bool = False) -> tuple[int, int, int, float]:
+    """Run all plugin validations with rich output.
+
+    Args:
+        verbose: If True, show full stack traces for errors.
+
+    Returns:
+        Tuple of (failed_count, category_count, plugin_count, total_time_seconds)
+    """
+    total_start = time.perf_counter()
+
+    # Load YAML data once upfront
+    categories_data = load_categories()
+    plugins_data = load_plugins()
+    category_count = len(categories_data)
+    plugin_count = sum(len(plugins) for plugins in plugins_data.values())
+
+    # Count protocol and metadata classes for Category Classes breakdown
+    protocol_count = sum(1 for spec in categories_data.values() if spec.get("protocol"))
+    metadata_count = sum(
+        1 for spec in categories_data.values() if spec.get("metadata_class")
+    )
+
+    # Simple validations (no sub-items)
+    simple_validations: list[tuple[str, Callable[[], list[str]], str]] = [
+        (
+            "categories.yaml",
+            lambda: validate_categories_schema(categories_data),
+            f"{category_count} categories",
+        ),
+        (
+            "plugins.yaml",
+            lambda: validate_plugins_schema(plugins_data),
+            f"{plugin_count} plugins",
+        ),
+        (
+            "Category References",
+            lambda: validate_category_references(categories_data, plugins_data),
+            f"{len(plugins_data)} categories",
+        ),
+    ]
+
+    failed = 0
+    max_errors_shown = 5
+
+    for name, validator, detail in simple_validations:
+        start = time.perf_counter()
+        errors = validator()
+        elapsed = time.perf_counter() - start
+        elapsed_ms = elapsed * 1000
+
+        if errors:
+            console.print(f"  [red]✗[/] {name} [dim]({elapsed_ms:.0f}ms)[/]")
+            # Show limited errors with "and X more" if many
+            for error in errors[:max_errors_shown]:
+                console.print(f"    [dim]•[/] [red]{error}[/]")
+            if len(errors) > max_errors_shown:
+                console.print(
+                    f"    [dim]... and {len(errors) - max_errors_shown} more error(s)[/]"
+                )
+            failed += 1
+        else:
+            console.print(
+                f"  [green]✓[/] {name} [dim]({detail}, {elapsed_ms:.0f}ms)[/]"
+            )
+
+    # Category Classes validation (with sub-items for each class when verbose)
+    if verbose:
+        console.print(
+            f"  [dim]○[/] Category Classes [dim]({protocol_count} protocols, {metadata_count} metadata)[/]"
+        )
+    start = time.perf_counter()
+    errors = validate_category_classes(categories_data, show_details=verbose)
+    elapsed = time.perf_counter() - start
+    elapsed_ms = elapsed * 1000
+
+    if errors:
+        console.print(f"  [red]✗[/] Category Classes [dim]({elapsed_ms:.0f}ms)[/]")
+        for error in errors[:max_errors_shown]:
+            console.print(f"    [dim]•[/] [red]{error}[/]")
+        if len(errors) > max_errors_shown:
+            console.print(
+                f"    [dim]... and {len(errors) - max_errors_shown} more error(s)[/]"
+            )
+        failed += 1
+    else:
+        console.print(
+            f"  [green]✓[/] Category Classes [dim]({protocol_count} protocols, {metadata_count} metadata, {elapsed_ms:.0f}ms)[/]"
+        )
+
+    # Plugin class validation (with sub-items for each plugin when verbose)
+    if verbose:
+        console.print(f"  [dim]○[/] Plugin Classes [dim]({plugin_count} plugins)[/]")
+    start = time.perf_counter()
+    try:
+        errors, validated_count = validate_plugin_classes(show_details=verbose)
+        elapsed = time.perf_counter() - start
+        elapsed_ms = elapsed * 1000
+
+        if errors:
+            console.print(f"  [red]✗[/] Plugin Classes [dim]({elapsed_ms:.0f}ms)[/]")
+            for error in errors[:max_errors_shown]:
+                console.print(f"    [dim]•[/] [red]{error}[/]")
+            if len(errors) > max_errors_shown:
+                console.print(
+                    f"    [dim]... and {len(errors) - max_errors_shown} more error(s)[/]"
+                )
+            failed += 1
+        else:
+            console.print(
+                f"  [green]✓[/] Plugin Classes [dim]({validated_count} plugins, {elapsed_ms:.0f}ms)[/]"
+            )
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        elapsed_ms = elapsed * 1000
+        console.print(f"  [red]✗[/] Plugin Classes [dim]({elapsed_ms:.0f}ms)[/]")
+        console.print(f"    [dim]•[/] [red]Failed to load plugin system: {e}[/]")
+        if verbose:
+            console.print()
+            error_console.print(Traceback.from_exception(type(e), e, e.__traceback__))
+        failed += 1
+
+    total_elapsed = time.perf_counter() - total_start
+    return failed, category_count, plugin_count, total_elapsed
 
 
 # =============================================================================
@@ -490,13 +1087,14 @@ def generate_overloads(check_mode: bool = False) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Generate plugin system artifacts from categories.yaml",
+        description="Generate and validate plugin system artifacts",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python tools/generate_plugin_artifacts.py          # Generate all
-  python tools/generate_plugin_artifacts.py --enums  # Generate only enums
-  python tools/generate_plugin_artifacts.py --check  # Verify files are up-to-date
+  python tools/generate_plugin_artifacts.py            # Generate all
+  python tools/generate_plugin_artifacts.py --enums    # Generate only enums
+  python tools/generate_plugin_artifacts.py --check    # Verify files are up-to-date
+  python tools/generate_plugin_artifacts.py --validate # Validate YAML and classes only
 """,
     )
     parser.add_argument(
@@ -507,43 +1105,91 @@ Examples:
         "--overloads", action="store_true", help="Generate type overloads"
     )
     parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate YAML files and plugin classes (no generation)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check if files are up-to-date (exit 1 if not)",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed validation progress and full tracebacks",
+    )
     args = parser.parse_args()
+
+    # Handle --validate mode separately
+    if args.validate:
+        print_section("Plugin Validation")
+        failed, category_count, plugin_count, total_time = validate_plugins(
+            verbose=args.verbose
+        )
+        console.print()
+        if failed:
+            console.print(
+                f"[bold red]✗[/] [bold]{failed}[/] validation(s) failed. [dim]({total_time:.2f}s)[/]"
+            )
+            if not args.verbose:
+                console.print(
+                    "[dim]Run with --verbose for detailed output and stack traces.[/]"
+                )
+            return 1
+        console.print(
+            f"[bold green]✓[/] Validated [bold]{category_count}[/] categories "
+            f"and [bold]{plugin_count}[/] plugins. [dim]({total_time:.2f}s)[/]"
+        )
+        return 0
 
     # Default to --all if no specific generators requested
     run_all = not (args.schemas or args.enums or args.overloads)
 
     generators = [
-        ("Schemas", args.schemas, generate_schemas),
-        ("Enums", args.enums, generate_enums),
-        ("Overloads", args.overloads, lambda: generate_overloads(args.check)),
+        ("Plugin Schemas", args.schemas, generate_schemas),
+        ("Plugin Enums", args.enums, generate_enums),
+        ("Plugin Overloads", args.overloads, lambda: generate_overloads(args.check)),
     ]
 
     total_files = 0
     errors = 0
     for name, flag, gen in generators:
         if run_all or flag:
-            print(f"=== {name} ===")
+            print_section(name)
             try:
                 result = gen()
                 if result < 0:
                     errors += 1
                 else:
                     total_files += result
+            except GeneratorError as e:
+                print_error(e, verbose=args.verbose)
+                errors += 1
             except Exception as e:
-                print(f"  Error: {e}")
+                print_error(
+                    e, verbose=True
+                )  # Always show traceback for unexpected errors
                 errors += 1
 
+    # Summary
+    console.print()
     if errors:
-        return 1
-    if args.check and total_files:
-        print(
-            f"\n{total_files} file(s) would be updated. Run without --check to apply."
+        console.print(
+            f"[bold red]✗[/] [bold]{errors}[/] error(s) occurred during generation."
         )
         return 1
+    if args.check and total_files:
+        console.print(f"[bold yellow]{total_files}[/] file(s) would be updated.")
+        console.print("Run without [cyan]--check[/] to apply.")
+        return 1
+    if total_files:
+        console.print(
+            f"[bold green]✓[/] Successfully generated [bold]{total_files}[/] plugin file(s)."
+        )
+    else:
+        console.print("[bold green]✓[/] All plugin files are up-to-date.")
     return 0
 
 
