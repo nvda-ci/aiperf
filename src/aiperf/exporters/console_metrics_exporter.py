@@ -10,7 +10,6 @@ from rich.table import Table
 from aiperf.common.enums import MetricFlags
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult
-from aiperf.exporters.display_units_utils import to_display_unit
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.metrics.metric_registry import MetricRegistry
 
@@ -50,11 +49,12 @@ class ConsoleMetricsExporter(AIPerfLoggerMixin):
         return table
 
     def _construct_table(self, table: Table, records: list[MetricResult]) -> None:
-        records = sorted(
-            (to_display_unit(r, MetricRegistry) for r in records),
+        # Records are already in display units from summarize()
+        sorted_records = sorted(
+            records,
             key=lambda x: MetricRegistry.get_class(x.tag).display_order or sys.maxsize,
         )
-        for record in records:
+        for record in sorted_records:
             if not self._should_show(record):
                 continue
             table.add_row(*self._format_row(record))

@@ -1,14 +1,12 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from collections.abc import Iterable
 from urllib.parse import urlparse
 
 from aiperf.common.aiperf_logger import AIPerfLogger
 from aiperf.common.constants import STAT_KEYS
 from aiperf.common.exceptions import MetricUnitError
 from aiperf.common.models import MetricResult
-from aiperf.common.types import MetricTagT
 from aiperf.metrics.metric_registry import MetricRegistry
 
 _logger = AIPerfLogger(__name__)
@@ -70,13 +68,3 @@ def to_display_unit(result: MetricResult, registry: MetricRegistry) -> MetricRes
                 continue
             setattr(record, stat, new_value)
     return record
-
-
-def convert_all_metrics_to_display_units(
-    records: Iterable[MetricResult], registry: MetricRegistry
-) -> dict[MetricTagT, MetricResult]:
-    """Helper for exporters that want a tag->result mapping in display units."""
-    out: dict[MetricTagT, MetricResult] = {}
-    for r in records:
-        out[r.tag] = to_display_unit(r, registry)
-    return out

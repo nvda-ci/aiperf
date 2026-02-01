@@ -70,7 +70,7 @@ def mk_metric():
         std=None,
     ):
         return MetricResult(
-            tag="time_to_first_token",
+            tag=tag,
             header=header,
             unit=unit,
             avg=avg,
@@ -96,16 +96,17 @@ async def test_metrics_csv_exporter_writes_two_sections_and_values(
 ):
     """
     Verifies:
-      - display-unit conversion is honored (we simulate the converter),
       - request-metrics section with STAT_KEYS appears first,
       - blank separator line exists iff both sections exist,
       - system-metrics section prints single values,
       - units included in 'Metric' column.
+
+    Note: Metrics are expected to already be in display units from summarize().
     """
-    # - ttft: request-level metric with percentiles, already converted to ms
+    # - ttft: request-level metric with percentiles, already in display units
     # - input_tokens: system metric (count)
-    converted = {
-        "time_to_first_token": mk_metric(
+    metrics = [
+        mk_metric(
             "time_to_first_token",
             "Time to First Token",
             "ms",
@@ -118,23 +119,16 @@ async def test_metrics_csv_exporter_writes_two_sections_and_values(
             p99=15.0,
             std=1.2,
         ),
-        "time_to_first_token_system": mk_metric(
-            "time_to_first_token",
+        mk_metric(
+            "time_to_first_token_system",
             'Input, Tokens "Total"',
             "ms",
             avg=1024.0,
         ),
-    }
+    ]
 
-    # Before conversion the exporter sees a list (consistent with your other exporters)
-    results = _MockResults(list(converted.values()))
-
-    # Monkeypatch converter to return our dict above
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    monkeypatch.setattr(
-        mbe, "convert_all_metrics_to_display_units", lambda records, reg: converted
-    )
+    # Metrics already in display units from summarize()
+    results = _MockResults(metrics)
 
     with tempfile.TemporaryDirectory() as tmp:
         outdir = Path(tmp)
@@ -147,6 +141,8 @@ async def test_metrics_csv_exporter_writes_two_sections_and_values(
         )
 
         exporter = MetricsCsvExporter(cfg)
+        # Mock _should_export to allow all metrics through
+        monkeypatch.setattr(exporter, "_should_export", lambda m: True)
         await exporter.export()
 
         expected = outdir / OutputDefaults.PROFILE_EXPORT_AIPERF_CSV_FILE
@@ -176,15 +172,8 @@ async def test_metrics_csv_exporter_empty_records_creates_empty_file(
     """
     With no records, exporter still creates the file but content is empty (no sections).
     """
-    # No records pre-conversion
+    # No records
     results = _MockResults([])
-
-    # Converter returns empty dict to the generator
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    monkeypatch.setattr(
-        mbe, "convert_all_metrics_to_display_units", lambda records, reg: {}
-    )
 
     with tempfile.TemporaryDirectory() as tmp:
         outdir = Path(tmp)
@@ -212,18 +201,12 @@ async def test_metrics_csv_exporter_deterministic_sort_order(
     """
     Ensures metrics are sorted by tag deterministically within each section.
     """
-    converted = {
-        "zzz_latency": mk_metric("zzz_latency", "Z Latency", "ms", avg=3.0, p50=3.0),
-        "aaa_latency": mk_metric("aaa_latency", "A Latency", "ms", avg=1.0, p50=1.0),
-        "mmm_gpu_util": mk_metric("mmm_gpu_util", "GPU Util", "percent", avg=80.0),
-    }
-    results = _MockResults(list(converted.values()))
-
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    monkeypatch.setattr(
-        mbe, "convert_all_metrics_to_display_units", lambda records, reg: converted
-    )
+    metrics = [
+        mk_metric("zzz_latency", "Z Latency", "ms", avg=3.0, p50=3.0),
+        mk_metric("aaa_latency", "A Latency", "ms", avg=1.0, p50=1.0),
+        mk_metric("mmm_gpu_util", "GPU Util", "percent", avg=80.0),
+    ]
+    results = _MockResults(metrics)
 
     with tempfile.TemporaryDirectory() as tmp:
         outdir = Path(tmp)
@@ -236,6 +219,8 @@ async def test_metrics_csv_exporter_deterministic_sort_order(
         )
 
         exporter = MetricsCsvExporter(cfg)
+        # Mock _should_export to allow all metrics through
+        monkeypatch.setattr(exporter, "_should_export", lambda m: True)
         await exporter.export()
 
         text = _read(outdir / OutputDefaults.PROFILE_EXPORT_AIPERF_CSV_FILE)
@@ -265,21 +250,13 @@ async def test_metrics_csv_exporter_unit_aware_number_formatting(
       - ms show with reasonable decimals (not coerced to integers),
       - presence of percentiles does not affect formatting policy.
     """
-    converted = {
-        "input_seq_len": mk_metric(
-            "input_seq_len", "Input Sequence Length", "tokens", avg=4096
-        ),
-        "req_latency": mk_metric(
+    metrics = [
+        mk_metric("input_seq_len", "Input Sequence Length", "tokens", avg=4096),
+        mk_metric(
             "req_latency", "Request Latency", "ms", avg=1.2345, p50=1.234, p90=1.9
         ),
-    }
-    results = _MockResults(list(converted.values()))
-
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    monkeypatch.setattr(
-        mbe, "convert_all_metrics_to_display_units", lambda records, reg: converted
-    )
+    ]
+    results = _MockResults(metrics)
 
     with tempfile.TemporaryDirectory() as tmp:
         outdir = Path(tmp)
@@ -292,6 +269,8 @@ async def test_metrics_csv_exporter_unit_aware_number_formatting(
         )
 
         exporter = MetricsCsvExporter(cfg)
+        # Mock _should_export to allow all metrics through
+        monkeypatch.setattr(exporter, "_should_export", lambda m: True)
         await exporter.export()
 
         text = _read(outdir / OutputDefaults.PROFILE_EXPORT_AIPERF_CSV_FILE)
@@ -310,18 +289,10 @@ async def test_metrics_csv_exporter_logs_and_raises_on_write_failure(
     """
     On write failure, exporter.error should be called and the exception should propagate.
     """
-    converted = {
-        "req_latency": mk_metric(
-            "req_latency", "Request Latency", "ms", avg=1.0, p50=1.0
-        ),
-    }
-    results = _MockResults(list(converted.values()))
-
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    monkeypatch.setattr(
-        mbe, "convert_all_metrics_to_display_units", lambda records, reg: converted
-    )
+    metrics = [
+        mk_metric("req_latency", "Request Latency", "ms", avg=1.0, p50=1.0),
+    ]
+    results = _MockResults(metrics)
 
     # Force aiofiles.open to throw
     import aiofiles
@@ -353,6 +324,8 @@ async def test_metrics_csv_exporter_logs_and_raises_on_write_failure(
 
         exporter = MetricsCsvExporter(cfg)
         monkeypatch.setattr(exporter, "error", _err)
+        # Mock _should_export to allow all metrics through
+        monkeypatch.setattr(exporter, "_should_export", lambda m: True)
 
         with pytest.raises(OSError, match="disk full"):
             await exporter.export()
@@ -1039,7 +1012,7 @@ def test_metrics_csv_exporter_generate_content_uses_instance_data_members(
     """Verify _generate_content() uses instance data members."""
     from aiperf.common.models import ProfileResults
 
-    # Create mock records
+    # Create mock records (already in display units from summarize())
     mock_records = [
         MetricResult(
             tag="time_to_first_token",
@@ -1059,16 +1032,7 @@ def test_metrics_csv_exporter_generate_content_uses_instance_data_members(
 
     exporter = MetricsCsvExporter(cfg)
 
-    # Mock conversion
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    def mock_convert(metrics, reg):
-        return {m.tag: m for m in metrics}
-
-    with (
-        patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-        patch.object(exporter, "_should_export", return_value=True),
-    ):
+    with patch.object(exporter, "_should_export", return_value=True):
         content = exporter._generate_content()
 
     # Should contain data from instance members
@@ -1091,13 +1055,7 @@ def test_metrics_csv_exporter_generate_content_uses_telemetry_results_from_insta
 
     exporter = MetricsCsvExporter(cfg)
 
-    import aiperf.exporters.metrics_base_exporter as mbe
-
-    def mock_convert(metrics, reg):
-        return {}
-
-    with patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert):
-        content = exporter._generate_content()
+    content = exporter._generate_content()
 
     # Should contain telemetry data
     assert "GPU_Index" in content or "Endpoint" in content

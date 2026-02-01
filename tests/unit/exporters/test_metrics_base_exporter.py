@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aiperf.common.config import EndpointConfig, ServiceConfig, UserConfig
+from aiperf.common.enums import MetricFlags
 from aiperf.common.models import MetricResult
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.exporters.metrics_base_exporter import MetricsBaseExporter
@@ -100,13 +101,16 @@ class TestMetricsBaseExporterInitialization:
 
 
 class TestMetricsBaseExporterPrepareMetrics:
-    """Tests for _prepare_metrics() method."""
+    """Tests for _prepare_metrics() method.
 
-    @pytest.mark.asyncio
-    async def test_prepare_metrics_converts_to_display_units(
+    Note: Metrics are expected to already be in display units from summarize(),
+    so _prepare_metrics only filters based on export flags.
+    """
+
+    def test_prepare_metrics_returns_dict_keyed_by_tag(
         self, mock_results, mock_user_config
     ):
-        """Verify conversion function is called with correct arguments."""
+        """Verify metrics are returned as a dict keyed by tag."""
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_user_config.output.artifact_directory = Path(temp_dir)
             config = ExporterConfig(
@@ -118,29 +122,23 @@ class TestMetricsBaseExporterPrepareMetrics:
 
             exporter = ConcreteExporter(config)
 
-            converted = {
-                "time_to_first_token": MetricResult(
-                    tag="time_to_first_token",
-                    header="Time to First Token",
-                    unit="ms",
-                    avg=45.2,
-                )
-            }
+            metric = MetricResult(
+                tag="time_to_first_token",
+                header="Time to First Token",
+                unit="ms",
+                avg=45.2,
+            )
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
+            # Mock to indicate no EXPERIMENTAL or INTERNAL flags
             with patch.object(
-                mbe, "convert_all_metrics_to_display_units", return_value=converted
-            ) as mock_convert:
-                result = exporter._prepare_metrics(mock_results.records)
+                MetricRegistry,
+                "get_class",
+                return_value=Mock(has_flags=Mock(return_value=False)),
+            ):
+                result = exporter._prepare_metrics([metric])
 
-                # Verify conversion was called
-                mock_convert.assert_called_once()
-                # Verify it was called with the metric results
-                call_args = mock_convert.call_args[0]
-                assert list(call_args[0]) == mock_results.records
-                # Verify result contains converted metrics
-                assert result == converted
+                assert "time_to_first_token" in result
+                assert result["time_to_first_token"] is metric
 
     def test_prepare_metrics_filters_experimental_metrics(
         self, mock_results, mock_user_config
@@ -162,23 +160,12 @@ class TestMetricsBaseExporterPrepareMetrics:
                 tag="request_latency", header="Request Latency", unit="ms", avg=10.0
             )
 
-            converted = {"request_latency": experimental_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
-
             # Mock the metric class to have EXPERIMENTAL flag
-            with (
-                patch.object(
-                    mbe, "convert_all_metrics_to_display_units", return_value=converted
-                ),
-                patch.object(
-                    MetricRegistry,
-                    "get_class",
-                    return_value=Mock(
-                        missing_flags=Mock(return_value=False)
-                    ),  # Has EXPERIMENTAL
-                ),
-            ):
+            mock_class = Mock()
+            mock_class.has_flags.side_effect = (
+                lambda f: f == MetricFlags.EXPERIMENTAL or f == MetricFlags.INTERNAL
+            )
+            with patch.object(MetricRegistry, "get_class", return_value=mock_class):
                 result = exporter._prepare_metrics([experimental_metric])
 
                 # Should be filtered out
@@ -203,21 +190,10 @@ class TestMetricsBaseExporterPrepareMetrics:
                 tag="internal_metric", header="Internal", unit="ms", avg=5.0
             )
 
-            converted = {"internal_metric": internal_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
-
             # Mock to indicate it has INTERNAL flag
-            with (
-                patch.object(
-                    mbe, "convert_all_metrics_to_display_units", return_value=converted
-                ),
-                patch.object(
-                    MetricRegistry,
-                    "get_class",
-                    return_value=Mock(missing_flags=Mock(return_value=False)),
-                ),
-            ):
+            mock_class = Mock()
+            mock_class.has_flags.side_effect = lambda f: f == MetricFlags.INTERNAL
+            with patch.object(MetricRegistry, "get_class", return_value=mock_class):
                 result = exporter._prepare_metrics([internal_metric])
 
                 assert len(result) == 0
@@ -242,20 +218,11 @@ class TestMetricsBaseExporterPrepareMetrics:
                 avg=45.2,
             )
 
-            converted = {"time_to_first_token": public_metric}
-
-            import aiperf.exporters.metrics_base_exporter as mbe
-
             # Mock to indicate no EXPERIMENTAL or INTERNAL flags
-            with (
-                patch.object(
-                    mbe, "convert_all_metrics_to_display_units", return_value=converted
-                ),
-                patch.object(
-                    MetricRegistry,
-                    "get_class",
-                    return_value=Mock(missing_flags=Mock(return_value=True)),
-                ),
+            with patch.object(
+                MetricRegistry,
+                "get_class",
+                return_value=Mock(has_flags=Mock(return_value=False)),
             ):
                 result = exporter._prepare_metrics([public_metric])
 
@@ -276,14 +243,9 @@ class TestMetricsBaseExporterPrepareMetrics:
 
             exporter = ConcreteExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
+            result = exporter._prepare_metrics([])
 
-            with patch.object(
-                mbe, "convert_all_metrics_to_display_units", return_value={}
-            ):
-                result = exporter._prepare_metrics([])
-
-                assert result == {}
+            assert result == {}
 
 
 class TestMetricsBaseExporterShouldExport:
@@ -309,10 +271,11 @@ class TestMetricsBaseExporterShouldExport:
                 avg=45.2,
             )
 
+            # Mock to indicate no EXPERIMENTAL or INTERNAL flags
             with patch.object(
                 MetricRegistry,
                 "get_class",
-                return_value=Mock(missing_flags=Mock(return_value=True)),
+                return_value=Mock(has_flags=Mock(return_value=False)),
             ):
                 assert exporter._should_export(metric) is True
 
@@ -335,11 +298,10 @@ class TestMetricsBaseExporterShouldExport:
                 tag="experimental_metric", header="Experimental", unit="ms", avg=10.0
             )
 
-            with patch.object(
-                MetricRegistry,
-                "get_class",
-                return_value=Mock(missing_flags=Mock(return_value=False)),
-            ):
+            # Mock to indicate it has EXPERIMENTAL flag
+            mock_class = Mock()
+            mock_class.has_flags.side_effect = lambda f: f == MetricFlags.EXPERIMENTAL
+            with patch.object(MetricRegistry, "get_class", return_value=mock_class):
                 assert exporter._should_export(metric) is False
 
     def test_should_export_blocks_internal_metrics(
@@ -361,11 +323,10 @@ class TestMetricsBaseExporterShouldExport:
                 tag="internal_metric", header="Internal", unit="ms", avg=5.0
             )
 
-            with patch.object(
-                MetricRegistry,
-                "get_class",
-                return_value=Mock(missing_flags=Mock(return_value=False)),
-            ):
+            # Mock to indicate it has INTERNAL flag
+            mock_class = Mock()
+            mock_class.has_flags.side_effect = lambda f: f == MetricFlags.INTERNAL
+            with patch.object(MetricRegistry, "get_class", return_value=mock_class):
                 assert exporter._should_export(metric) is False
 
     def test_should_export_blocks_combined_flags(self, mock_results, mock_user_config):
@@ -385,11 +346,10 @@ class TestMetricsBaseExporterShouldExport:
                 tag="flagged_metric", header="Flagged", unit="ms", avg=15.0
             )
 
-            with patch.object(
-                MetricRegistry,
-                "get_class",
-                return_value=Mock(missing_flags=Mock(return_value=False)),
-            ):
+            # Mock to indicate it has both EXPERIMENTAL and INTERNAL flags
+            mock_class = Mock()
+            mock_class.has_flags.return_value = True  # Has both flags
+            with patch.object(MetricRegistry, "get_class", return_value=mock_class):
                 assert exporter._should_export(metric) is False
 
 

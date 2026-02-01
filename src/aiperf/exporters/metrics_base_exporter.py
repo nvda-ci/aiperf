@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from abc import ABC, abstractmethod
@@ -7,9 +7,9 @@ from collections.abc import Iterable
 import aiofiles
 
 from aiperf.common.enums import MetricFlags
+from aiperf.common.environment import Environment
 from aiperf.common.mixins import AIPerfLoggerMixin
 from aiperf.common.models import MetricResult
-from aiperf.exporters.display_units_utils import convert_all_metrics_to_display_units
 from aiperf.exporters.exporter_config import ExporterConfig
 from aiperf.metrics.metric_registry import MetricRegistry
 
@@ -29,27 +29,28 @@ class MetricsBaseExporter(AIPerfLoggerMixin, ABC):
     def _prepare_metrics(
         self, metric_results: Iterable[MetricResult]
     ) -> dict[str, MetricResult]:
-        """Convert to display units and filter exportable metrics.
+        """Filter exportable metrics.
+
+        Metrics are expected to already be in display units from summarize().
 
         Args:
-            metric_results: Raw metric results to prepare
+            metric_results: Metric results to filter (already in display units)
 
         Returns:
-            dict of filtered and converted metrics ready for export
+            dict of filtered metrics ready for export
         """
-        converted = convert_all_metrics_to_display_units(
-            metric_results, self._metric_registry
-        )
         return {
-            tag: result
-            for tag, result in converted.items()
-            if self._should_export(result)
+            metric.tag: metric
+            for metric in metric_results
+            if self._should_export(metric)
         }
 
     def _should_export(self, metric: MetricResult) -> bool:
         """Check if a metric should be exported.
 
-        Filters out experimental and internal metrics.
+        Note: Since summarize() already filters INTERNAL/EXPERIMENTAL metrics
+        (unless dev mode is enabled), this method provides consistent behavior
+        by respecting the same dev mode flags for exports.
 
         Args:
             metric: MetricResult to check
@@ -58,11 +59,24 @@ class MetricsBaseExporter(AIPerfLoggerMixin, ABC):
             bool: True if metric should be exported
         """
         metric_class = MetricRegistry.get_class(metric.tag)
-        res = metric_class.missing_flags(
-            MetricFlags.EXPERIMENTAL | MetricFlags.INTERNAL
-        )
-        self.trace(lambda: f"Metric '{metric.tag}' should be exported: {res}")
-        return res
+
+        # Filter INTERNAL metrics unless SHOW_INTERNAL_METRICS is enabled
+        if (
+            metric_class.has_flags(MetricFlags.INTERNAL)
+            and not Environment.DEV.SHOW_INTERNAL_METRICS
+        ):
+            self.trace(lambda: f"Metric '{metric.tag}' filtered (INTERNAL)")
+            return False
+
+        # Filter EXPERIMENTAL metrics unless SHOW_EXPERIMENTAL_METRICS is enabled
+        if (
+            metric_class.has_flags(MetricFlags.EXPERIMENTAL)
+            and not Environment.DEV.SHOW_EXPERIMENTAL_METRICS
+        ):
+            self.trace(lambda: f"Metric '{metric.tag}' filtered (EXPERIMENTAL)")
+            return False
+
+        return True
 
     @abstractmethod
     def _generate_content(self) -> str:

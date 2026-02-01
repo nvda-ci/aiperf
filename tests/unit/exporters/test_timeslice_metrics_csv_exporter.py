@@ -233,16 +233,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            # Mock conversion to return metrics as-is
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -293,15 +284,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -344,15 +327,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -405,15 +380,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -469,15 +436,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -528,15 +487,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -573,15 +524,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -618,15 +561,7 @@ class TestTimesliceMetricsCsvExporterGenerateContent:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 content = exporter._generate_content()
 
             lines = content.strip().split("\n")
@@ -691,15 +626,7 @@ class TestTimesliceMetricsCsvExporterIntegration:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 await exporter.export()
 
             # Verify file exists
@@ -761,15 +688,7 @@ class TestTimesliceMetricsCsvExporterIntegration:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {m.tag: m for m in metrics}
-
-            with (
-                patch.object(mbe, "convert_all_metrics_to_display_units", mock_convert),
-                patch.object(exporter, "_should_export", return_value=True),
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 await exporter.export()
 
             with open(exporter._file_path) as f:
@@ -808,14 +727,7 @@ class TestTimesliceMetricsCsvExporterIntegration:
 
             exporter = TimesliceMetricsCsvExporter(config)
 
-            import aiperf.exporters.metrics_base_exporter as mbe
-
-            def mock_convert(metrics, reg):
-                return {}
-
-            with patch.object(
-                mbe, "convert_all_metrics_to_display_units", mock_convert
-            ):
+            with patch.object(exporter, "_should_export", return_value=True):
                 await exporter.export()
 
             with open(exporter._file_path) as f:

@@ -8,6 +8,7 @@ from aiperf.common.constants import NANOS_PER_SECOND
 from aiperf.common.exceptions import NoMetricValue, PostProcessorDisabled
 from aiperf.common.models import MetricResult
 from aiperf.common.types import MetricTagT, TimeSliceT
+from aiperf.exporters.display_units_utils import to_display_unit
 from aiperf.metrics.base_metric import BaseMetric
 from aiperf.metrics.metric_dicts import MetricResultsDict
 from aiperf.metrics.metric_registry import MetricRegistry
@@ -93,6 +94,10 @@ class TimesliceMetricResultsProcessor(MetricResultsProcessor):
         """Summarize the results.
 
         This will compute the values for the derived metrics, and then create the MetricResult objects for each metric.
+        Results are returned in display units so consumers can use them directly.
+
+        Note: INTERNAL and EXPERIMENTAL metrics are computed (as they may be dependencies)
+        but filtered from output unless dev mode flags are enabled.
         """
         self.info("Summarizing timeslice metric results...")
         await self.update_derived_metrics()
@@ -104,9 +109,11 @@ class TimesliceMetricResultsProcessor(MetricResultsProcessor):
         for counter, timeslice_index in enumerate[TimeSliceT](
             sorted(self._timeslice_results.keys())
         ):
+            # Filter internal/experimental metrics and convert to display units
             metric_results = [
-                self._create_metric_result(tag, values)
+                to_display_unit(self._create_metric_result(tag, values), MetricRegistry)
                 for tag, values in self._timeslice_results[timeslice_index].items()
+                if self._should_include_in_summary(tag)
             ]
             timeslice_metric_results[counter] = metric_results
 
