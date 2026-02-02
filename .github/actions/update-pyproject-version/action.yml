@@ -1,0 +1,45 @@
+name: Update pyproject.toml version
+description: Update the version field in pyproject.toml
+inputs:
+  version:
+    description: Version to set (e.g., 1.2.3). This must be PEP440 compliant.
+    required: true
+  file:
+    description: Path to pyproject.toml
+    required: false
+    default: pyproject.toml
+runs:
+  using: composite
+  steps:
+    - name: Validate PEP 440 version
+      shell: bash
+      run: |
+        python - <<'PY'
+        from packaging.version import InvalidVersion, Version
+
+        version = "${{ inputs.version }}"
+        try:
+            Version(version)
+        except InvalidVersion as exc:
+            raise SystemExit(f"Invalid PEP 440 version: {version}") from exc
+        PY
+    - name: Update version
+      shell: bash
+      run: |
+        python - <<'PY'
+        import re
+        from pathlib import Path
+
+        version = "${{ inputs.version }}"
+        path = Path("${{ inputs.file }}")
+        text = path.read_text()
+        new_text, count = re.subn(
+            r'^(version\s*=\s*")([^"]+)(")',
+            r'\g<1>' + version + r'\g<3>',
+            text,
+            flags=re.MULTILINE,
+        )
+        if count == 0:
+            raise SystemExit("version key not found in pyproject.toml")
+        path.write_text(new_text)
+        PY

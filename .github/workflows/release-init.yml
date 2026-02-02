@@ -23,26 +23,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  verify-inputs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-      - name: Verify devops membership
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const teamSlug = 'devops';
-            const username = context.actor;
-            try {
-              await github.rest.teams.getMembershipForUserInOrg({
-                org: context.repo.owner,
-                team_slug: teamSlug,
-                username,
-              });
-              core.info(`User ${username} is in ${teamSlug}.`);
-            } catch (error) {
-              core.setFailed(`User ${username} is not authorized to run this workflow.`);
-            }
 
       - name: Validate workflow inputs
         uses: actions/github-script@v7
@@ -80,7 +64,11 @@ jobs:
             } catch (tagError) {
               core.setFailed(`Previous release tag '${previousRelease}' does not exist.`);
             }
-
+  create-release-branch:
+    runs-on: ubuntu-latest
+    environment: release
+    needs: verify-inputs
+    steps:
       - name: Checkout repository at specified base ref
         uses: actions/checkout@v4
         with:
@@ -97,19 +85,9 @@ jobs:
           git checkout -b "release/${{ inputs.release_version }}"
 
       - name: Update version in pyproject.toml
-        run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          version = "${{ inputs.release_version }}"
-          path = Path("pyproject.toml")
-          text = path.read_text()
-          new_text, count = re.subn(r'^(version\s*=\s*")([^"]+)(")', rf'\1{version}\3', text, flags=re.MULTILINE)
-          if count == 0:
-              raise SystemExit("version key not found in pyproject.toml")
-          path.write_text(new_text)
-          PY
+        uses: ./.github/actions/update-pyproject-version
+        with:
+          version: ${{ inputs.release_version }}
 
       - name: Commit version bump
         run: |
@@ -130,6 +108,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${version}`,
+              previous_tag_name: previous,
               target_commitish: `release/${version}`,
               name: `AIPerf v${version} Release`,
               draft: true,
