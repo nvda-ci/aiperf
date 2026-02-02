@@ -33,6 +33,7 @@ Features
 
 - Scalable via multiprocess support
 - Modular design for easy user modification
+- **3 UI types**: `--ui-type dashboard` (default, real-time TUI), `--ui-type simple` (progress bars), `--ui-type none` (no UI). See [CLI Options](docs/cli_options.md) for details.
 - Several benchmarking modes:
   - concurrency
   - request-rate
@@ -46,6 +47,7 @@ Features
 
 ### Getting Started
 - **[Basic Tutorial](docs/tutorial.md)** - Learn the fundamentals with Dynamo and vLLM examples
+- **[User Interface](docs/tutorials/ui-types.md)** - Choose between dashboard, simple, or none for displaying progress
 
 ### Load Control & Timing
 
@@ -58,6 +60,7 @@ Features
 | **[Warmup Phase](docs/tutorials/warmup.md)** | Configure pre-benchmark warmup to eliminate cold-start effects | Accurate measurements, JIT warm-up, cache priming |
 | **[User-Centric Timing](docs/tutorials/user-centric-timing.md)** | Per-user rate limiting with precise timing for KV cache benchmarking | KV cache effectiveness, multi-user simulation, cache TTL testing |
 | **[Request Cancellation](docs/tutorials/request-cancellation.md)** | Test timeout behavior and service resilience | SLA validation, cancellation modeling |
+| **[Multi-URL Load Balancing](docs/tutorials/multi-url-load-balancing.md)** | Distribute requests across multiple inference server instances | Multi-GPU scaling, distributed inference, high-throughput benchmarking |
 
 ### Workloads & Data
 

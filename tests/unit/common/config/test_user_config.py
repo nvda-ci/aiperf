@@ -23,9 +23,13 @@ from aiperf.common.config import (
     UserConfig,
 )
 from aiperf.common.config.prompt_config import InputTokensConfig
-from aiperf.common.enums import EndpointType, GPUTelemetryMode
-from aiperf.common.enums.dataset_enums import DatasetSamplingStrategy
-from aiperf.common.enums.timing_enums import ArrivalPattern, TimingMode
+from aiperf.common.enums import GPUTelemetryMode
+from aiperf.plugin.enums import (
+    ArrivalPattern,
+    DatasetSamplingStrategy,
+    EndpointType,
+    TimingMode,
+)
 
 # =============================================================================
 # Test Helpers
@@ -39,6 +43,9 @@ def make_endpoint(
     **kwargs,
 ) -> EndpointConfig:
     """Create an EndpointConfig with sensible defaults for testing."""
+    # Convert url= to urls= for backward compatibility
+    if "url" in kwargs:
+        kwargs["urls"] = [kwargs.pop("url")]
     return EndpointConfig(
         model_names=model_names or ["test-model"],
         type=endpoint_type,
@@ -97,7 +104,7 @@ class TestUserConfigSerialization:
                 type=EndpointType.CHAT,
                 custom_endpoint="custom_endpoint",
                 streaming=True,
-                url="http://custom-url",
+                urls=["http://custom-url"],
                 api_key="test_api_key",
                 timeout_seconds=10,
             ),

@@ -14,9 +14,12 @@ from aiperf.common.config.config_validators import parse_str_or_list
 from aiperf.common.config.groups import Groups
 from aiperf.common.enums import (
     ConnectionReuseStrategy,
-    EndpointType,
     ModelSelectionStrategy,
+)
+from aiperf.plugin.enums import (
+    EndpointType,
     TransportType,
+    URLSelectionStrategy,
 )
 
 _logger = AIPerfLogger(__name__)
@@ -36,12 +39,9 @@ class EndpointConfig(BaseConfig):
             return self
 
         # Lazy import to avoid circular dependency
-        from aiperf.common.factories import EndpointFactory
-        from aiperf.module_loader import ensure_modules_loaded
+        from aiperf.plugin import plugins
 
-        ensure_modules_loaded()
-
-        metadata = EndpointFactory.get_metadata(self.type)
+        metadata = plugins.get_endpoint_metadata(self.type)
         if not metadata.supports_streaming:
             _logger.warning(
                 f"Streaming is not supported for --endpoint-type {self.type}, setting streaming to False"
@@ -127,20 +127,41 @@ class EndpointConfig(BaseConfig):
         ),
     ] = EndpointDefaults.STREAMING
 
-    url: Annotated[
-        str,
+    urls: Annotated[
+        list[str],
         Field(
-            description="Base URL of the API server to benchmark (e.g., `http://localhost:8000`, `https://api.example.com`). "
+            description="Base URL(s) of the API server(s) to benchmark. Multiple URLs can be specified for load balancing "
+            "across multiple instances (e.g., `--url http://server1:8000 --url http://server2:8000`). "
             "The endpoint path is automatically appended based on `--endpoint-type` (e.g., `/v1/chat/completions` for `chat`).",
+            min_length=1,
         ),
+        BeforeValidator(parse_str_or_list),
         CLIParameter(
             name=(
                 "--url",  # GenAI-Perf
                 "-u",  # GenAI-Perf
             ),
+            consume_multiple=True,
             group=_CLI_GROUP,
         ),
-    ] = EndpointDefaults.URL
+    ] = [EndpointDefaults.URL]
+
+    url_selection_strategy: Annotated[
+        URLSelectionStrategy,
+        Field(
+            description="Strategy for selecting URLs when multiple `--url` values are provided. "
+            "'round_robin' (default): distribute requests evenly across URLs in sequential order.",
+        ),
+        CLIParameter(
+            name=("--url-strategy",),
+            group=_CLI_GROUP,
+        ),
+    ] = EndpointDefaults.URL_STRATEGY
+
+    @property
+    def url(self) -> str:
+        """Return the first URL for backward compatibility."""
+        return self.urls[0]
 
     timeout_seconds: Annotated[
         float,

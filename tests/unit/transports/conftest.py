@@ -8,11 +8,7 @@ import aiohttp
 import pytest
 
 from aiperf.common.config import EndpointConfig, UserConfig
-from aiperf.common.enums import (
-    ConnectionReuseStrategy,
-    EndpointType,
-    ModelSelectionStrategy,
-)
+from aiperf.common.enums import ConnectionReuseStrategy, ModelSelectionStrategy
 from aiperf.common.models import RequestRecord, SSEMessage, TextResponse
 from aiperf.common.models.model_endpoint_info import (
     EndpointInfo,
@@ -20,6 +16,7 @@ from aiperf.common.models.model_endpoint_info import (
     ModelInfo,
     ModelListInfo,
 )
+from aiperf.plugin.enums import EndpointType
 from aiperf.transports.aiohttp_client import AioHttpClient, create_tcp_connector
 
 
@@ -54,7 +51,7 @@ def create_model_endpoint_info(
         ),
         endpoint=EndpointInfo(
             type=EndpointType.CHAT,
-            base_url=base_url,
+            base_urls=[base_url],
             custom_endpoint=custom_endpoint,
             streaming=streaming,
             api_key=api_key,
@@ -114,7 +111,7 @@ def user_config() -> UserConfig:
     return UserConfig(
         endpoint=EndpointConfig(
             type=EndpointType.CHAT,
-            url="http://localhost:8000",
+            urls=["http://localhost:8000"],
             timeout_seconds=600,
             model_names=["gpt-4"],
             api_key="test-api-key",

@@ -7,16 +7,10 @@ import uuid
 from aiperf.common.base_component_service import BaseComponentService
 from aiperf.common.config import ServiceConfig, UserConfig
 from aiperf.common.constants import BYTES_PER_MIB
-from aiperf.common.enums import (
-    CommAddress,
-    CommandType,
-    MessageType,
-    ServiceType,
-)
+from aiperf.common.enums import CommAddress, CommandType, MessageType
 from aiperf.common.environment import Environment
 from aiperf.common.event_loop_monitor import EventLoopMonitor
 from aiperf.common.exceptions import NotInitializedError
-from aiperf.common.factories import DatasetClientStoreFactory, ServiceFactory
 from aiperf.common.hooks import (
     background_task,
     on_command,
@@ -49,7 +43,6 @@ from aiperf.common.models import (
     WorkerTaskStats,
 )
 from aiperf.common.protocols import (
-    DatasetClientStoreProtocol,
     PushClientProtocol,
     RequestClientProtocol,
     StreamingDealerClientProtocol,
@@ -63,11 +56,13 @@ from aiperf.credit.messages import (
     WorkerShutdown,
 )
 from aiperf.credit.structs import Credit, CreditContext
+from aiperf.dataset.protocols import DatasetClientStoreProtocol
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import PluginType
 from aiperf.workers.inference_client import InferenceClient
 from aiperf.workers.session_manager import UserSession, UserSessionManager
 
 
-@ServiceFactory.register(ServiceType.WORKER)
 class Worker(BaseComponentService, ProcessHealthMixin):
     """Worker processes credits from the TimingManager and makes API calls to inference servers.
 
@@ -231,9 +226,10 @@ class Worker(BaseComponentService, ProcessHealthMixin):
         the discriminated union pattern for type-safe routing. This allows new
         storage backends (S3, Redis, etc.) to work without modifying Worker code.
         """
-        self._dataset_client = DatasetClientStoreFactory.create_instance(
-            client_metadata=msg.client_metadata,
+        ClientStoreClass = plugins.get_class(
+            PluginType.DATASET_CLIENT_STORE, msg.client_metadata.client_type
         )
+        self._dataset_client = ClientStoreClass(client_metadata=msg.client_metadata)
         await self._dataset_client.initialize()
         self._dataset_configured_event.set()
         self.debug(
@@ -454,8 +450,12 @@ class Worker(BaseComponentService, ProcessHealthMixin):
                     conversation_id=credit_context.credit.conversation_id,
                     credit_context=credit_context,
                 )
+                # Store url_index from first turn so all turns hit the same backend
                 session = self.session_manager.create_and_store(
-                    x_correlation_id, _conversation, credit_context.credit.num_turns
+                    x_correlation_id,
+                    _conversation,
+                    credit_context.credit.num_turns,
+                    url_index=credit_context.credit.url_index,
                 )
 
             session.advance_turn(credit_context.credit.turn_index)
@@ -535,6 +535,8 @@ class Worker(BaseComponentService, ProcessHealthMixin):
             system_message=system_message,
             user_context_message=user_context_message,
             is_final_turn=credit.is_final_turn,
+            # Use session's url_index to ensure all turns hit the same backend
+            url_index=session.url_index,
         )
 
     async def _retrieve_conversation(
@@ -695,9 +697,11 @@ class Worker(BaseComponentService, ProcessHealthMixin):
 
 
 def main() -> None:
+    """Main entry point for the worker."""
     from aiperf.common.bootstrap import bootstrap_and_run_service
+    from aiperf.plugin.enums import ServiceType
 
-    bootstrap_and_run_service(Worker)
+    bootstrap_and_run_service(ServiceType.WORKER)
 
 
 if __name__ == "__main__":

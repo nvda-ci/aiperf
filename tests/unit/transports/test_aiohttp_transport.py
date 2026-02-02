@@ -7,8 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aiperf.common.enums import ConnectionReuseStrategy, CreditPhase, TransportType
+from aiperf.common.enums import ConnectionReuseStrategy, CreditPhase
 from aiperf.common.models.record_models import RequestInfo, RequestRecord
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import TransportType
 from aiperf.transports.aiohttp_transport import (
     AioHttpTransport,
     ConnectionLeaseManager,
@@ -121,7 +123,7 @@ class TestAioHttpTransport:
 
     def test_metadata(self, transport):
         """Test metadata returns correct transport info."""
-        metadata = transport.metadata()
+        metadata = plugins.get_transport_metadata(TransportType.HTTP)
         assert metadata.transport_type == TransportType.HTTP
         assert "http" in metadata.url_schemes
         assert "https" in metadata.url_schemes
@@ -153,15 +155,14 @@ class TestAioHttpTransport:
         ],
         ids=["http-prefix", "no-scheme", "https-prefix"],
     )
-    def test_get_url(
-        self, model_endpoint_non_streaming, base_url, custom_endpoint, expected_url
-    ):
+    def test_get_url(self, base_url, custom_endpoint, expected_url):
         """Test get_url with various base URLs and endpoints."""
-        model_endpoint_non_streaming.endpoint.base_url = base_url
-        model_endpoint_non_streaming.endpoint.custom_endpoint = custom_endpoint
+        model_endpoint = create_model_endpoint_info(
+            base_url=base_url, custom_endpoint=custom_endpoint
+        )
 
-        transport = AioHttpTransport(model_endpoint=model_endpoint_non_streaming)
-        request_info = create_request_info(model_endpoint_non_streaming)
+        transport = AioHttpTransport(model_endpoint=model_endpoint)
+        request_info = create_request_info(model_endpoint)
         url = transport.get_url(request_info)
         assert url == expected_url
 
@@ -458,7 +459,7 @@ class TestAioHttpTransportIntegration:
             "headers": transport.aiohttp_client.post_request.call_args[0][2],
         }
 
-        assert "https://api.example.com/v1/chat/completions" in args["url"]
+        assert args["url"].startswith("https://api.example.com/v1/chat/completions")
         assert "api-version=2024-10-01" in args["url"]
         assert "Hello" in args["json_str"]
         assert args["headers"]["Authorization"] == "Bearer test-key"

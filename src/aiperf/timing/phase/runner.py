@@ -12,16 +12,19 @@ import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aiperf.common.enums import CreditPhase, TimingMode
+from aiperf.common.enums import CreditPhase
 from aiperf.common.environment import Environment
 from aiperf.common.loop_scheduler import LoopScheduler
 from aiperf.common.mixins import TaskManagerMixin
 from aiperf.credit.issuer import CreditIssuer
+from aiperf.plugin import plugins
+from aiperf.plugin.enums import PluginType, TimingMode
 from aiperf.timing.phase.lifecycle import PhaseLifecycle
 from aiperf.timing.phase.progress_tracker import PhaseProgressTracker
 from aiperf.timing.phase.stop_conditions import StopConditionChecker
 from aiperf.timing.ramping import RampConfig, Ramper, RampType
-from aiperf.timing.strategies.core import RateSettableProtocol, TimingStrategyFactory
+from aiperf.timing.strategies.core import RateSettableProtocol
+from aiperf.timing.url_samplers import URLSelectionStrategyProtocol
 
 if TYPE_CHECKING:
     from aiperf.common.models import CreditPhaseStats
@@ -75,6 +78,7 @@ class PhaseRunner(TaskManagerMixin):
         concurrency_manager: ConcurrencyManager,
         cancellation_policy: RequestCancellationSimulator,
         callback_handler: CreditCallbackHandler,
+        url_selection_strategy: URLSelectionStrategyProtocol | None = None,
         **kwargs,
     ) -> None:
         """Initialize phase runner.
@@ -87,6 +91,8 @@ class PhaseRunner(TaskManagerMixin):
             concurrency_manager: Manages session and prefill concurrency slots.
             cancellation_policy: Determines credit cancellation delays.
             callback_handler: Handles credit returns and TTFT events.
+            url_selection_strategy: Optional URL selection strategy for multi-URL
+                load balancing. Passed to CreditIssuer.
         """
         super().__init__(**kwargs)
         self._config = config
@@ -127,6 +133,7 @@ class PhaseRunner(TaskManagerMixin):
             credit_router=self._credit_router,
             cancellation_policy=self._cancellation_policy,
             lifecycle=self._lifecycle,
+            url_selection_strategy=url_selection_strategy,
         )
 
         # Execution state
@@ -192,8 +199,10 @@ class PhaseRunner(TaskManagerMixin):
         Returns:
             CreditPhaseStats snapshot of final phase state.
         """
-        strategy: TimingStrategyProtocol = TimingStrategyFactory.create_instance(
-            self._config.timing_mode,
+        StrategyClass = plugins.get_class(
+            PluginType.TIMING_STRATEGY, self._config.timing_mode
+        )
+        strategy: TimingStrategyProtocol = StrategyClass(
             config=self._config,
             conversation_source=self._conversation_source,
             scheduler=self._scheduler,

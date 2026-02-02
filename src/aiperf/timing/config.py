@@ -6,12 +6,13 @@ from __future__ import annotations
 from pydantic import ConfigDict, Field
 
 from aiperf.common.config import InputDefaults, UserConfig
-from aiperf.common.enums import (
-    ArrivalPattern,
-    CreditPhase,
-    TimingMode,
-)
+from aiperf.common.enums import CreditPhase
 from aiperf.common.models.base_models import AIPerfBaseModel
+from aiperf.plugin.enums import (
+    ArrivalPattern,
+    TimingMode,
+    URLSelectionStrategy,
+)
 from aiperf.timing.request_cancellation import RequestCancellationConfig
 
 
@@ -32,6 +33,15 @@ class TimingConfig(AIPerfBaseModel):
     request_cancellation: RequestCancellationConfig = Field(
         default_factory=RequestCancellationConfig,
         description="Configuration for request cancellation policy.",
+    )
+    urls: list[str] = Field(
+        default_factory=list,
+        description="List of endpoint URLs for load balancing. If multiple URLs provided, "
+        "requests are distributed according to url_selection_strategy.",
+    )
+    url_selection_strategy: URLSelectionStrategy = Field(
+        default=URLSelectionStrategy.ROUND_ROBIN,
+        description="Strategy for selecting URLs when multiple URLs are provided.",
     )
 
     @classmethod
@@ -56,6 +66,8 @@ class TimingConfig(AIPerfBaseModel):
                 rate=loadgen.request_cancellation_rate,
                 delay=loadgen.request_cancellation_delay,
             ),
+            urls=user_config.endpoint.urls,
+            url_selection_strategy=user_config.endpoint.url_selection_strategy,
         )
 
 
