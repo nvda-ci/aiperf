@@ -21,7 +21,8 @@
 		integration-tests integration-tests-ci integration-tests-verbose integration-tests-ci-macos \
 		test-integration test-integration-ci test-integration-verbose test-integration-ci-macos \
 		test-component-integration test-component-integration-ci test-component-integration-verbose \
-		generate-cli-docs generate-env-vars-docs test-stress stress-tests internal-help help
+		generate-cli-docs generate-env-vars-docs test-stress stress-tests internal-help help \
+		docker-setup docker-cleanup build-wheel docker-build\
 
 
 # Include user-defined environment variables
@@ -45,10 +46,42 @@ APP_VERSION := $(shell grep '^version = ' pyproject.toml 2>/dev/null | sed 's/ve
 # The folder where uv is installed
 UV_PATH ?= $(HOME)/.local/bin
 
+# Docker registry prefix (empty for none)
+DOCKER_REGISTRY ?=
+
 # The name of the docker image (defaults to the app name)
 DOCKER_IMAGE_NAME ?= $(APP_NAME)
+
+ifneq ($(strip $(DOCKER_REGISTRY)),)
+DOCKER_IMAGE_NAME := $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME)
+endif
+
+# The name of the wheel-builder stage of docker image
+DOCKER_IMAGE_WHEELBUILDER_NAME := $(DOCKER_IMAGE_NAME)-wheelbuilder
+
 # The tag of the docker image (defaults to the app version)
 DOCKER_IMAGE_TAG ?= $(APP_VERSION)
+
+# The target stage to build the docker image to (defaults to runtime)
+DOCKER_BUILD_TARGET ?= runtime
+
+# The image name to tag for docker-build (defaults to runtime image name)
+DOCKER_BUILD_IMAGE_NAME ?= $(DOCKER_IMAGE_NAME)
+
+# Host architecture detection (amd64 or arm64)
+HOST_ARCH := $(shell uname -m)
+ifeq ($(HOST_ARCH),x86_64)
+	HOST_ARCH := amd64
+else ifneq ($(filter aarch64 arm64,$(HOST_ARCH)),)
+	HOST_ARCH := arm64
+endif
+
+# Comma separated list of architectures to build the docker image for, defaults to linux/{host architecture}
+DOCKER_SUPPORTED_ARCHITECTURES ?= linux/$(HOST_ARCH)
+
+# What to do with the docker buildx output, i.e. load to local docker(load), push to registry(push), or export to tar(export)
+DOCKER_BUILDX_OUTPUT_TYPE ?= load
+DOCKER_BUILDX_OUTPUT_ARG := --$(DOCKER_BUILDX_OUTPUT_TYPE)
 
 # The extra arguments the user passed to make
 args = $(filter-out $@,$(MAKECMDGOALS))
@@ -122,8 +155,38 @@ install: install-app install-mock-server #? install the project and mock server 
 install-app: #? install the project in editable mode.
 	$(activate_venv) && uv pip install -e ".[dev]"
 
-docker: #? build the docker image.
-	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) $(args) .
+docker-setup: #? setup docker buildx for multi-arch builds.
+	@# Setup docker buildx for multi-arch builds
+	@printf "$(bold)$(green)Setting up docker buildx for multi-arch builds...$(reset)\n"
+	@docker buildx use aiperf_builder 2>/dev/null || docker buildx create --use --name aiperf_builder 2>/dev/null
+
+docker-cleanup: #? cleanup docker buildx builder instance.
+	@docker buildx rm aiperf_builder >/dev/null 2>&1 || true
+
+docker-build: docker-setup #? build the docker image to the runtime stage
+	@# build for all the DOCKER_SUPPORTED_ARCHITECTURES
+	@docker buildx build \
+	    --platform $(DOCKER_SUPPORTED_ARCHITECTURES) \
+		--target $(DOCKER_BUILD_TARGET) \
+		-t $(DOCKER_BUILD_IMAGE_NAME):$(DOCKER_IMAGE_TAG) \
+		$(DOCKER_BUILDX_OUTPUT_ARG) \
+		.
+
+build-wheel: #? extract the built wheels from the wheel-builder docker image (multi-arch).
+	@# Create a temporary container from the wheel-builder image and copy the wheels out
+	@# then remove the temporary container
+	@$(MAKE) docker-build \
+		DOCKER_BUILD_TARGET=wheel-builder \
+		DOCKER_BUILD_IMAGE_NAME=$(DOCKER_IMAGE_WHEELBUILDER_NAME) \
+		DOCKER_BUILDX_OUTPUT_TYPE=load \
+		DOCKER_SUPPORTED_ARCHITECTURES=linux/$(HOST_ARCH) \
+		--no-print-directory
+	@docker rm aiperf_wheel_builder_temp 2>/dev/null || true
+	@docker create \
+		--name aiperf_wheel_builder_temp \
+		$(DOCKER_IMAGE_WHEELBUILDER_NAME):$(DOCKER_IMAGE_TAG) >/dev/null 2>&1
+	@docker cp aiperf_wheel_builder_temp:/dist/. ./dist
+	@docker rm aiperf_wheel_builder_temp >/dev/null 2>&1
 
 docker-run: #? run the docker container.
 	docker run -it --rm $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) $(args)
@@ -186,7 +249,18 @@ test-ci: #? run the tests using pytest-xdist for CI.
 	@$(activate_venv) && pytest tests/unit -n auto --cov=src/aiperf --cov-branch --cov-report= -m 'not performance and not stress' --tb=short $(args) || exit_code=$$?; \
 	# Run component integration tests with coverage append regardless of unit test result \
 	printf "$(bold)$(blue)Running component integration tests...$(reset)\n"; \
-	$(activate_venv) && pytest tests/component_integration -n auto --cov=src/aiperf --cov-branch --cov-append --cov-report=html --cov-report=xml --cov-report=term -m 'not performance and not stress' -v --tb=short $(args) || exit_code=$$((exit_code + $$?)); \
+	$(activate_venv) && pytest tests/component_integration \
+		-m 'not performance and not stress' \
+		-n auto \
+		--cov=src/aiperf \
+		--cov-branch \
+		--cov-append \
+		--cov-report=html \
+		--cov-report=xml \
+		--cov-report=term \
+		-v \
+		--tb=short \
+		$(args) || exit_code=$$((exit_code + $$?)); \
 	if [[ $$exit_code -eq 0 ]]; then \
 		printf "$(bold)$(green)AIPerf unit and component integration tests (CI mode) passed!$(reset)\n"; \
 	else \
@@ -196,44 +270,90 @@ test-ci: #? run the tests using pytest-xdist for CI.
 
 stress-tests test-stress: #? run stress tests with with AIPerf Mock Server.
 	@printf "$(bold)$(blue)Running stress tests with AIPerf Mock Server...$(reset)\n"
-	$(activate_venv) && pytest tests/integration/ -m 'integration and stress' -vv -s --tb=short --log-cli-level=INFO --capture=no $(args)
+	$(activate_venv) && pytest tests/integration/ \
+		-m 'integration and stress' \
+		-vv \
+		-s \
+		--tb=short \
+		--log-cli-level=INFO \
+		--capture=no \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Mock Server stress tests passed!$(reset)\n"
 
 integration-tests test-integration: #? run integration tests with with AIPerf Mock Server.
 	@printf "$(bold)$(blue)Running integration tests with AIPerf Mock Server...$(reset)\n"
-	$(activate_venv) && pytest tests/integration/ -m 'integration and not stress and not performance' -n auto -v --tb=short --no-looptime $(args)
+	$(activate_venv) && pytest tests/integration/ \
+		-m 'integration and not stress and not performance' \
+		-n auto \
+		-v \
+		--tb=short \
+		--no-looptime \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Mock Server integration tests passed!$(reset)\n"
 
 integration-tests-ci test-integration-ci: #? run integration tests with with AIPerf Mock Server for CI (parallel, verbose, no performance and no ffmpeg tests).
 	@printf "$(bold)$(blue)Running integration tests (CI mode) with AIPerf Mock Server...$(reset)\n"
-	$(activate_venv) && pytest tests/integration/ -m 'integration and not performance and not ffmpeg and not stress' -n auto -v --tb=long $(args)
+	$(activate_venv) && pytest tests/integration/ \
+		-m 'integration and not performance and not ffmpeg and not stress' \
+		-n auto \
+		-v \
+		--tb=long \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Mock Server integration tests (CI mode) passed!$(reset)\n"
 
 integration-tests-ci-macos test-integration-ci-macos: #? run integration tests with with AIPerf Mock Server for CI on macOS (non-parallel, verbose, no performance and no ffmpeg tests).
 	@printf "$(bold)$(blue)Running integration tests (CI mode on macOS) with AIPerf Mock Server...$(reset)\n"
-	$(activate_venv) && pytest tests/integration/ -m 'integration and not performance and not ffmpeg and not stress' -v --tb=long $(args)
+	$(activate_venv) && pytest tests/integration/ \
+		-m 'integration and not performance and not ffmpeg and not stress' \
+		-v \
+		--tb=long \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Mock Server integration tests (CI mode on macOS) passed!$(reset)\n"
 
 integration-tests-verbose test-integration-verbose: #? run integration tests with verbose output with AIPerf Mock Server.
 	@printf "$(bold)$(blue)Running integration tests (verbose, sequential) with AIPerf Mock Server...$(reset)\n"
 	@printf "$(yellow)Note: Sequential mode shows real-time AIPerf output$(reset)\n"
-	$(activate_venv) && pytest tests/integration/ -m 'integration and not stress and not performance' -vv -s --tb=short --log-cli-level=INFO --capture=no $(args)
+	$(activate_venv) && pytest tests/integration/ \
+		-m 'integration and not stress and not performance' \
+		-vv \
+		-s \
+		--tb=short \
+		--log-cli-level=INFO \
+		--capture=no \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Mock Server integration tests passed!$(reset)\n"
 
 component-integration-tests test-component-integration: #? run component integration tests with with AIPerf Mock Server.
 	@printf "$(bold)$(blue)Running Fake Component Integration tests...$(reset)\n"
-	$(activate_venv) && pytest tests/component_integration/ -m 'component_integration and not stress and not performance' -n auto --tb=short $(args)
+	$(activate_venv) && pytest tests/component_integration/ \
+		-m 'component_integration and not stress and not performance' \
+		-n auto \
+		-v \
+		--tb=short \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Fake Component Integration tests passed!$(reset)\n"
 
 component-integration-tests-ci test-component-integration-ci: #? run component integration tests with with AIPerf Mock Server for CI (parallel, verbose, no performance and no ffmpeg tests).
 	@printf "$(bold)$(blue)Running Fake Component Integration tests (CI mode)...$(reset)\n"
-	$(activate_venv) && pytest tests/component_integration/ -m 'component_integration and not performance and not ffmpeg and not stress' -n auto -v --tb=long $(args)
+	$(activate_venv) && pytest tests/component_integration/ \
+		-m 'component_integration and not performance and not ffmpeg and not stress' \
+		-n auto \
+		-v \
+		--tb=long \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Fake Component Integration tests (CI mode) passed!$(reset)\n"
 
 component-integration-tests-verbose test-component-integration-verbose: #? run component integration tests with verbose output with AIPerf Mock Server.
 	@printf "$(bold)$(blue)Running Fake Component Integration tests (verbose, sequential)...$(reset)\n"
 	@printf "$(yellow)Note: Sequential mode shows real-time AIPerf output$(reset)\n"
-	$(activate_venv) && pytest tests/component_integration/ -m 'component_integration and not stress and not performance' -vv -s --tb=short --log-cli-level=INFO --capture=no $(args)
+	$(activate_venv) && pytest tests/component_integration/ \
+		-m 'component_integration and not stress and not performance' \
+		-vv \
+		-s \
+		--tb=short \
+		--log-cli-level=INFO \
+		--capture=no \
+		$(args)
 	@printf "$(bold)$(green)AIPerf Fake Component Integration tests passed!$(reset)\n"
 
 generate-cli-docs: #? generate the CLI documentation.
