@@ -85,19 +85,9 @@ jobs:
           git checkout -b "release/${{ inputs.release_version }}"
 
       - name: Update version in pyproject.toml
-        run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          version = "${{ inputs.release_version }}"
-          path = Path("pyproject.toml")
-          text = path.read_text()
-          new_text, count = re.subn(r'^(version\s*=\s*")([^"]+)(")', rf'\1{version}\3', text, flags=re.MULTILINE)
-          if count == 0:
-              raise SystemExit("version key not found in pyproject.toml")
-          path.write_text(new_text)
-          PY
+        uses: ./.github/actions/update-pyproject-version
+        with:
+          version: ${{ inputs.release_version }}
 
       - name: Commit version bump
         run: |
