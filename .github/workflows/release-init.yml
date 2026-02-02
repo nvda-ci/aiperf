@@ -21,9 +21,10 @@ on:
 
 permissions:
   contents: write
+  organizations: read
 
 jobs:
-  release:
+  verify-authorization-and-inputs:
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -80,7 +81,11 @@ jobs:
             } catch (tagError) {
               core.setFailed(`Previous release tag '${previousRelease}' does not exist.`);
             }
-
+  create-release-branch:
+    runs-on: ubuntu-latest
+    environment: release
+    needs: verify-authorization-and-inputs
+    steps:
       - name: Checkout repository at specified base ref
         uses: actions/checkout@v4
         with:
