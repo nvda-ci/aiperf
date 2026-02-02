@@ -21,29 +21,12 @@ on:
 
 permissions:
   contents: write
-  organizations: read
 
 jobs:
-  verify-authorization-and-inputs:
+  verify-inputs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-      - name: Verify devops membership
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const teamSlug = 'devops';
-            const username = context.actor;
-            try {
-              await github.rest.teams.getMembershipForUserInOrg({
-                org: context.repo.owner,
-                team_slug: teamSlug,
-                username,
-              });
-              core.info(`User ${username} is in ${teamSlug}.`);
-            } catch (error) {
-              core.setFailed(`User ${username} is not authorized to run this workflow.`);
-            }
 
       - name: Validate workflow inputs
         uses: actions/github-script@v7
@@ -84,7 +67,7 @@ jobs:
   create-release-branch:
     runs-on: ubuntu-latest
     environment: release
-    needs: verify-authorization-and-inputs
+    needs: verify-inputs
     steps:
       - name: Checkout repository at specified base ref
         uses: actions/checkout@v4
@@ -135,6 +118,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${version}`,
+              previous_tag_name: previous,
               target_commitish: `release/${version}`,
               name: `AIPerf v${version} Release`,
               draft: true,
