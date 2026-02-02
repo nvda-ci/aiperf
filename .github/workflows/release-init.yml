@@ -1,0 +1,139 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Init release
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Commit hash or branch name to base the release branch on
+        required: true
+        type: string
+      release_version:
+        description: Release version (e.g., 1.2.3)
+        required: true
+        type: string
+      previous_release:
+        description: Previous release tag to compare against (e.g., v1.2.2)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Verify devops membership
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const teamSlug = 'devops';
+            const username = context.actor;
+            try {
+              await github.rest.teams.getMembershipForUserInOrg({
+                org: context.repo.owner,
+                team_slug: teamSlug,
+                username,
+              });
+              core.info(`User ${username} is in ${teamSlug}.`);
+            } catch (error) {
+              core.setFailed(`User ${username} is not authorized to run this workflow.`);
+            }
+
+      - name: Validate workflow inputs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const baseRef = `${{ inputs.base_ref }}`;
+            const releaseVersion = `${{ inputs.release_version }}`;
+            const previousRelease = `${{ inputs.previous_release }}`;
+
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseVersion)) {
+              core.setFailed('Release version must be in the form X.Y.Z');
+              return;
+            }
+
+            if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(previousRelease)) {
+              core.setFailed('Previous release must be in the form vX.Y.Z');
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${baseRef}` });
+            } catch (branchError) {
+              try {
+                await github.rest.git.getCommit({ owner, repo, commit_sha: baseRef });
+              } catch (commitError) {
+                core.setFailed(`Base ref '${baseRef}' not found as branch or commit.`);
+                return;
+              }
+            }
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${previousRelease}` });
+            } catch (tagError) {
+              core.setFailed(`Previous release tag '${previousRelease}' does not exist.`);
+            }
+
+      - name: Checkout repository at specified base ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create release branch
+        run: |
+          git checkout -b "release/${{ inputs.release_version }}"
+
+      - name: Update version in pyproject.toml
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          version = "${{ inputs.release_version }}"
+          path = Path("pyproject.toml")
+          text = path.read_text()
+          new_text, count = re.subn(r'^(version\s*=\s*")([^"]+)(")', rf'\1{version}\3', text, flags=re.MULTILINE)
+          if count == 0:
+              raise SystemExit("version key not found in pyproject.toml")
+          path.write_text(new_text)
+          PY
+
+      - name: Commit version bump
+        run: |
+          git add pyproject.toml
+          git commit -m "chore(release): bump version to ${{ inputs.release_version }}"
+
+      - name: Push release branch
+        run: |
+          git push origin "release/${{ inputs.release_version }}"
+
+      - name: Create draft release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = `${{ inputs.release_version }}`;
+            const previous = `${{ inputs.previous_release }}`;
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${version}`,
+              target_commitish: `release/${version}`,
+              name: `AIPerf v${version} Release`,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true,
+              body: `Release v${version}\n\n- TBD\n`
+            });
