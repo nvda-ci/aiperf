@@ -97,7 +97,12 @@ jobs:
       - name: Push release branch
         run: |
           git push origin "release/${{ inputs.release_version }}"
-
+  
+  create-draft-release:
+    runs-on: ubuntu-latest
+    environment: release
+    needs: create-release-branch
+    steps:
       - name: Create draft release
         uses: actions/github-script@v7
         with:
