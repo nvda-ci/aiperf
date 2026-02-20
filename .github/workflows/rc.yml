@@ -1,0 +1,219 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: RC
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Commit hash or branch name to base the release candidate on
+        required: true
+        type: string
+      rc_number:
+        description: Number of the release candidate (one-indexed integer)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      base_ref:
+        description: Commit hash or branch name to base the release candidate on
+        required: true
+        type: string
+      rc_number:
+        description: Number of the release candidate (one-indexed integer)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  verify-inputs:
+    if: startsWith(github.ref_name, 'release/')
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      base_version: ${{ steps.metadata.outputs.base_version }}
+      pep440_version: ${{ steps.metadata.outputs.pep440_version }}
+      wheel_filename: ${{ steps.metadata.outputs.wheel_filename }}
+      wheel_local_path: ${{ steps.metadata.outputs.wheel_local_path }}
+      wheel_remote_path: ${{ steps.metadata.outputs.wheel_remote_path }}
+      container_image: ${{ steps.metadata.outputs.container_image }}
+      container_platform_amd64_tag: ${{ steps.metadata.outputs.container_platform_amd64_tag }}
+      container_platform_arm64_tag: ${{ steps.metadata.outputs.container_platform_arm64_tag }}
+      container_platform_amd64_ref: ${{ steps.metadata.outputs.container_platform_amd64_ref }}
+      container_platform_arm64_ref: ${{ steps.metadata.outputs.container_platform_arm64_ref }}
+      container_multiarch_tag: ${{ steps.metadata.outputs.container_multiarch_tag }}
+      container_multiarch_ref: ${{ steps.metadata.outputs.container_multiarch_ref }}
+    steps:
+      - name: Validate release branch name
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = context.ref || '';
+            const refName = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+            const isReleaseBranch = /^release\/[0-9]+\.[0-9]+\.[0-9]+(\.post[0-9]+)?$/.test(refName);
+            if (!isReleaseBranch) {
+              core.setFailed(`Workflow must run on a release branch like release/X.Y.Z or release/X.Y.Z.postN. Current ref: ${refName || ref}`);
+            }
+
+      - name: Validate workflow inputs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const baseRef = `${{ inputs.base_ref }}`;
+            const rcNumber = `${{ inputs.rc_number }}`;
+            const releaseBranchRegex = /^release\/[0-9]+\.[0-9]+\.[0-9]+(\.post[0-9]+)?$/;
+            const runRef = context.ref || '';
+            const runRefName = runRef.startsWith('refs/heads/') ? runRef.slice('refs/heads/'.length) : runRef;
+
+            if (!/^[1-9][0-9]*$/.test(rcNumber)) {
+              core.setFailed('RC number must be a positive integer');
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${baseRef}` });
+
+              // if baseRef is a branch name; enforce it matches the branch this workflow runs from.
+              if (!releaseBranchRegex.test(baseRef)) {
+                core.setFailed(`Base ref branch must be release/X.Y.Z or release/X.Y.Z.postN. Received '${baseRef}'.`);
+                return;
+              }
+
+              if (runRefName && baseRef !== runRefName) {
+                core.setFailed(`Base ref branch must match the run branch '${runRefName}'. Received '${baseRef}'.`);
+                return;
+              }
+            } catch (branchError) {
+              try {
+                await github.rest.git.getCommit({ owner, repo, commit_sha: baseRef });
+              } catch (commitError) {
+                core.setFailed(`Base ref '${baseRef}' not found as branch or commit.`);
+                return;
+              }
+
+              // if baseRef is a commit SHA; verify it is contained in the branch the workflow runs from.
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner,
+                repo,
+                base: baseRef,
+                head: runRefName,
+              });
+
+              if (!['ahead', 'identical'].includes(comparison.status)) {
+                core.setFailed(`Base ref '${baseRef}' is not on branch '${runRefName}'.`);
+                return;
+              }
+            }
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate release metadata
+        id: metadata
+        uses: ./.github/actions/release-metadata
+        with:
+          branch_name: ${{ github.ref_name }}
+          rc_number: ${{ inputs.rc_number }}
+          container_registry: ${{ secrets.RC_CONTAINER_REGISTRY }}
+          container_repository: aiperf-test
+          
+  build-runtime-container:
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+      - verify-inputs
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and push runtime image
+        uses: ./.github/actions/build-and-push-container
+        env:
+          DOCKER_SUPPORTED_ARCHITECTURES: linux/${{ matrix.arch }}
+        with:
+          docker-target: runtime
+          image-tag: ${{ needs.verify-inputs.outputs[format('container_platform_{0}_tag', matrix.arch)] }}
+          image-name: ${{ needs.verify-inputs.outputs.container_image }}
+          registry: ${{ secrets.RC_CONTAINER_REGISTRY }}
+          registry-username: ${{ secrets.RC_CONTAINER_REGISTRY_USERNAME }}
+          registry-password: ${{ secrets.RC_CONTAINER_REGISTRY_PASSWORD }}
+
+  create-multiarch-manifest:
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+      - verify-inputs
+      - build-runtime-container
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create and push multi-arch manifest
+        uses: ./.github/actions/create-multiarch-manifest
+        with:
+          registry: ${{ secrets.RC_CONTAINER_REGISTRY }}
+          registry-username: ${{ secrets.RC_CONTAINER_REGISTRY_USERNAME }}
+          registry-password: ${{ secrets.RC_CONTAINER_REGISTRY_PASSWORD }}
+          target-image: ${{ needs.verify-inputs.outputs.container_multiarch_ref }}
+          source-images: |
+            ${{ needs.verify-inputs.outputs.container_platform_amd64_ref }}
+            ${{ needs.verify-inputs.outputs.container_platform_arm64_ref }}
+
+  build-wheels:
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+      - verify-inputs
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and upload wheels
+        uses: ./.github/actions/build-and-push-wheel
+        with:
+          version: ${{ needs.verify-inputs.outputs.pep440_version }}
+          rc: ${{ inputs.rc_number }}
+        
+  create-rc:
+    runs-on: ubuntu-latest
+    needs: 
+      - verify-inputs
+      - build-wheels
+      - create-multiarch-manifest
+    environment: release
+    steps:
+      - name: Checkout repository at specified base ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref }}
+          fetch-depth: 0
+
+      - name: Set RC tag
+        id: tag
+        run: |
+          echo "tag=v${{ needs.verify-inputs.outputs.pep440_version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push RC tag
+        run: |
+          git tag "${{ steps.tag.outputs.tag }}"
+          git push origin "${{ steps.tag.outputs.tag }}"
+
+      - name: Build and stage artifacts (TODO)
+        run: |
+          echo "TODO: build wheel, build/push container, and stage artifacts"
+          echo "RC tag: ${{ steps.tag.outputs.tag }}"

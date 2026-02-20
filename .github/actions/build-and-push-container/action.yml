@@ -1,0 +1,45 @@
+name: Build and push container image
+description: Build container and push the runtime image to a registry.
+inputs:
+  docker-target:
+    description: Docker build stage target.
+    required: false
+    default: runtime
+  image-tag:
+    description: Image tag to publish.
+    required: true
+  registry:
+    description: Registry host to authenticate against (pass from secrets).
+    required: true
+  registry-username:
+    description: Registry username for docker login (pass from secrets).
+    required: true
+  registry-password:
+    description: Registry password or token for docker login (pass from secrets).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.registry-username }}
+        password: ${{ inputs.registry-password }}
+
+    - name: Set up environment
+      shell: bash
+      run: |
+        make first-time-setup
+        make docker-setup
+
+    - name: Build and push runtime image
+      shell: bash
+      env:
+        DOCKER_BUILD_TARGET: ${{ inputs.docker-target }}
+        DOCKER_BUILDX_OUTPUT_TYPE: push
+        DOCKER_BUILD_IMAGE_NAME: ${{ inputs.image-name }}
+      run: make docker-build
