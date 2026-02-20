@@ -121,7 +121,8 @@ jobs:
           branch_name: ${{ github.ref_name }}
           rc_number: ${{ inputs.rc_number }}
           container_registry: ${{ secrets.RC_CONTAINER_REGISTRY }}
-
+          container_repository: aiperf-test
+          
   build-runtime-container:
     runs-on: ubuntu-latest
     environment: release

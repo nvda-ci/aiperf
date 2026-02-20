@@ -14,6 +14,9 @@ inputs:
   container_registry:
     description: Container registry (e.g., ghcr.io)
     required: true
+  container_repository:
+    description: Container image repository name (e.g., org/app)
+    required: true
 outputs:
   base_version:
     description: Base version from release branch (X.Y.Z or X.Y.Z.postN)
