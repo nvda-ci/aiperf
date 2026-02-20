@@ -1,0 +1,32 @@
+name: Build and push wheel
+description: Build wheel and upload to S3.
+inputs:
+  version:
+    description: Release version number (e.g. 1.2.3).
+    required: true
+  rc:
+    description: Release candidate number (e.g. 1, 2, 3).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Mask S3 bucket name
+      shell: bash
+      run: echo "::add-mask::${{ inputs.s3-bucket }}"
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up environment
+      shell: bash
+      run: |
+        make first-time-setup
+        make docker-setup
+
+    - name: Build wheel-builder stage and extract wheels
+      shell: bash
+      run: make build-wheel
+
+    - name: List extracted wheels
+      shell: bash
+      run: ls -la dist

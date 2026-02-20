@@ -1,0 +1,126 @@
+name: Generate version metadata
+description: Generate versions, artifact names, and registry info for wheels and containers
+inputs:
+  branch_name:
+    description: Branch name (e.g., release/1.2.3 or feature/foo)
+    required: true
+  rc_number:
+    description: RC number (one-indexed integer). When provided, generates an rc version.
+    required: false
+  package_name:
+    description: Python package name used for wheel filenames
+    required: false
+    default: aiperf
+  container_registry:
+    description: Container registry (e.g., ghcr.io)
+    required: true
+outputs:
+  base_version:
+    description: Base version from release branch (X.Y.Z or X.Y.Z.postN)
+    value: ${{ steps.generate.outputs.base_version }}
+  pep440_version:
+    description: PEP 440 version (X.Y.ZrcN or X.Y.ZrcN.postN)
+    value: ${{ steps.generate.outputs.pep440_version }}
+  wheel_filename:
+    description: Wheel filename
+    value: ${{ steps.generate.outputs.wheel_filename }}
+  wheel_basename:
+    description: Wheel filename without extension
+    value: ${{ steps.generate.outputs.wheel_basename }}
+  wheel_local_path:
+    description: Local wheel path (dist/wheel_name)
+    value: ${{ steps.generate.outputs.wheel_local_path }}
+  wheel_remote_path:
+    description: Remote wheel path (s3_bucket/aiperf/wheel_name or rc path)
+    value: ${{ steps.generate.outputs.wheel_remote_path }}
+  container_image:
+    description: Container image repository (registry/repository)
+    value: ${{ steps.generate.outputs.container_image }}
+  container_platform_tag:
+    description: Platform-specific container tag
+    value: ${{ steps.generate.outputs.container_platform_tag }}
+  container_platform_ref:
+    description: Platform-specific container reference
+    value: ${{ steps.generate.outputs.container_platform_ref }}
+  container_multiarch_tag:
+    description: Multi-arch container tag
+    value: ${{ steps.generate.outputs.container_multiarch_tag }}
+  container_multiarch_ref:
+    description: Multi-arch container reference
+    value: ${{ steps.generate.outputs.container_multiarch_ref }}
+runs:
+  using: composite
+  steps:
+    - id: generate
+      name: Generate release metadata
+      shell: bash
+      run: |
+        python - <<'PY' >> "$GITHUB_OUTPUT"
+        import os
+        import re
+
+        branch_name = os.environ["INPUT_BRANCH_NAME"].strip()
+        rc_number = os.environ.get("INPUT_RC_NUMBER", "").strip()
+        package_name = os.environ.get("INPUT_PACKAGE_NAME", "aiperf").strip()
+        container_registry = os.environ["INPUT_CONTAINER_REGISTRY"].strip()
+        container_repository = os.environ["INPUT_CONTAINER_REPOSITORY"].strip()
+
+        base_version = ""
+        pep440_version = ""
+        version_tag = ""
+
+        if branch_name.startswith("release/"):
+          version = branch_name[len("release/"):]
+          match = re.fullmatch(r"(\d+\.\d+\.\d+)(\.post\d+)?", version)
+          if not match:
+            raise SystemExit(
+              f"Invalid release branch version '{version}'. Expected X.Y.Z or X.Y.Z.postN."
+            )
+
+          base_version = version
+          base_core = match.group(1)
+          post = match.group(2) or ""
+
+          if rc_number:
+            if not re.fullmatch(r"[1-9]\d*", rc_number):
+              raise SystemExit(f"Invalid rc_number '{rc_number}'. Expected positive integer.")
+            pep440_version = f"{base_core}rc{rc_number}{post}"
+            version_tag = f"{base_core}rc{rc_number}{post}"
+          else:
+            pep440_version = base_version
+            version_tag = base_version
+        elif rc_number:
+          raise SystemExit("rc_number is only valid for release/* branches.")
+
+        normalized_name = re.sub(r"[-]+", "_", package_name)
+        wheel_basename = f"{normalized_name}-{pep440_version}-py3-none-any"
+        wheel_filename = f"{wheel_basename}.whl"
+        wheel_local_path = f"dist/{wheel_filename}"
+
+        container_image = f"{container_registry}/{container_repository}"
+        container_platform_amd64_tag = f"{version_tag}-amd64" if version_tag else ""
+        container_platform_arm64_tag = f"{version_tag}-arm64" if version_tag else ""
+        container_platform_amd64_ref = f"{container_image}:{container_platform_amd64_tag}" if container_platform_amd64_tag else ""
+        container_platform_arm64_ref = f"{container_image}:{container_platform_arm64_tag}" if container_platform_arm64_tag else ""
+        if version_tag:
+          if rc_number:
+            container_multiarch_tag = f"{version_tag}"
+          else:
+            container_multiarch_tag = f"{version_tag}-{container_platform}"
+        else:
+          container_multiarch_tag = ""
+        container_multiarch_ref = f"{container_image}:{container_multiarch_tag}" if container_multiarch_tag else ""
+
+        print(f"base_version={base_version}")
+        print(f"pep440_version={pep440_version}")
+        print(f"wheel_basename={wheel_basename}")
+        print(f"wheel_filename={wheel_filename}")
+        print(f"container_image={container_image}")
+        print(f"wheel_local_path={wheel_local_path}")
+        print(f"wheel_remote_path={wheel_remote_path}")
+        print(f"container_platform_arm64_tag={container_platform_arm64_tag}")
+        print(f"container_platform_amd64_tag={container_platform_amd64_tag}")
+        print(f"container_platform_amd64_ref={container_platform_amd64_ref}")
+        print(f"container_platform_arm64_ref={container_platform_arm64_ref}")
+        print(f"container_multiarch_tag={container_multiarch_tag}")
+        print(f"container_multiarch_ref={container_multiarch_ref}")

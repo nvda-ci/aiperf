@@ -1,0 +1,55 @@
+name: Create multi-arch manifest
+description: Create and push a multi-architecture image manifest.
+inputs:
+  registry:
+    description: Registry host to authenticate against (pass from secrets).
+    required: true
+  registry-username:
+    description: Registry username for docker login (pass from secrets).
+    required: true
+  registry-password:
+    description: Registry password or token for docker login (pass from secrets).
+    required: true
+  target-image:
+    description: Full image reference to create (e.g., registry/repo:tag).
+    required: true
+  source-images:
+    description: Newline-separated list of image references to include in the manifest.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Log in to registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.registry-username }}
+        password: ${{ inputs.registry-password }}
+
+    - name: Create and push manifest
+      shell: bash
+      env:
+        TARGET_IMAGE: ${{ inputs.target-image }}
+        SOURCE_IMAGES: ${{ inputs.source-images }}
+      run: |
+        if [[ -z "${SOURCE_IMAGES}" ]]; then
+          echo "source-images input is required" >&2
+          exit 1
+        fi
+
+        images=()
+        while IFS= read -r image; do
+          [[ -n "${image}" ]] && images+=("${image}")
+        done <<< "${SOURCE_IMAGES}"
+
+        if [[ ${#images[@]} -eq 0 ]]; then
+          echo "source-images input must contain at least one image" >&2
+          exit 1
+        fi
+
+        docker manifest create "${TARGET_IMAGE}" "${images[0]}"
+        for image in "${images[@]:1}"; do
+          docker manifest create "${TARGET_IMAGE}" --amend "${image}"
+        done
+
+        docker manifest push "${TARGET_IMAGE}"
